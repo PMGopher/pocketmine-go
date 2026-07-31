@@ -40,4 +40,7 @@ var (
 	_ Behavior = (*HardenedClay)(nil)
 	_ Behavior = (*HardenedGlass)(nil)
 	_ Behavior = (*StainedGlass)(nil)
+	_ Behavior = (*Bookshelf)(nil)
+	_ Behavior = (*PackedIce)(nil)
+	_ Behavior = (*BlueIce)(nil)
 )
