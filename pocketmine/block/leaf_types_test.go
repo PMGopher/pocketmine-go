@@ -55,4 +55,5 @@ var (
 	_ Behavior = (*GlazedTerracotta)(nil)
 	_ Behavior = (*Redstone)(nil)
 	_ Behavior = (*Dirt)(nil)
+	_ Behavior = (*Cactus)(nil)
 )
