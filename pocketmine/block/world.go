@@ -73,3 +73,7 @@ func (p Position) GetWorld() (World, error) {
 }
 
 func (p Position) AsVector3() math.Vector3 { return p.Vector3 }
+
+func (p Position) GetSide(side math.Facing, step int) Position {
+	return Position{Vector3: p.Vector3.GetSide(side, step), world: p.world}
+}

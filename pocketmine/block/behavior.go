@@ -69,6 +69,7 @@ type Behavior interface {
 	CanBeFlowedInto() bool
 	CanClimb() bool
 
+	GetDrops(item Item) []Item
 	GetDropsForCompatibleTool(item Item) []Item
 	GetDropsForIncompatibleTool(item Item) []Item
 	GetSilkTouchDrops(item Item) []Item

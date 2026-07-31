@@ -213,6 +213,8 @@ type blockGeometry interface {
 	GetSide(side math.Facing, step int) Behavior
 	GetAdjacentSupportType(facing math.Facing) blockutils.SupportType
 	HasTypeTag(tag string) bool
+	HasSameTypeId(other Behavior) bool
+	IsFullCube() bool
 }
 
 func (b *Block) GetPosition() Position { return b.position }
@@ -294,6 +296,17 @@ func (b *Block) IsSolid() bool { return true }
 
 func (b *Block) CanBeFlowedInto() bool { return false }
 func (b *Block) CanClimb() bool        { return false }
+
+// GetDrops mirrors Block::getDrops(). The PHP original also checks
+// `$item->hasEnchantment(VanillaEnchantments::SILK_TOUCH())` before taking the silk-touch branch;
+// Item doesn't expose enchantment queries yet (the enchantment package isn't ported), so the
+// silk-touch branch is never taken here until that's wired up.
+func (b *Block) GetDrops(item Item) []Item {
+	if b.self.GetBreakInfo().IsToolCompatible(item) {
+		return b.self.GetDropsForCompatibleTool(item)
+	}
+	return b.self.GetDropsForIncompatibleTool(item)
+}
 
 // GetDropsForCompatibleTool/GetSilkTouchDrops should each return []Item{b.AsItem()} — the
 // block's item form — matching PHP's `return [$this->asItem()];`. AsItem() currently returns a
