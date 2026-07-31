@@ -14,3 +14,13 @@ type RedstonePowerOnSound struct{}
 
 // RedstonePowerOffSound is a port of pocketmine\world\sound\RedstonePowerOffSound.
 type RedstonePowerOffSound struct{}
+
+// ItemUseOnBlockSound is a port of pocketmine\world\sound\ItemUseOnBlockSound.
+//
+// The PHP original stores the whole Block (its Encode() only ever reads getStateId() from it).
+// Storing block.Behavior here instead would create an import cycle (block already imports this
+// package for RedstonePowerOnSound/OffSound), so this stores just the state ID that Encode()
+// actually needs.
+type ItemUseOnBlockSound struct {
+	BlockStateID int
+}

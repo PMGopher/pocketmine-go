@@ -32,4 +32,7 @@ var (
 	_ Behavior = (*Melon)(nil)
 	_ Behavior = (*TintedGlass)(nil)
 	_ Behavior = (*Podzol)(nil)
+	_ Behavior = (*SimplePillar)(nil)
+	_ Behavior = (*Planks)(nil)
+	_ Behavior = (*Wood)(nil)
 )
