@@ -27,4 +27,6 @@ var (
 	_ Behavior = (*Glowstone)(nil)
 	_ Behavior = (*Glass)(nil)
 	_ Behavior = (*Ice)(nil)
+	_ Behavior = (*WoodenButton)(nil)
+	_ Behavior = (*Ladder)(nil)
 )

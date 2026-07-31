@@ -33,6 +33,16 @@ type Chunk interface {
 
 type Entity interface {
 	ResetFallDistance()
+	GetPosition() math.Vector3
+	SetOnGround(onGround bool)
+}
+
+// Living is a forward-compatible marker for pocketmine\entity\Living — same pattern as
+// Flowable.go's Liquid marker. The future Living entity type just needs to satisfy this
+// trivially; the block package only ever uses it for `instanceof Living` checks.
+type Living interface {
+	Entity
+	IsLiving() bool
 }
 
 type Player interface {
