@@ -35,4 +35,5 @@ var (
 	_ Behavior = (*SimplePillar)(nil)
 	_ Behavior = (*Planks)(nil)
 	_ Behavior = (*Wood)(nil)
+	_ Behavior = (*Leaves)(nil)
 )
