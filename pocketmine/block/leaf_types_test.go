@@ -46,4 +46,6 @@ var (
 	_ Behavior = (*Anvil)(nil)
 	_ Behavior = (*Sand)(nil)
 	_ Behavior = (*Gravel)(nil)
+	_ Behavior = (*Concrete)(nil)
+	_ Behavior = (*ConcretePowder)(nil)
 )
