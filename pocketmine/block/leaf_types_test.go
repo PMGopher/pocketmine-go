@@ -56,4 +56,8 @@ var (
 	_ Behavior = (*Redstone)(nil)
 	_ Behavior = (*Dirt)(nil)
 	_ Behavior = (*Cactus)(nil)
+	_ Behavior = (*InfestedStone)(nil)
+	_ Behavior = (*InfestedPillar)(nil)
+	_ Behavior = (*CarvedPumpkin)(nil)
+	_ Behavior = (*Reserved6)(nil)
 )
