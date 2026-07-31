@@ -37,4 +37,7 @@ var (
 	_ Behavior = (*Wood)(nil)
 	_ Behavior = (*Leaves)(nil)
 	_ Behavior = (*Farmland)(nil)
+	_ Behavior = (*HardenedClay)(nil)
+	_ Behavior = (*HardenedGlass)(nil)
+	_ Behavior = (*StainedGlass)(nil)
 )
