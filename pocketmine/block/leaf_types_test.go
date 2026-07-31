@@ -61,4 +61,8 @@ var (
 	_ Behavior = (*CarvedPumpkin)(nil)
 	_ Behavior = (*Reserved6)(nil)
 	_ Behavior = (*Copper)(nil)
+	_ Behavior = (*Chain)(nil)
+	_ Behavior = (*Lantern)(nil)
+	_ Behavior = (*CopperChain)(nil)
+	_ Behavior = (*CopperLantern)(nil)
 )
