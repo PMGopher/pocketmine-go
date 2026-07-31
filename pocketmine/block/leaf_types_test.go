@@ -53,4 +53,6 @@ var (
 	_ Behavior = (*StainedHardenedClay)(nil)
 	_ Behavior = (*StainedHardenedGlass)(nil)
 	_ Behavior = (*GlazedTerracotta)(nil)
+	_ Behavior = (*Redstone)(nil)
+	_ Behavior = (*Dirt)(nil)
 )
