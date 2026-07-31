@@ -43,4 +43,5 @@ var (
 	_ Behavior = (*Bookshelf)(nil)
 	_ Behavior = (*PackedIce)(nil)
 	_ Behavior = (*BlueIce)(nil)
+	_ Behavior = (*Anvil)(nil)
 )

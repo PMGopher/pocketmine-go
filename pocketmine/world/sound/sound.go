@@ -24,3 +24,6 @@ type RedstonePowerOffSound struct{}
 type ItemUseOnBlockSound struct {
 	BlockStateID int
 }
+
+// AnvilFallSound is a port of pocketmine\world\sound\AnvilFallSound.
+type AnvilFallSound struct{}
