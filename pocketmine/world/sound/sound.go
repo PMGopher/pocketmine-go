@@ -27,3 +27,12 @@ type ItemUseOnBlockSound struct {
 
 // AnvilFallSound is a port of pocketmine\world\sound\AnvilFallSound.
 type AnvilFallSound struct{}
+
+// CopperWaxApplySound is a port of pocketmine\world\sound\CopperWaxApplySound.
+type CopperWaxApplySound struct{}
+
+// CopperWaxRemoveSound is a port of pocketmine\world\sound\CopperWaxRemoveSound.
+type CopperWaxRemoveSound struct{}
+
+// ScrapeSound is a port of pocketmine\world\sound\ScrapeSound.
+type ScrapeSound struct{}

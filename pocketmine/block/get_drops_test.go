@@ -4,13 +4,16 @@ import "testing"
 
 // fakeItem is a minimal Item for exercising BlockBreakInfo.IsToolCompatible / Block.GetDrops.
 type fakeItem struct {
+	typeID       int
 	toolType     ToolType
 	harvestLevel int
 }
 
+func (f fakeItem) GetTypeId() int                   { return f.typeID }
 func (f fakeItem) GetBlockToolType() ToolType       { return f.toolType }
 func (f fakeItem) GetBlockToolHarvestLevel() int    { return f.harvestLevel }
 func (f fakeItem) GetMiningEfficiency(bool) float64 { return 1 }
+func (f fakeItem) Pop()                             {}
 
 type fakeToolTier struct{ level int }
 

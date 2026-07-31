@@ -60,4 +60,5 @@ var (
 	_ Behavior = (*InfestedPillar)(nil)
 	_ Behavior = (*CarvedPumpkin)(nil)
 	_ Behavior = (*Reserved6)(nil)
+	_ Behavior = (*Copper)(nil)
 )
