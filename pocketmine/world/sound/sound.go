@@ -83,3 +83,15 @@ type RespawnAnchorChargeSound struct{}
 
 // RespawnAnchorSetSpawnSound is a port of pocketmine\world\sound\RespawnAnchorSetSpawnSound.
 type RespawnAnchorSetSpawnSound struct{}
+
+// BucketFillWaterSound is a port of pocketmine\world\sound\BucketFillWaterSound.
+type BucketFillWaterSound struct{}
+
+// BucketEmptyWaterSound is a port of pocketmine\world\sound\BucketEmptyWaterSound.
+type BucketEmptyWaterSound struct{}
+
+// BucketFillLavaSound is a port of pocketmine\world\sound\BucketFillLavaSound.
+type BucketFillLavaSound struct{}
+
+// BucketEmptyLavaSound is a port of pocketmine\world\sound\BucketEmptyLavaSound.
+type BucketEmptyLavaSound struct{}

@@ -2,13 +2,6 @@ package block
 
 import "pocketmine-go/pocketmine/math"
 
-// Water is a forward-compatible marker for pocketmine\block\Water — same pattern as Flowable.go's
-// Liquid marker, just narrower (WaterLily needs to specifically distinguish Water, not any
-// liquid). The future Water block type just needs to satisfy this trivially.
-type Water interface {
-	IsWater() bool
-}
-
 // WaterLily is a port of pocketmine\block\WaterLily.
 type WaterLily struct {
 	Flowable
@@ -32,7 +25,7 @@ func (w *WaterLily) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 }
 
 func (w *WaterLily) canBeSupportedAt(blk Behavior) bool {
-	_, isWater := blk.(blockGeometry).GetSide(math.Down, 1).(Water)
+	_, isWater := blk.(blockGeometry).GetSide(math.Down, 1).(*Water)
 	return isWater
 }
 
@@ -41,7 +34,7 @@ func (w *WaterLily) supportedWhenPlacedAt(blockReplace Behavior, clickVector mat
 }
 
 func (w *WaterLily) CanBePlacedAt(blockReplace Behavior, clickVector math.Vector3, face math.Facing, isClickedBlock bool) bool {
-	if _, isWater := blockReplace.(Water); isWater {
+	if _, isWater := blockReplace.(*Water); isWater {
 		return false
 	}
 	return w.supportedWhenPlacedAt(blockReplace, clickVector, face, isClickedBlock)

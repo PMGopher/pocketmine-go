@@ -13,21 +13,13 @@ type Flowable struct {
 	Transparent
 }
 
-// Liquid is a forward-compatible marker for pocketmine\block\Liquid — declared here since it's
-// only needed for CanBePlacedAt's `instanceof Liquid` check below, matching the local-interface
-// pattern used elsewhere for not-yet-ported types (block.Tile, block.Item, etc.). The future
-// Liquid base block type just needs to satisfy this trivially for the check to keep working.
-type Liquid interface {
-	IsLiquid() bool
-}
-
 func (f *Flowable) CanBeFlowedInto() bool { return true }
 
 func (f *Flowable) IsSolid() bool { return false }
 
 func (f *Flowable) CanBePlacedAt(blockReplace Behavior, clickVector math.Vector3, face math.Facing, isClickedBlock bool) bool {
 	if f.self.CanBeFlowedInto() {
-		if _, ok := blockReplace.(Liquid); ok {
+		if _, ok := blockReplace.(liquidBaser); ok {
 			return false
 		}
 	}

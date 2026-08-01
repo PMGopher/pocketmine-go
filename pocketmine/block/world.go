@@ -44,6 +44,9 @@ type Entity interface {
 	GetBoundingBox() math.AxisAlignedBB
 	GetMotion() math.Vector3
 	SetOnFire(seconds int)
+	IsOnFire() bool
+	Extinguish()
+	CanBeMovedByCurrents() bool
 }
 
 // Living is a forward-compatible marker for pocketmine\entity\Living — same pattern as
@@ -63,7 +66,6 @@ type Player interface {
 
 type Projectile interface {
 	Entity
-	IsOnFire() bool
 	GetHorizontalFacing() math.Facing
 }
 

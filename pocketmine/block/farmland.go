@@ -134,7 +134,7 @@ func (f *Farmland) canHydrate() bool {
 		raw /= farmlandWaterSearchHorizontalLength
 		y := raw % farmlandWaterSearchVerticalLength
 
-		if _, ok := world.GetBlockAt(startX+x, startY+y, startZ+z).(Water); ok {
+		if _, ok := world.GetBlockAt(startX+x, startY+y, startZ+z).(*Water); ok {
 			return true
 		}
 	}
@@ -144,7 +144,7 @@ func (f *Farmland) canHydrate() bool {
 	for y := 0; y < farmlandWaterSearchVerticalLength; y++ {
 		for x := 0; x < farmlandWaterSearchHorizontalLength; x++ {
 			for z := 0; z < farmlandWaterSearchHorizontalLength; z++ {
-				if _, ok := world.GetBlockAt(startX+x, startY+y, startZ+z).(Water); ok {
+				if _, ok := world.GetBlockAt(startX+x, startY+y, startZ+z).(*Water); ok {
 					f.WaterPositionIndex = x + z*farmlandWaterSearchHorizontalLength + y*farmlandWaterSearchHorizontalLength*farmlandWaterSearchHorizontalLength
 					return true
 				}

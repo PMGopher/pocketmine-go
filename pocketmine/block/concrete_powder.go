@@ -31,12 +31,12 @@ func (c *ConcretePowder) DescribeBlockItemState(w runtime.DataDescriber) { c.Des
 
 // getAdjacentWater is fully ported and ready to use once VanillaBlocks exists - see
 // OnNearbyBlockChange/TickFalling below.
-func (c *ConcretePowder) getAdjacentWater() (Water, bool) {
+func (c *ConcretePowder) getAdjacentWater() (*Water, bool) {
 	for _, f := range math.AllFacing {
 		if f == math.Down {
 			continue
 		}
-		if w, ok := c.GetSide(f, 1).(Water); ok {
+		if w, ok := c.GetSide(f, 1).(*Water); ok {
 			return w, true
 		}
 	}
