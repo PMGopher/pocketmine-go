@@ -65,4 +65,5 @@ var (
 	_ Behavior = (*Lantern)(nil)
 	_ Behavior = (*CopperChain)(nil)
 	_ Behavior = (*CopperLantern)(nil)
+	_ Behavior = (*SeaPickle)(nil)
 )
