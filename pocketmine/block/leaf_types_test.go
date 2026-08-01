@@ -102,4 +102,8 @@ var (
 	_ Behavior = (*SweetBerryBush)(nil)
 	_ Behavior = (*EndPortalFrame)(nil)
 	_ Behavior = (*ChorusPlant)(nil)
+	_ Behavior = (*ChorusFlower)(nil)
+	_ Behavior = (*PoweredRail)(nil)
+	_ Behavior = (*ActivatorRail)(nil)
+	_ Behavior = (*DetectorRail)(nil)
 )
