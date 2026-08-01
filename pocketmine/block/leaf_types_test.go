@@ -184,4 +184,6 @@ var (
 	_ Behavior = (*RedstoneWire)(nil)
 	_ Behavior = (*RedstoneRepeater)(nil)
 	_ Behavior = (*RedstoneComparator)(nil)
+	_ Behavior = (*NetherFungus)(nil)
+	_ Behavior = (*NetherVines)(nil)
 )
