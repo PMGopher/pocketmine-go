@@ -238,4 +238,5 @@ var (
 	_ Behavior = (*SoulCampfire)(nil)
 	_ Behavior = (*ItemFrame)(nil)
 	_ Behavior = (*Lectern)(nil)
+	_ Behavior = (*ChiseledBookshelf)(nil)
 )
