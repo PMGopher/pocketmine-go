@@ -12,6 +12,9 @@ type Item interface {
 	// Pop reduces this item stack's count by one — a base Item method in the PHP original (unlike
 	// ApplyDamage, which only applies to Durable items and stays on the separate Axe marker below).
 	Pop()
+	// IsNull reports whether this represents "no item" (air / zero count) — a base Item method in
+	// the PHP original.
+	IsNull() bool
 }
 
 // ToolTier is the minimal surface needed from an item tool tier (wood/stone/iron/diamond/netherite).

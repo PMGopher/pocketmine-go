@@ -136,4 +136,5 @@ var (
 	_ Behavior = (*Froglight)(nil)
 	_ Behavior = (*MonsterSpawner)(nil)
 	_ Behavior = (*GlowLichen)(nil)
+	_ Behavior = (*Candle)(nil)
 )

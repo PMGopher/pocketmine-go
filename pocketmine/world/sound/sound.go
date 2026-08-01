@@ -59,3 +59,12 @@ type AmethystBlockChimeSound struct{}
 type BlockPunchSound struct {
 	BlockStateID int
 }
+
+// BlazeShootSound is a port of pocketmine\world\sound\BlazeShootSound.
+type BlazeShootSound struct{}
+
+// FireExtinguishSound is a port of pocketmine\world\sound\FireExtinguishSound.
+type FireExtinguishSound struct{}
+
+// FlintSteelSound is a port of pocketmine\world\sound\FlintSteelSound.
+type FlintSteelSound struct{}

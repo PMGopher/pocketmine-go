@@ -7,6 +7,7 @@ type fakeItem struct {
 	typeID       int
 	toolType     ToolType
 	harvestLevel int
+	null         bool
 }
 
 func (f fakeItem) GetTypeId() int                   { return f.typeID }
@@ -14,6 +15,7 @@ func (f fakeItem) GetBlockToolType() ToolType       { return f.toolType }
 func (f fakeItem) GetBlockToolHarvestLevel() int    { return f.harvestLevel }
 func (f fakeItem) GetMiningEfficiency(bool) float64 { return 1 }
 func (f fakeItem) Pop()                             {}
+func (f fakeItem) IsNull() bool                     { return f.null }
 
 type fakeToolTier struct{ level int }
 
