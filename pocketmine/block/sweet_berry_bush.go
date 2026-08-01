@@ -4,6 +4,7 @@ import (
 	"math/rand"
 
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -94,14 +95,15 @@ func (s *SweetBerryBush) OnRandomTick() {}
 
 func (s *SweetBerryBush) HasEntityCollision() bool { return true }
 
-// OnEntityInside should reset fall distance and damage Living entities via
-// EntityDamageByBlockEvent — needs that unported concrete event subclass and Entity.Attack, so
-// only the portable ResetFallDistance part runs; it still returns true, matching the PHP
-// original's unconditional `return true;`.
-func (s *SweetBerryBush) OnEntityInside(entity Entity) bool {
+// OnEntityInside is a port of SweetBerryBush::onEntityInside. The PHP original's TODO about only
+// triggering while moving through the bush isn't addressed here either (no such movement-tracking
+// system is ported).
+func (s *SweetBerryBush) OnEntityInside(e Entity) bool {
 	if s.Age >= SweetBerryBushStageBushNoBerries {
-		if living, ok := entity.(Living); ok {
+		if living, ok := e.(Living); ok {
 			living.ResetFallDistance()
+			ev := entity.NewEntityDamageByBlockEvent(s.self, e, entity.EntityDamageCauseContact, 1, nil)
+			living.Attack(ev)
 		}
 	}
 	return true

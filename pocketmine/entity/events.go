@@ -22,13 +22,38 @@ type DamagerBlock interface {
 // site. Equivalent to PHP's $event->call().
 func Call[E any](e *E) { event.Call(e) }
 
+// EntityLike is the interface an EntityEvent holds its subject as, instead of a concrete *Entity
+// - needed so callers that only have an opaque interface value (like the block package's local
+// Entity/Living interfaces) can still construct and fire these events; *Entity and *Living (and
+// any future concrete mob type) satisfy it automatically.
+type EntityLike interface {
+	GetPosition() math.Vector3
+	IsOnFire() bool
+}
+
+// DamageSource is the interface Entity.Attack accepts, rather than the concrete *EntityDamageEvent
+// - satisfied by *EntityDamageEvent itself and by *EntityDamageByBlockEvent (which embeds it),
+// letting Attack accept either polymorphically the way PHP's class hierarchy does natively. Call
+// is part of this interface (rather than relying on struct embedding to promote one) because
+// promoted methods keep the EMBEDDED type's receiver, not the outer type's - so
+// EntityDamageByBlockEvent needs its own Call() to dispatch listeners registered for its own
+// concrete type, not silently fire as a plain EntityDamageEvent (same self-dispatch pitfall this
+// port has hit before in inventory.BaseInventory/CraftingGrid).
+type DamageSource interface {
+	GetCause() int
+	GetFinalDamage() float64
+	IsCancelled() bool
+	Cancel()
+	Call()
+}
+
 // EntityEvent is a port of pocketmine\event\entity\EntityEvent - embedded by every concrete event
 // type below.
 type EntityEvent struct {
-	entity *Entity
+	entity EntityLike
 }
 
-func (e *EntityEvent) GetEntity() *Entity { return e.entity }
+func (e *EntityEvent) GetEntity() EntityLike { return e.entity }
 
 // EntityMotionEvent is a port of pocketmine\event\entity\EntityMotionEvent.
 type EntityMotionEvent struct {
@@ -38,7 +63,7 @@ type EntityMotionEvent struct {
 	vector math.Vector3
 }
 
-func NewEntityMotionEvent(entity *Entity, vector math.Vector3) *EntityMotionEvent {
+func NewEntityMotionEvent(entity EntityLike, vector math.Vector3) *EntityMotionEvent {
 	return &EntityMotionEvent{EntityEvent: EntityEvent{entity: entity}, vector: vector}
 }
 
@@ -96,7 +121,7 @@ type EntityDamageEvent struct {
 }
 
 // NewEntityDamageEvent is a port of EntityDamageEvent::__construct.
-func NewEntityDamageEvent(entity *Entity, cause int, damage float64, modifiers map[int]float64) *EntityDamageEvent {
+func NewEntityDamageEvent(entity EntityLike, cause int, damage float64, modifiers map[int]float64) *EntityDamageEvent {
 	if modifiers == nil {
 		modifiers = map[int]float64{}
 	}
@@ -114,6 +139,10 @@ func NewEntityDamageEvent(entity *Entity, cause int, damage float64, modifiers m
 		attackCooldown: 10,
 	}
 }
+
+// Call dispatches this event to listeners registered for *EntityDamageEvent specifically - see
+// DamageSource's doc comment for why this can't just be promoted.
+func (e *EntityDamageEvent) Call() { event.Call(e) }
 
 func (e *EntityDamageEvent) GetCause() int { return e.cause }
 
@@ -179,12 +208,16 @@ type EntityDamageByBlockEvent struct {
 	damager DamagerBlock
 }
 
-func NewEntityDamageByBlockEvent(damager DamagerBlock, entity *Entity, cause int, damage float64, modifiers map[int]float64) *EntityDamageByBlockEvent {
+func NewEntityDamageByBlockEvent(damager DamagerBlock, entity EntityLike, cause int, damage float64, modifiers map[int]float64) *EntityDamageByBlockEvent {
 	return &EntityDamageByBlockEvent{
 		EntityDamageEvent: *NewEntityDamageEvent(entity, cause, damage, modifiers),
 		damager:           damager,
 	}
 }
+
+// Call dispatches this event to listeners registered for *EntityDamageByBlockEvent specifically -
+// see DamageSource's doc comment for why this can't just be promoted from EntityDamageEvent.
+func (e *EntityDamageByBlockEvent) Call() { event.Call(e) }
 
 func (e *EntityDamageByBlockEvent) GetDamager() DamagerBlock { return e.damager }
 
@@ -196,9 +229,14 @@ type EntityCombustEvent struct {
 	duration int
 }
 
-func NewEntityCombustEvent(combustee *Entity, duration int) *EntityCombustEvent {
+func NewEntityCombustEvent(combustee EntityLike, duration int) *EntityCombustEvent {
 	return &EntityCombustEvent{EntityEvent: EntityEvent{entity: combustee}, duration: duration}
 }
+
+// Call dispatches this event to listeners registered for *EntityCombustEvent specifically - see
+// DamageSource's doc comment for why EntityCombustByBlockEvent needs its own copy of this rather
+// than inheriting it via embedding.
+func (e *EntityCombustEvent) Call() { event.Call(e) }
 
 func (e *EntityCombustEvent) GetDuration() int { return e.duration }
 
@@ -211,12 +249,15 @@ type EntityCombustByBlockEvent struct {
 	combuster DamagerBlock
 }
 
-func NewEntityCombustByBlockEvent(combuster DamagerBlock, combustee *Entity, duration int) *EntityCombustByBlockEvent {
+func NewEntityCombustByBlockEvent(combuster DamagerBlock, combustee EntityLike, duration int) *EntityCombustByBlockEvent {
 	return &EntityCombustByBlockEvent{
 		EntityCombustEvent: *NewEntityCombustEvent(combustee, duration),
 		combuster:          combuster,
 	}
 }
+
+// Call dispatches this event to listeners registered for *EntityCombustByBlockEvent specifically.
+func (e *EntityCombustByBlockEvent) Call() { event.Call(e) }
 
 func (e *EntityCombustByBlockEvent) GetCombuster() DamagerBlock { return e.combuster }
 
@@ -240,7 +281,7 @@ type EntityExtinguishEvent struct {
 	cause int
 }
 
-func NewEntityExtinguishEvent(entity *Entity, cause int) *EntityExtinguishEvent {
+func NewEntityExtinguishEvent(entity EntityLike, cause int) *EntityExtinguishEvent {
 	return &EntityExtinguishEvent{EntityEvent: EntityEvent{entity: entity}, cause: cause}
 }
 

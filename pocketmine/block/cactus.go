@@ -3,6 +3,7 @@ package block
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -45,10 +46,12 @@ func (c *Cactus) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone
 }
 
-// OnEntityInside should damage the entity via EntityDamageByBlockEvent - needs that unported
-// concrete event subclass and Entity.Attack, so this is a no-op for now; it still returns true,
-// matching the PHP original's unconditional `return true;`.
-func (c *Cactus) OnEntityInside(entity Entity) bool { return true }
+// OnEntityInside is a port of Cactus::onEntityInside.
+func (c *Cactus) OnEntityInside(e Entity) bool {
+	ev := entity.NewEntityDamageByBlockEvent(c.self, e, entity.EntityDamageCauseContact, 1, nil)
+	e.Attack(ev)
+	return true
+}
 
 func (c *Cactus) canBeSupportedAt(blk Behavior) bool {
 	geo := blk.(blockGeometry)

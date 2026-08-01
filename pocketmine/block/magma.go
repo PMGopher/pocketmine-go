@@ -1,5 +1,7 @@
 package block
 
+import "pocketmine-go/pocketmine/entity"
+
 // Magma is a port of pocketmine\block\Magma.
 type Magma struct {
 	Opaque
@@ -21,10 +23,15 @@ func (m *Magma) GetLightLevel() int { return 3 }
 
 func (m *Magma) HasEntityCollision() bool { return true }
 
-// OnEntityInside should damage non-sneaking, non-frost-walker Living entities via
-// EntityDamageByBlockEvent — needs that unported concrete event subclass, Entity.Attack, and
-// frost-walker/sneaking queries not on the minimal Entity/Living interfaces, so this is a no-op
-// for now; it still returns true, matching the PHP original's unconditional `return true;`.
-func (m *Magma) OnEntityInside(entity Entity) bool { return true }
+// OnEntityInside is a port of Magma::onEntityInside, minus the frost-walker-level check (not on
+// the minimal Living interface yet, and no boots/enchantment system is ported anyway) - so this
+// damages any non-sneaking Living entity, frost walker or not.
+func (m *Magma) OnEntityInside(e Entity) bool {
+	if living, ok := e.(Living); ok && !living.IsSneaking() {
+		ev := entity.NewEntityDamageByBlockEvent(m.self, e, entity.EntityDamageCauseFire, 1, nil)
+		living.Attack(ev)
+	}
+	return true
+}
 
 func (m *Magma) BurnsForever() bool { return true }

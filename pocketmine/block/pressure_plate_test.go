@@ -3,6 +3,7 @@ package block
 import (
 	"testing"
 
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -21,6 +22,7 @@ func (fakeLivingEntity) SetOnFire(seconds int)                {}
 func (fakeLivingEntity) IsOnFire() bool                       { return false }
 func (fakeLivingEntity) Extinguish()                          {}
 func (fakeLivingEntity) CanBeMovedByCurrents() bool           { return true }
+func (fakeLivingEntity) Attack(source entity.DamageSource)    {}
 
 // entityWorld extends fakeWorld with a settable list of nearby entities, for exercising
 // PressurePlate.OnScheduledUpdate.
@@ -85,6 +87,7 @@ func (fakeItemLikeEntity) SetOnFire(seconds int)                {}
 func (fakeItemLikeEntity) IsOnFire() bool                       { return false }
 func (fakeItemLikeEntity) Extinguish()                          {}
 func (fakeItemLikeEntity) CanBeMovedByCurrents() bool           { return true }
+func (fakeItemLikeEntity) Attack(source entity.DamageSource)    {}
 
 func TestWeightedPressurePlateSignalStrengthScalesWithEntityCount(t *testing.T) {
 	w := &entityWorld{}

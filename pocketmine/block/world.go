@@ -3,6 +3,7 @@ package block
 import (
 	"fmt"
 
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -47,6 +48,11 @@ type Entity interface {
 	IsOnFire() bool
 	Extinguish()
 	CanBeMovedByCurrents() bool
+	// Attack is needed by the several OnEntityInside/OnAttack methods across this package that
+	// deal fire/contact/lava damage (BaseFire, Cactus, Lava, Magma, SweetBerryBush, Campfire).
+	// entity.DamageSource (not entity.EntityDamageEvent directly) so an EntityDamageByBlockEvent
+	// can be passed here too - see its doc comment in the entity package.
+	Attack(source entity.DamageSource)
 }
 
 // Living is a forward-compatible marker for pocketmine\entity\Living — same pattern as

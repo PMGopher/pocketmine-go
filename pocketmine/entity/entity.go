@@ -52,7 +52,7 @@ type Entity struct {
 
 	health          float64
 	maxHealth       int
-	lastDamageCause *EntityDamageEvent
+	lastDamageCause DamageSource
 
 	closed bool
 }
@@ -191,9 +191,9 @@ func (e *Entity) GetMaxHealth() int { return e.maxHealth }
 
 func (e *Entity) SetMaxHealth(amount int) { e.maxHealth = amount }
 
-func (e *Entity) SetLastDamageCause(source *EntityDamageEvent) { e.lastDamageCause = source }
+func (e *Entity) SetLastDamageCause(source DamageSource) { e.lastDamageCause = source }
 
-func (e *Entity) GetLastDamageCause() *EntityDamageEvent { return e.lastDamageCause }
+func (e *Entity) GetLastDamageCause() DamageSource { return e.lastDamageCause }
 
 // Kill is a port of Entity::kill, minus scheduleUpdate (tick scheduling isn't ported).
 func (e *Entity) Kill() {
@@ -211,11 +211,11 @@ func (e *Entity) onDeath() {}
 // effects on top - not ported, see package doc comment). Fire-immune entities cancel fire-cause
 // damage; otherwise the event is called, and unless cancelled, health is reduced by the event's
 // final damage.
-func (e *Entity) Attack(source *EntityDamageEvent) {
+func (e *Entity) Attack(source DamageSource) {
 	if e.self.IsFireProof() && isFireCause(source.GetCause()) {
 		source.Cancel()
 	}
-	Call(source)
+	source.Call()
 	if source.IsCancelled() {
 		return
 	}

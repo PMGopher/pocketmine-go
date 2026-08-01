@@ -3,6 +3,7 @@ package block
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -81,10 +82,14 @@ func (c *Campfire) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	return []math.AxisAlignedBB{math.OneAABB().TrimmedCopy(math.Up, 9.0/16)}
 }
 
-// GetEntityCollisionDamage is a port of Campfire::getEntityCollisionDamage. It isn't called
-// anywhere yet - the damage half of OnEntityInside needs Entity.Attack/EntityDamageByBlockEvent,
-// neither ported (see OnEntityInside's doc comment) - but it's kept as a real overridable method
-// (SoulCampfire returns 2) so it's ready once that gap closes.
+// campfireEntityDamageShaper lets OnEntityInside reach a concrete leaf's (SoulCampfire's)
+// GetEntityCollisionDamage override - same self-dispatch shape as fireShaper.
+type campfireEntityDamageShaper interface {
+	GetEntityCollisionDamage() int
+}
+
+// GetEntityCollisionDamage is a port of Campfire::getEntityCollisionDamage (SoulCampfire returns
+// 2).
 func (c *Campfire) GetEntityCollisionDamage() int { return 1 }
 
 // Place is a port of Campfire::place.
@@ -132,15 +137,17 @@ func (c *Campfire) OnNearbyBlockChange() {
 	}
 }
 
-// OnEntityInside is a port of Campfire::onEntityInside. The Living-entity damage branch needs
-// Entity.Attack/EntityDamageByBlockEvent, neither ported (same gap category as BaseFire's doc
-// comment), so it's skipped; the ignite branch is real.
-func (c *Campfire) OnEntityInside(entity Entity) bool {
+// OnEntityInside is a port of Campfire::onEntityInside.
+func (c *Campfire) OnEntityInside(e Entity) bool {
 	if !c.Lit {
-		if entity.IsOnFire() {
+		if e.IsOnFire() {
 			c.ignite()
 			return false
 		}
+	} else if living, ok := e.(Living); ok {
+		damage := c.self.(campfireEntityDamageShaper).GetEntityCollisionDamage()
+		ev := entity.NewEntityDamageByBlockEvent(c.self, e, entity.EntityDamageCauseFire, float64(damage), nil)
+		living.Attack(ev)
 	}
 	return true
 }

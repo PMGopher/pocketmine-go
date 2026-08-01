@@ -3,6 +3,7 @@ package block
 import (
 	"testing"
 
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -198,14 +199,48 @@ func TestCampfireOnNearbyBlockChangeExtinguishesUnderWater(t *testing.T) {
 func TestCampfireOnEntityInsideIgnitesWhenEntityOnFire(t *testing.T) {
 	w := &fakeWorld{}
 	c := newTestCampfire(w)
-	entity := &onFireTrackingEntity{reportsOnFire: true}
+	fireEntity := &onFireTrackingEntity{reportsOnFire: true}
 
-	handled := c.OnEntityInside(entity)
+	handled := c.OnEntityInside(fireEntity)
 
 	if handled {
 		t.Error("expected OnEntityInside to return false when it ignites")
 	}
 	if !c.Lit {
 		t.Error("expected the campfire to be lit")
+	}
+}
+
+func TestCampfireOnEntityInsideDamagesLivingWhileLit(t *testing.T) {
+	w := &fakeWorld{}
+	c := newTestCampfire(w)
+	c.Lit = true
+
+	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	startHealth := living.GetHealth()
+
+	if !c.OnEntityInside(living) {
+		t.Fatal("expected OnEntityInside to return true")
+	}
+	if living.GetHealth() != startHealth-1 { // Campfire.GetEntityCollisionDamage() == 1
+		t.Errorf("GetHealth() = %v, want %v", living.GetHealth(), startHealth-1)
+	}
+}
+
+// TestSoulCampfireOnEntityInsideDamagesLivingWithItsOwnAmount confirms the self-dispatch through
+// campfireEntityDamageShaper reaches SoulCampfire's override (2 damage), not the inherited
+// Campfire.GetEntityCollisionDamage (1) that OnEntityInside is defined on.
+func TestSoulCampfireOnEntityInsideDamagesLivingWithItsOwnAmount(t *testing.T) {
+	w := &fakeWorld{}
+	s := newTestSoulCampfire(w)
+	s.Lit = true
+
+	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	startHealth := living.GetHealth()
+
+	s.OnEntityInside(living)
+
+	if living.GetHealth() != startHealth-2 {
+		t.Errorf("GetHealth() = %v, want %v (SoulCampfire.GetEntityCollisionDamage() == 2)", living.GetHealth(), startHealth-2)
 	}
 }

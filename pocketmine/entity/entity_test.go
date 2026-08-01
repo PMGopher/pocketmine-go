@@ -3,16 +3,8 @@ package entity
 import (
 	"testing"
 
-	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/event"
 	"pocketmine-go/pocketmine/math"
-)
-
-// Compile-time proof that *Entity/*Living satisfy the local forward-compatible interfaces the
-// block package already declared for a future entity type (see block/world.go).
-var (
-	_ block.Entity = (*Entity)(nil)
-	_ block.Living = (*Living)(nil)
 )
 
 func newTestEntity() *Entity {

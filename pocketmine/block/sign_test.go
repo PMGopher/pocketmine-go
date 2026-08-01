@@ -5,6 +5,7 @@ import (
 
 	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -123,6 +124,7 @@ func (fakeSignPlayer) SetOnFire(seconds int)                {}
 func (fakeSignPlayer) IsOnFire() bool                       { return false }
 func (fakeSignPlayer) Extinguish()                          {}
 func (fakeSignPlayer) CanBeMovedByCurrents() bool           { return true }
+func (fakeSignPlayer) Attack(source entity.DamageSource)    {}
 func (fakeSignPlayer) GetHorizontalFacing() math.Facing     { return math.North }
 func (fakeSignPlayer) IsSneaking() bool                     { return false }
 func (fakeSignPlayer) GetYaw() float64                      { return 0 }

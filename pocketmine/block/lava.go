@@ -1,6 +1,9 @@
 package block
 
-import "pocketmine-go/pocketmine/world/sound"
+import (
+	"pocketmine-go/pocketmine/entity"
+	"pocketmine-go/pocketmine/world/sound"
+)
 
 // Lava is a port of pocketmine\block\Lava.
 type Lava struct {
@@ -35,11 +38,17 @@ func (l *Lava) GetFlowDecayPerBlock() int { return 2 } // TODO: this is 1 in the
 // for now (same category of gap as everywhere else BlockEventHelper is needed).
 func (l *Lava) checkForHarden() bool { return false }
 
-func (l *Lava) OnEntityInside(entity Entity) bool {
-	// The damage half needs EntityDamageByBlockEvent and Entity.Attack, neither ported yet, so
-	// it's skipped - see BaseFire.OnEntityInside's doc comment for the same category of gap and
-	// the same "ignite unconditionally" reasoning.
-	entity.SetOnFire(8)
-	entity.ResetFallDistance()
+// OnEntityInside is a port of Lava::onEntityInside.
+func (l *Lava) OnEntityInside(e Entity) bool {
+	dmgEv := entity.NewEntityDamageByBlockEvent(l.self, e, entity.EntityDamageCauseLava, 4, nil)
+	e.Attack(dmgEv)
+
+	combustEv := entity.NewEntityCombustByBlockEvent(l.self, e, 8)
+	combustEv.Call()
+	if !combustEv.IsCancelled() {
+		e.SetOnFire(combustEv.GetDuration())
+	}
+
+	e.ResetFallDistance()
 	return true
 }

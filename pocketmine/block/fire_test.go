@@ -2,6 +2,9 @@ package block
 
 import (
 	"testing"
+
+	"pocketmine-go/pocketmine/entity"
+	"pocketmine-go/pocketmine/math"
 )
 
 func newTestFire(w World) *Fire {
@@ -33,6 +36,27 @@ func TestBaseFireOnEntityInsideSetsFireDuration(t *testing.T) {
 	}
 	if e.onFireSeconds != 8 {
 		t.Errorf("onFireSeconds = %d, want 8", e.onFireSeconds)
+	}
+}
+
+// TestBaseFireOnEntityInsideDamagesARealLivingEntity uses the real entity package (not a fake
+// double) end-to-end: confirms Fire.OnEntityInside both reduces health via Entity.Attack and sets
+// fire duration via the (uncancelled) EntityCombustByBlockEvent.
+func TestBaseFireOnEntityInsideDamagesARealLivingEntity(t *testing.T) {
+	w := &fakeWorld{}
+	f := newTestFire(w)
+
+	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	startHealth := living.GetHealth()
+
+	if !f.OnEntityInside(living) {
+		t.Fatal("expected OnEntityInside to report handled")
+	}
+	if living.GetHealth() != startHealth-1 { // Fire.GetFireDamage() == 1
+		t.Errorf("GetHealth() = %v, want %v", living.GetHealth(), startHealth-1)
+	}
+	if living.GetFireTicks() != 8*20 {
+		t.Errorf("GetFireTicks() = %d, want %d", living.GetFireTicks(), 8*20)
 	}
 }
 
