@@ -177,4 +177,5 @@ var (
 	_ Behavior = (*Nylium)(nil)
 	_ Behavior = (*Snow)(nil)
 	_ Behavior = (*SnowLayer)(nil)
+	_ Behavior = (*Sugarcane)(nil)
 )
