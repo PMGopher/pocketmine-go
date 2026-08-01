@@ -1,6 +1,8 @@
 // Package sound is a port of pocketmine\world\sound.
 package sound
 
+import blockutils "pocketmine-go/pocketmine/block/utils"
+
 // Sound is a port of pocketmine\world\sound\Sound. The real interface has one method,
 // Encode(pos Vector3) []ClientboundPacket, but ClientboundPacket belongs to the unported
 // network/mcpe/protocol package — deferred the same way block.Tile is, as a marker interface
@@ -125,3 +127,13 @@ type ChestOpenSound struct{}
 
 // ChestCloseSound is a port of pocketmine\world\sound\ChestCloseSound.
 type ChestCloseSound struct{}
+
+// RecordSound is a port of pocketmine\world\sound\RecordSound. Stores the record's RecordType
+// rather than encoding it to a LevelSoundEvent - same reasoning as BlockPunchSound storing a
+// state ID instead of encoding a full packet.
+type RecordSound struct {
+	RecordType blockutils.RecordType
+}
+
+// RecordStopSound is a port of pocketmine\world\sound\RecordStopSound.
+type RecordStopSound struct{}

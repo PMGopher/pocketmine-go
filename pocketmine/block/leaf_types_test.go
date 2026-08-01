@@ -239,4 +239,5 @@ var (
 	_ Behavior = (*ItemFrame)(nil)
 	_ Behavior = (*Lectern)(nil)
 	_ Behavior = (*ChiseledBookshelf)(nil)
+	_ Behavior = (*Jukebox)(nil)
 )
