@@ -91,4 +91,7 @@ var (
 	_ Behavior = (*Trapdoor)(nil)
 	_ Behavior = (*WoodenTrapdoor)(nil)
 	_ Behavior = (*CopperTrapdoor)(nil)
+	_ Behavior = (*Door)(nil)
+	_ Behavior = (*WoodenDoor)(nil)
+	_ Behavior = (*CopperDoor)(nil)
 )
