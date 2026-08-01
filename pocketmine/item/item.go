@@ -41,12 +41,17 @@ const (
 // as block.Behavior/block.Block: concrete leaf types embed ItemBase, call Init(self) once their
 // own fields are set to their defaults, and override whichever methods they need.
 //
-// Not ported (all documented on ItemBase below rather than declared here, since nothing needs
-// them yet): enchantment handling (ItemEnchantmentHandlingTrait - needs the unported
+// Not ported: enchantment handling (ItemEnchantmentHandlingTrait - needs the unported
 // item/enchantment package), NbtSerialize/NbtDeserialize/SafeNbtDeserialize (need
 // GlobalItemDataHandlers, a whole item-data-driven serializer/deserializer registry),
-// legacyJsonDeserialize (deprecated upgrade path, not worth porting), GetPlacementTransaction
-// (needs a concrete world.BlockTransaction and the block registry).
+// legacyJsonDeserialize (deprecated upgrade path, not worth porting), GetPlacementTransaction and
+// GetBlock/CanBePlaced (need a concrete world.BlockTransaction and the block registry). Also not
+// ported: the Player/Entity-interaction methods (OnInteractBlock, OnClickAir, OnReleaseUsing,
+// OnDestroyBlock, OnAttackEntity, OnTickWorn, OnInteractEntity) - these need a real Player/Entity
+// with far more machinery than the block package's minimal local interfaces provide (inventory,
+// hunger, world access), so leaf item types in this port can't meaningfully override them yet;
+// concrete types that would (like FlintSteel.OnInteractBlock) document the gap individually
+// instead.
 type Item interface {
 	Clone() Item
 
@@ -193,9 +198,18 @@ func (b *ItemBase) SetKeepOnDeath(keep bool) { b.keepOnDeath = keep }
 
 func (b *ItemBase) HasNamedTag() bool { return b.GetNamedTag().Count() > 0 }
 
+// compoundTagCodec lets concrete item types (e.g. Durable) extend serializeCompoundTag/
+// deserializeCompoundTag the way PHP subclasses override-and-call-parent:: - same narrow
+// self-dispatch shape as describeState/stateDescriber above. A concrete type provides its own
+// pair of these methods, calling its embedded type's version first, then adding its own tags.
+type compoundTagCodec interface {
+	serializeCompoundTag(tag *nbt.CompoundTag)
+	deserializeCompoundTag(tag *nbt.CompoundTag)
+}
+
 // GetNamedTag is a port of Item::getNamedTag.
 func (b *ItemBase) GetNamedTag() *nbt.CompoundTag {
-	b.serializeCompoundTag(b.nbtTag)
+	b.self.(compoundTagCodec).serializeCompoundTag(b.nbtTag)
 	return b.nbtTag
 }
 
@@ -206,13 +220,13 @@ func (b *ItemBase) SetNamedTag(tag *nbt.CompoundTag) {
 		return
 	}
 	b.nbtTag = tag.Clone()
-	b.deserializeCompoundTag(b.nbtTag)
+	b.self.(compoundTagCodec).deserializeCompoundTag(b.nbtTag)
 }
 
 // ClearNamedTag is a port of Item::clearNamedTag.
 func (b *ItemBase) ClearNamedTag() {
 	b.nbtTag = nbt.NewCompoundTag()
-	b.deserializeCompoundTag(b.nbtTag)
+	b.self.(compoundTagCodec).deserializeCompoundTag(b.nbtTag)
 }
 
 // deserializeCompoundTag is a port of Item::deserializeCompoundTag, minus the "ench" list round

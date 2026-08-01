@@ -12,7 +12,7 @@ type fakeAxeItem struct {
 	damage int
 }
 
-func (a *fakeAxeItem) ApplyDamage(amount int) { a.damage += amount }
+func (a *fakeAxeItem) ApplyDamage(amount int) bool { a.damage += amount; return true }
 
 func newTestCopper(w World) *Copper {
 	idInfo, err := NewBlockIdentifier(1003, nil)

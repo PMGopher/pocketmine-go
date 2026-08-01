@@ -15,7 +15,7 @@ const (
 // Durable is a forward-compatible marker for pocketmine\item\Durable - same pattern as the Axe
 // interface in wood.go.
 type Durable interface {
-	ApplyDamage(amount int)
+	ApplyDamage(amount int) bool
 }
 
 // CandleComponent is a port of pocketmine\block\utils\CandleTrait (which itself uses

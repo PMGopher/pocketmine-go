@@ -11,7 +11,7 @@ import (
 // is the only current consumer, matching the local-interface pattern used elsewhere for
 // not-yet-ported types. The future Axe item type just needs to satisfy this.
 type Axe interface {
-	ApplyDamage(amount int)
+	ApplyDamage(amount int) bool
 }
 
 // Wood is a port of pocketmine\block\Wood.
