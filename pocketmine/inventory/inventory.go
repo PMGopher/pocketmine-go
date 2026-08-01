@@ -26,7 +26,7 @@ type InventoryListener interface {
 // Inventory is a port of pocketmine\inventory\Inventory, using the same self-dispatch pattern as
 // block.Behavior/item.Item: concrete inventory types embed BaseInventory, call Init(self) once
 // their own storage is ready, and implement the handful of methods BaseInventory has no sensible
-// default for (GetSize/GetItem/internalSetItem/internalSetContents/GetContents).
+// default for (GetSize/GetItem/InternalSetItem/InternalSetContents/GetContents).
 //
 // Not ported: getSlotValidators (SlotValidatedInventory - needs the unported transaction/action/
 // validator package). getViewers/onOpen/onClose keep working (just identity tracking), but
@@ -62,13 +62,16 @@ type Inventory interface {
 
 // inventoryStorage is what a concrete type (e.g. SimpleInventory) must provide - the narrow
 // self-dispatch surface BaseInventory's default method bodies reach through b.self, the same
-// "*Shaper" pattern used throughout block/ and item/.
+// "*Shaper" pattern used throughout block/ and item/. InternalSetItem/InternalSetContents are
+// exported (PHP's are protected) so concrete inventory types living outside this package - like
+// block/inventory's DoubleChestInventory - can implement inventoryStorage at all: an unexported
+// method name can only satisfy an interface declared in the same package.
 type inventoryStorage interface {
 	GetSize() int
 	GetItem(index int) item.Item
 	GetContents(includeEmpty bool) map[int]item.Item
-	internalSetItem(index int, it item.Item)
-	internalSetContents(items map[int]item.Item)
+	InternalSetItem(index int, it item.Item)
+	InternalSetContents(items map[int]item.Item)
 }
 
 // BaseInventory is a port of pocketmine\inventory\BaseInventory.
@@ -120,7 +123,7 @@ func (b *BaseInventory) SetItem(index int, it item.Item) {
 	}
 
 	oldItem := b.self.GetItem(index)
-	b.self.internalSetItem(index, it)
+	b.self.InternalSetItem(index, it)
 	b.onSlotChange(index, oldItem)
 }
 
@@ -137,14 +140,18 @@ func (b *BaseInventory) SetContents(items map[int]item.Item) {
 	}
 
 	oldContents := b.self.GetContents(true)
-	b.self.internalSetContents(items)
+	b.self.InternalSetContents(items)
 	b.onContentChange(oldContents)
 }
 
-// getMatchingItemCount is a port of BaseInventory::getMatchingItemCount - the slow-but-correct
-// default; SimpleInventory overrides it to avoid GetItem's clone-per-call cost, matching the PHP
-// original's own override for the same reason.
-func (b *BaseInventory) getMatchingItemCount(slot int, test item.Item, checkTags bool) int {
+// GetMatchingItemCount is a port of BaseInventory::getMatchingItemCount (exported here, unlike
+// PHP's protected visibility, so concrete inventory types defined outside this package - like
+// block/inventory's DoubleChestInventory - can override it: an unexported method name can only
+// satisfy an interface requirement declared in the same package, which would otherwise break the
+// self-dispatch in matchingItemCount below for any cross-package override). It's the
+// slow-but-correct default; SimpleInventory overrides it to avoid GetItem's clone-per-call cost,
+// matching the PHP original's own override for the same reason.
+func (b *BaseInventory) GetMatchingItemCount(slot int, test item.Item, checkTags bool) int {
 	it := b.self.GetItem(slot)
 	if it.Equals(test, checkTags) {
 		return it.GetCount()
@@ -204,7 +211,7 @@ func (b *BaseInventory) FirstEmpty() int {
 }
 
 // IsSlotEmpty is a port of BaseInventory::isSlotEmpty - the slow-but-correct default;
-// SimpleInventory overrides it for the same reason as getMatchingItemCount.
+// SimpleInventory overrides it for the same reason as GetMatchingItemCount.
 func (b *BaseInventory) IsSlotEmpty(index int) bool {
 	return b.self.GetItem(index).IsNull()
 }
@@ -399,19 +406,19 @@ func (b *BaseInventory) SlotExists(slot int) bool { return slot >= 0 && slot < b
 
 func (b *BaseInventory) GetListeners() *utils.ObjectSet[InventoryListener] { return b.listeners }
 
-// matchingItemCount and isSlotEmpty reach getMatchingItemCount/IsSlotEmpty through self rather
+// matchingItemCount and isSlotEmpty reach GetMatchingItemCount/IsSlotEmpty through self rather
 // than calling BaseInventory's own methods directly - PHP's $this-> calls resolve to the
 // most-derived override automatically, but Go's embedding doesn't, so every internal caller in
-// this file goes through these two helpers instead of b.getMatchingItemCount/b.IsSlotEmpty
+// this file goes through these two helpers instead of b.GetMatchingItemCount/b.IsSlotEmpty
 // directly. SimpleInventory overrides both for performance (avoiding GetItem's clone-per-call
 // cost), matching the PHP original's own overrides for the same reason.
 func (b *BaseInventory) matchingItemCount(slot int, test item.Item, checkTags bool) int {
 	if m, ok := b.self.(interface {
-		getMatchingItemCount(slot int, test item.Item, checkTags bool) int
+		GetMatchingItemCount(slot int, test item.Item, checkTags bool) int
 	}); ok {
-		return m.getMatchingItemCount(slot, test, checkTags)
+		return m.GetMatchingItemCount(slot, test, checkTags)
 	}
-	return b.getMatchingItemCount(slot, test, checkTags)
+	return b.GetMatchingItemCount(slot, test, checkTags)
 }
 
 func (b *BaseInventory) isSlotEmpty(index int) bool {

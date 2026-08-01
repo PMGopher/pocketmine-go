@@ -28,7 +28,7 @@ func (s *SimpleInventory) GetItem(index int) item.Item {
 	return s.slots[index].Clone()
 }
 
-func (s *SimpleInventory) internalSetItem(index int, it item.Item) {
+func (s *SimpleInventory) InternalSetItem(index int, it item.Item) {
 	if index < 0 || index >= len(s.slots) {
 		return
 	}
@@ -51,7 +51,7 @@ func (s *SimpleInventory) GetContents(includeEmpty bool) map[int]item.Item {
 	return contents
 }
 
-func (s *SimpleInventory) internalSetContents(items map[int]item.Item) {
+func (s *SimpleInventory) InternalSetContents(items map[int]item.Item) {
 	for i := range s.slots {
 		it, ok := items[i]
 		if !ok || it.IsNull() {
@@ -62,9 +62,9 @@ func (s *SimpleInventory) internalSetContents(items map[int]item.Item) {
 	}
 }
 
-// getMatchingItemCount overrides BaseInventory's slow default, matching the PHP original's own
+// GetMatchingItemCount overrides BaseInventory's slow default, matching the PHP original's own
 // override (avoids GetItem's clone-per-call cost).
-func (s *SimpleInventory) getMatchingItemCount(slot int, test item.Item, checkTags bool) int {
+func (s *SimpleInventory) GetMatchingItemCount(slot int, test item.Item, checkTags bool) int {
 	if slot < 0 || slot >= len(s.slots) || s.slots[slot] == nil {
 		return 0
 	}
