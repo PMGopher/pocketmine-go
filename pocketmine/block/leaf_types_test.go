@@ -143,4 +143,5 @@ var (
 	_ Behavior = (*LightningRod)(nil)
 	_ Behavior = (*DragonEgg)(nil)
 	_ Behavior = (*Bell)(nil)
+	_ Behavior = (*Grass)(nil)
 )
