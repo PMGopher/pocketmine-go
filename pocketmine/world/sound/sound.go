@@ -50,3 +50,12 @@ type PressurePlateActivateSound struct {
 type PressurePlateDeactivateSound struct {
 	BlockStateID int
 }
+
+// AmethystBlockChimeSound is a port of pocketmine\world\sound\AmethystBlockChimeSound.
+type AmethystBlockChimeSound struct{}
+
+// BlockPunchSound is a port of pocketmine\world\sound\BlockPunchSound. Stores the block's state
+// ID rather than the whole Block - same reasoning as ItemUseOnBlockSound.
+type BlockPunchSound struct {
+	BlockStateID int
+}
