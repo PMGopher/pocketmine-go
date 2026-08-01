@@ -75,4 +75,6 @@ var (
 	_ Behavior = (*GlassPane)(nil)
 	_ Behavior = (*StainedGlassPane)(nil)
 	_ Behavior = (*Slab)(nil)
+	_ Behavior = (*WoodenSlab)(nil)
+	_ Behavior = (*CopperSlab)(nil)
 )
