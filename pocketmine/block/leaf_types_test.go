@@ -106,4 +106,8 @@ var (
 	_ Behavior = (*PoweredRail)(nil)
 	_ Behavior = (*ActivatorRail)(nil)
 	_ Behavior = (*DetectorRail)(nil)
+	_ Behavior = (*Carrot)(nil)
+	_ Behavior = (*Potato)(nil)
+	_ Behavior = (*Beetroot)(nil)
+	_ Behavior = (*Wheat)(nil)
 )
