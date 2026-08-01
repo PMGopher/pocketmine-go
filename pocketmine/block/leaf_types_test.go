@@ -99,4 +99,5 @@ var (
 	_ Behavior = (*WeightedPressurePlate)(nil)
 	_ Behavior = (*WeightedPressurePlateHeavy)(nil)
 	_ Behavior = (*WeightedPressurePlateLight)(nil)
+	_ Behavior = (*SweetBerryBush)(nil)
 )
