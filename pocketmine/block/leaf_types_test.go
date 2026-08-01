@@ -138,4 +138,6 @@ var (
 	_ Behavior = (*GlowLichen)(nil)
 	_ Behavior = (*Candle)(nil)
 	_ Behavior = (*DyedCandle)(nil)
+	_ Behavior = (*GrassPath)(nil)
+	_ Behavior = (*Mycelium)(nil)
 )
