@@ -142,4 +142,5 @@ var (
 	_ Behavior = (*Mycelium)(nil)
 	_ Behavior = (*LightningRod)(nil)
 	_ Behavior = (*DragonEgg)(nil)
+	_ Behavior = (*Bell)(nil)
 )

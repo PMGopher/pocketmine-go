@@ -60,6 +60,7 @@ type Player interface {
 type Projectile interface {
 	Entity
 	IsOnFire() bool
+	GetHorizontalFacing() math.Facing
 }
 
 // BlockTransaction is the minimal surface Block.Place needs — a set of block changes to be

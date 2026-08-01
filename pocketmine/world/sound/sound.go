@@ -68,3 +68,6 @@ type FireExtinguishSound struct{}
 
 // FlintSteelSound is a port of pocketmine\world\sound\FlintSteelSound.
 type FlintSteelSound struct{}
+
+// BellRingSound is a port of pocketmine\world\sound\BellRingSound.
+type BellRingSound struct{}
