@@ -50,6 +50,7 @@ type Living interface {
 type Player interface {
 	Entity
 	GetHorizontalFacing() math.Facing
+	IsSneaking() bool
 }
 
 type Projectile interface {

@@ -88,4 +88,7 @@ var (
 	_ Behavior = (*DaylightSensor)(nil)
 	_ Behavior = (*TripwireHook)(nil)
 	_ Behavior = (*Tripwire)(nil)
+	_ Behavior = (*Trapdoor)(nil)
+	_ Behavior = (*WoodenTrapdoor)(nil)
+	_ Behavior = (*CopperTrapdoor)(nil)
 )
