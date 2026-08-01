@@ -95,3 +95,9 @@ type BucketFillLavaSound struct{}
 
 // BucketEmptyLavaSound is a port of pocketmine\world\sound\BucketEmptyLavaSound.
 type BucketEmptyLavaSound struct{}
+
+// DyeUseSound is a port of pocketmine\world\sound\DyeUseSound.
+type DyeUseSound struct{}
+
+// InkSacUseSound is a port of pocketmine\world\sound\InkSacUseSound.
+type InkSacUseSound struct{}

@@ -202,4 +202,6 @@ var (
 	_ Behavior = (*Note)(nil)
 	_ Behavior = (*FloorBanner)(nil)
 	_ Behavior = (*WallBanner)(nil)
+	_ Behavior = (*FloorSign)(nil)
+	_ Behavior = (*WallSign)(nil)
 )
