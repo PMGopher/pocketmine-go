@@ -83,4 +83,6 @@ var (
 	_ Behavior = (*Rail)(nil)
 	_ Behavior = (*RedstoneLamp)(nil)
 	_ Behavior = (*RedstoneOre)(nil)
+	_ Behavior = (*RedstoneTorch)(nil)
+	_ Behavior = (*UnderwaterTorch)(nil)
 )
