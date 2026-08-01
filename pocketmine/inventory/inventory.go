@@ -278,7 +278,7 @@ func (b *BaseInventory) internalAddItem(newItem item.Item) item.Item {
 				newItem.SetCount(newItem.GetCount() - amount)
 				slotItem := b.self.GetItem(i)
 				slotItem.SetCount(slotItem.GetCount() + amount)
-				b.SetItem(i, slotItem)
+				b.setItem(i, slotItem)
 				if newItem.GetCount() <= 0 {
 					return newItem
 				}
@@ -291,7 +291,7 @@ func (b *BaseInventory) internalAddItem(newItem item.Item) item.Item {
 		newItem.SetCount(newItem.GetCount() - amount)
 		slotItem := newItem.Clone()
 		slotItem.SetCount(amount)
-		b.SetItem(slotIndex, slotItem)
+		b.setItem(slotIndex, slotItem)
 		if newItem.GetCount() <= 0 {
 			return newItem
 		}
@@ -335,7 +335,7 @@ func (b *BaseInventory) RemoveItem(slots ...item.Item) []item.Item {
 
 				slotItem := b.self.GetItem(i)
 				slotItem.SetCount(slotItem.GetCount() - amount)
-				b.SetItem(i, slotItem)
+				b.setItem(i, slotItem)
 			}
 			if search.item.GetCount() > 0 {
 				remaining = append(remaining, search)
@@ -351,15 +351,15 @@ func (b *BaseInventory) RemoveItem(slots ...item.Item) []item.Item {
 	return result
 }
 
-func (b *BaseInventory) Clear(index int) { b.SetItem(index, newEmptyItem()) }
+func (b *BaseInventory) Clear(index int) { b.setItem(index, newEmptyItem()) }
 
 func (b *BaseInventory) ClearAll() { b.SetContents(nil) }
 
 func (b *BaseInventory) Swap(slot1, slot2 int) {
 	i1 := b.self.GetItem(slot1)
 	i2 := b.self.GetItem(slot2)
-	b.SetItem(slot1, i2)
-	b.SetItem(slot2, i1)
+	b.setItem(slot1, i2)
+	b.setItem(slot2, i1)
 }
 
 func (b *BaseInventory) GetViewers() []Player { return b.viewers }
@@ -426,4 +426,17 @@ func (b *BaseInventory) isSlotEmpty(index int) bool {
 		return s.IsSlotEmpty(index)
 	}
 	return b.IsSlotEmpty(index)
+}
+
+// setItem is the same self-dispatch shape as matchingItemCount/isSlotEmpty above, for the same
+// reason: every internal BaseInventory method that needs to write a slot goes through this
+// instead of calling b.SetItem directly, so a concrete type overriding SetItem (like
+// block/inventory's CraftingGrid, which recomputes its recipe bounds on every change) is picked
+// up correctly rather than silently bypassed.
+func (b *BaseInventory) setItem(index int, it item.Item) {
+	if s, ok := b.self.(interface{ SetItem(index int, it item.Item) }); ok {
+		s.SetItem(index, it)
+		return
+	}
+	b.SetItem(index, it)
 }
