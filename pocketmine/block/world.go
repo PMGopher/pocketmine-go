@@ -64,6 +64,8 @@ type Player interface {
 	IsSneaking() bool
 	GetYaw() float64
 	GetID() int
+	// GetEyePos is needed by Barrel.Place's look-direction-based facing logic.
+	GetEyePos() math.Vector3
 }
 
 type Projectile interface {
