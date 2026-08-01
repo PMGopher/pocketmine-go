@@ -70,15 +70,35 @@ func (c *Candle) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone
 }
 
-func (c *Candle) getCandleIfCompatibleType(blk Behavior) *Candle {
-	if candle, ok := blk.(*Candle); ok && candle.HasSameTypeId(c.self) {
-		return candle
+// candleShaper lets DyedCandle override GetCandleIfCompatibleType and have CanBePlacedAt/Place
+// (defined once here on Candle) reach the override - same self-dispatch problem and solution as
+// RailShaper/pressurePlateShaper.
+type candleShaper interface {
+	GetCandleIfCompatibleType(blk Behavior) *Candle
+}
+
+// candleBaser is satisfied by Candle and (via embedding) anything that embeds it, such as
+// DyedCandle - candleBase() returns the *Candle within whatever concrete type blk actually is, so
+// GetCandleIfCompatibleType below can recognise e.g. a *DyedCandle as "a candle" the same way
+// PHP's `instanceof Candle` does for a subclass.
+type candleBaser interface {
+	candleBase() *Candle
+}
+
+func (c *Candle) candleBase() *Candle { return c }
+
+// GetCandleIfCompatibleType is a port of Candle::getCandleIfCompatibleType.
+func (c *Candle) GetCandleIfCompatibleType(blk Behavior) *Candle {
+	if cb, ok := blk.(candleBaser); ok {
+		if candle := cb.candleBase(); candle.HasSameTypeId(c.self) {
+			return candle
+		}
 	}
 	return nil
 }
 
 func (c *Candle) CanBePlacedAt(blockReplace Behavior, clickVector math.Vector3, face math.Facing, isClickedBlock bool) bool {
-	if candle := c.getCandleIfCompatibleType(blockReplace); candle != nil {
+	if candle := c.self.(candleShaper).GetCandleIfCompatibleType(blockReplace); candle != nil {
 		return candle.Count < candleMaxCount
 	}
 	return c.Transparent.CanBePlacedAt(blockReplace, clickVector, face, isClickedBlock)
@@ -88,7 +108,7 @@ func (c *Candle) Place(tx BlockTransaction, item Item, blockReplace Behavior, bl
 	if !blockReplace.(blockGeometry).GetAdjacentSupportType(math.Down).HasCenterSupport() {
 		return false
 	}
-	if existing := c.getCandleIfCompatibleType(blockReplace); existing != nil {
+	if existing := c.self.(candleShaper).GetCandleIfCompatibleType(blockReplace); existing != nil {
 		if existing.Count >= candleMaxCount {
 			return false
 		}
