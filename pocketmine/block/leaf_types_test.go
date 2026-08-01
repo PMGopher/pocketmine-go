@@ -186,4 +186,6 @@ var (
 	_ Behavior = (*RedstoneComparator)(nil)
 	_ Behavior = (*NetherFungus)(nil)
 	_ Behavior = (*NetherVines)(nil)
+	_ Behavior = (*Pumpkin)(nil)
+	_ Behavior = (*SmallDripleaf)(nil)
 )
