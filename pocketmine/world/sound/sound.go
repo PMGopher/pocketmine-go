@@ -78,6 +78,9 @@ type ItemFrameRemoveItemSound struct{}
 // ItemFrameRotateItemSound is a port of pocketmine\world\sound\ItemFrameRotateItemSound.
 type ItemFrameRotateItemSound struct{}
 
+// LecternPlaceBookSound is a port of pocketmine\world\sound\LecternPlaceBookSound.
+type LecternPlaceBookSound struct{}
+
 // BellRingSound is a port of pocketmine\world\sound\BellRingSound.
 type BellRingSound struct{}
 
