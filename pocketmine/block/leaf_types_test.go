@@ -140,4 +140,5 @@ var (
 	_ Behavior = (*DyedCandle)(nil)
 	_ Behavior = (*GrassPath)(nil)
 	_ Behavior = (*Mycelium)(nil)
+	_ Behavior = (*LightningRod)(nil)
 )
