@@ -208,4 +208,6 @@ var (
 	_ Behavior = (*CeilingEdgesHangingSign)(nil)
 	_ Behavior = (*WallHangingSign)(nil)
 	_ Behavior = (*MobHead)(nil)
+	_ Behavior = (*OminousFloorBanner)(nil)
+	_ Behavior = (*OminousWallBanner)(nil)
 )
