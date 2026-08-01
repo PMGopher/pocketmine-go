@@ -17,6 +17,7 @@ func (fakeLivingEntity) IsLiving() bool                       { return true }
 func (fakeLivingEntity) IsSneaking() bool                     { return false }
 func (fakeLivingEntity) GetBoundingBox() math.AxisAlignedBB   { return math.AxisAlignedBB{} }
 func (fakeLivingEntity) GetMotion() math.Vector3              { return math.Vector3{} }
+func (fakeLivingEntity) SetOnFire(seconds int)                {}
 
 // entityWorld extends fakeWorld with a settable list of nearby entities, for exercising
 // PressurePlate.OnScheduledUpdate.
@@ -77,6 +78,7 @@ func (fakeItemLikeEntity) GetFallDistance() float64             { return 0 }
 func (fakeItemLikeEntity) SetFallDistance(fallDistance float64) {}
 func (fakeItemLikeEntity) GetBoundingBox() math.AxisAlignedBB   { return math.AxisAlignedBB{} }
 func (fakeItemLikeEntity) GetMotion() math.Vector3              { return math.Vector3{} }
+func (fakeItemLikeEntity) SetOnFire(seconds int)                {}
 
 func TestWeightedPressurePlateSignalStrengthScalesWithEntityCount(t *testing.T) {
 	w := &entityWorld{}

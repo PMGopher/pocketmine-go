@@ -188,4 +188,6 @@ var (
 	_ Behavior = (*NetherVines)(nil)
 	_ Behavior = (*Pumpkin)(nil)
 	_ Behavior = (*SmallDripleaf)(nil)
+	_ Behavior = (*Fire)(nil)
+	_ Behavior = (*SoulFire)(nil)
 )
