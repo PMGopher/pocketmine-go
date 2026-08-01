@@ -51,3 +51,20 @@ var dyeColorMetadataTable = map[DyeColor]dyeColorMetadata{
 func (d DyeColor) GetDisplayName() string { return dyeColorMetadataTable[d].displayName }
 
 func (d DyeColor) GetRgbValue() color.Color { return dyeColorMetadataTable[d].rgbValue }
+
+// DyeColorToInvertedID is a port of pocketmine\data\bedrock\DyeColorIdMap::toInvertedId. Banner
+// base/pattern colours are historically stored inverted relative to their normal dye ID (PHP:
+// `~toId($color) & 0xf`); since DyeColor's declaration order already matches toId 1:1
+// (White=0...Black=15, confirmed against the PHP registration table above), this is just
+// `15 - id`, which is arithmetically identical to `~id & 0xf` for id in 0-15.
+func DyeColorToInvertedID(d DyeColor) int { return int(DyeColorBlack) - int(d) }
+
+// DyeColorFromInvertedID is a port of DyeColorIdMap::fromInvertedId, and false if the ID doesn't
+// map to a valid DyeColor.
+func DyeColorFromInvertedID(id int) (DyeColor, bool) {
+	raw := int(DyeColorBlack) - id
+	if raw < int(DyeColorWhite) || raw > int(DyeColorBlack) {
+		return 0, false
+	}
+	return DyeColor(raw), true
+}
