@@ -181,4 +181,7 @@ var (
 	_ Behavior = (*Beacon)(nil)
 	_ Behavior = (*CocoaBlock)(nil)
 	_ Behavior = (*RespawnAnchor)(nil)
+	_ Behavior = (*RedstoneWire)(nil)
+	_ Behavior = (*RedstoneRepeater)(nil)
+	_ Behavior = (*RedstoneComparator)(nil)
 )
