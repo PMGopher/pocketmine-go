@@ -100,4 +100,6 @@ var (
 	_ Behavior = (*WeightedPressurePlateHeavy)(nil)
 	_ Behavior = (*WeightedPressurePlateLight)(nil)
 	_ Behavior = (*SweetBerryBush)(nil)
+	_ Behavior = (*EndPortalFrame)(nil)
+	_ Behavior = (*ChorusPlant)(nil)
 )
