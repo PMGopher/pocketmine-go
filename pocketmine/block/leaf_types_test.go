@@ -190,4 +190,7 @@ var (
 	_ Behavior = (*SmallDripleaf)(nil)
 	_ Behavior = (*Fire)(nil)
 	_ Behavior = (*SoulFire)(nil)
+	_ Behavior = (*NetherReactor)(nil)
+	_ Behavior = (*Coral)(nil)
+	_ Behavior = (*CoralBlock)(nil)
 )
