@@ -211,4 +211,7 @@ var (
 	_ Behavior = (*OminousFloorBanner)(nil)
 	_ Behavior = (*OminousWallBanner)(nil)
 	_ Behavior = (*Bed)(nil)
+	_ Behavior = (*Cake)(nil)
+	_ Behavior = (*CakeWithCandle)(nil)
+	_ Behavior = (*CakeWithDyedCandle)(nil)
 )
