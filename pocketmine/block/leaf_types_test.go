@@ -153,4 +153,6 @@ var (
 	_ Behavior = (*NetherPortal)(nil)
 	_ Behavior = (*MelonStem)(nil)
 	_ Behavior = (*PumpkinStem)(nil)
+	_ Behavior = (*BigDripleafStem)(nil)
+	_ Behavior = (*BigDripleafHead)(nil)
 )

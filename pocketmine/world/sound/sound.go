@@ -71,3 +71,9 @@ type FlintSteelSound struct{}
 
 // BellRingSound is a port of pocketmine\world\sound\BellRingSound.
 type BellRingSound struct{}
+
+// DripleafTiltDownSound is a port of pocketmine\world\sound\DripleafTiltDownSound.
+type DripleafTiltDownSound struct{}
+
+// DripleafTiltUpSound is a port of pocketmine\world\sound\DripleafTiltUpSound.
+type DripleafTiltUpSound struct{}

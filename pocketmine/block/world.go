@@ -41,6 +41,7 @@ type Entity interface {
 	SetOnGround(onGround bool)
 	GetFallDistance() float64
 	SetFallDistance(fallDistance float64)
+	GetBoundingBox() math.AxisAlignedBB
 }
 
 // Living is a forward-compatible marker for pocketmine\entity\Living — same pattern as
