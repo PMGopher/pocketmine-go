@@ -109,7 +109,7 @@ func (w *Wall) recalculateConnections() bool {
 	for _, facing := range math.HorizontalFacing {
 		side := w.GetSide(facing, 1)
 		geo := side.(blockGeometry)
-		_, isThin := side.(*Thin)
+		_, isThin := side.(thinBaser)
 		_, isFenceGate := side.(*FenceGate)
 		connects := geo.HasSameTypeId(w.self) || isFenceGate || isThin ||
 			side.GetSupportType(math.Opposite(facing)) == blockutils.SupportTypeFull

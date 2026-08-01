@@ -21,6 +21,16 @@ func NewThin(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) *Thi
 	return t
 }
 
+// thinBaser is satisfied by Thin and (via embedding) anything that embeds it, such as GlassPane,
+// StainedGlassPane or HardenedGlassPane - used below so a neighbouring pane of any of those types
+// is recognised as "Thin" the way PHP's `instanceof Thin` does for a subclass, instead of only
+// matching the exact *Thin type. Same pattern as candleBaser/fenceBaser.
+type thinBaser interface {
+	thinBase() *Thin
+}
+
+func (t *Thin) thinBase() *Thin { return t }
+
 // Clone can't use the usual one-line pattern: Connections is a map, a reference type - see
 // Vine.Clone's doc comment for the same reasoning.
 func (t *Thin) Clone() Behavior {
@@ -42,7 +52,7 @@ func (t *Thin) ReadStateFromWorld() Behavior {
 	connections := map[math.Facing]bool{}
 	for _, facing := range math.HorizontalFacing {
 		side := t.GetSide(facing, 1)
-		_, isThin := side.(*Thin)
+		_, isThin := side.(thinBaser)
 		_, isWall := side.(*Wall)
 		if isThin || isWall || side.GetSupportType(math.Opposite(facing)) == blockutils.SupportTypeFull {
 			connections[facing] = true

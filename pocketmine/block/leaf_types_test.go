@@ -155,4 +155,7 @@ var (
 	_ Behavior = (*PumpkinStem)(nil)
 	_ Behavior = (*BigDripleafStem)(nil)
 	_ Behavior = (*BigDripleafHead)(nil)
+	_ Behavior = (*WoodenFence)(nil)
+	_ Behavior = (*HardenedGlassPane)(nil)
+	_ Behavior = (*StainedHardenedGlassPane)(nil)
 )

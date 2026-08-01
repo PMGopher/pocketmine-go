@@ -18,6 +18,16 @@ func NewFence(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) *Fe
 	return f
 }
 
+// fenceBaser is satisfied by Fence and (via embedding) anything that embeds it, such as
+// WoodenFence - used below so a neighbouring *WoodenFence is recognised as "a fence" the way
+// PHP's `instanceof Fence` does for a subclass, instead of only matching the exact *Fence type.
+// Same pattern as candleBaser.
+type fenceBaser interface {
+	fenceBase() *Fence
+}
+
+func (f *Fence) fenceBase() *Fence { return f }
+
 // Clone can't use the usual one-line pattern: Connections is a map, a reference type - see
 // Vine.Clone's doc comment for the same reasoning.
 func (f *Fence) Clone() Behavior {
@@ -41,7 +51,7 @@ func (f *Fence) ReadStateFromWorld() Behavior {
 	connections := map[math.Facing]bool{}
 	for _, facing := range math.HorizontalFacing {
 		side := f.GetSide(facing, 1)
-		_, isFence := side.(*Fence)
+		_, isFence := side.(fenceBaser)
 		_, isFenceGate := side.(*FenceGate)
 		if isFence || isFenceGate || side.GetSupportType(math.Opposite(facing)) == blockutils.SupportTypeFull {
 			connections[facing] = true
