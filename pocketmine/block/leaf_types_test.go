@@ -219,4 +219,5 @@ var (
 	_ Behavior = (*TorchflowerCrop)(nil)
 	_ Behavior = (*PitcherCrop)(nil)
 	_ Behavior = (*DoublePitcherCrop)(nil)
+	_ Behavior = (*Chest)(nil)
 )

@@ -15,6 +15,9 @@ type Item interface {
 	// IsNull reports whether this represents "no item" (air / zero count) — a base Item method in
 	// the PHP original.
 	IsNull() bool
+	// GetCustomName is needed by Chest.OnInteract's CanOpenWith(item.GetCustomName()) check — a
+	// base Item method in the PHP original.
+	GetCustomName() string
 }
 
 // ToolTier is the minimal surface needed from an item tool tier (wood/stone/iron/diamond/netherite).
