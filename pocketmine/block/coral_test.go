@@ -16,6 +16,8 @@ func (n *noSupportBlock) GetSupportType(facing math.Facing) blockutils.SupportTy
 	return blockutils.SupportTypeNone
 }
 
+func (n *noSupportBlock) IsSolid() bool { return false }
+
 func (n *noSupportBlock) Clone() Behavior {
 	c := *n
 	c.rebind(&c)

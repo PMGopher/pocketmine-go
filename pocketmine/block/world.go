@@ -62,6 +62,7 @@ type Player interface {
 	Entity
 	GetHorizontalFacing() math.Facing
 	IsSneaking() bool
+	GetYaw() float64
 }
 
 type Projectile interface {

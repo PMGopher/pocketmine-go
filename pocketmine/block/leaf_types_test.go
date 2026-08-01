@@ -200,4 +200,6 @@ var (
 	_ Behavior = (*Water)(nil)
 	_ Behavior = (*Lava)(nil)
 	_ Behavior = (*Note)(nil)
+	_ Behavior = (*FloorBanner)(nil)
+	_ Behavior = (*WallBanner)(nil)
 )
