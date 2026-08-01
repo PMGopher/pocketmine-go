@@ -77,3 +77,9 @@ type DripleafTiltDownSound struct{}
 
 // DripleafTiltUpSound is a port of pocketmine\world\sound\DripleafTiltUpSound.
 type DripleafTiltUpSound struct{}
+
+// RespawnAnchorChargeSound is a port of pocketmine\world\sound\RespawnAnchorChargeSound.
+type RespawnAnchorChargeSound struct{}
+
+// RespawnAnchorSetSpawnSound is a port of pocketmine\world\sound\RespawnAnchorSetSpawnSound.
+type RespawnAnchorSetSpawnSound struct{}

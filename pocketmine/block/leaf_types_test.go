@@ -180,4 +180,5 @@ var (
 	_ Behavior = (*Sugarcane)(nil)
 	_ Behavior = (*Beacon)(nil)
 	_ Behavior = (*CocoaBlock)(nil)
+	_ Behavior = (*RespawnAnchor)(nil)
 )
