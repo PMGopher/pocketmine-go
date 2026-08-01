@@ -70,4 +70,5 @@ var (
 	_ Behavior = (*Loom)(nil)
 	_ Behavior = (*Wall)(nil)
 	_ Behavior = (*FenceGate)(nil)
+	_ Behavior = (*Fence)(nil)
 )

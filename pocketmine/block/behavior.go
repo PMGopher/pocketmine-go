@@ -34,6 +34,12 @@ type Behavior interface {
 	GetStateId() int
 	GetPosition() Position
 
+	// ReadStateFromWorld lets a block compute extra state derived from its surroundings (e.g.
+	// Fence/Wall/Thin's neighbor connections) right after being read from/placed in the world.
+	// Called externally by World once it exists; not invoked automatically by anything in this
+	// package yet.
+	ReadStateFromWorld() Behavior
+
 	// State encoding — must always describe the same fields in the same order regardless of
 	// current state (see data/runtime's DataDescriber for why these take pointers).
 	DescribeBlockItemState(w runtime.DataDescriber)

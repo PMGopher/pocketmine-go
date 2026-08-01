@@ -219,6 +219,8 @@ type blockGeometry interface {
 
 func (b *Block) GetPosition() Position { return b.position }
 
+func (b *Block) ReadStateFromWorld() Behavior { return b.self }
+
 // SetPosition is the Go equivalent of the internal position() method.
 func (b *Block) SetPosition(world World, x, y, z int) {
 	b.position = NewPosition(float64(x), float64(y), float64(z), world)
