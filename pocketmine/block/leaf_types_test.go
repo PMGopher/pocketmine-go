@@ -150,4 +150,5 @@ var (
 	_ Behavior = (*MushroomStem)(nil)
 	_ Behavior = (*Element)(nil)
 	_ Behavior = (*DoubleTallGrass)(nil)
+	_ Behavior = (*NetherPortal)(nil)
 )
