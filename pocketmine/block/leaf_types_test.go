@@ -165,4 +165,8 @@ var (
 	_ Behavior = (*Slime)(nil)
 	_ Behavior = (*SporeBlossom)(nil)
 	_ Behavior = (*ResinClump)(nil)
+	_ Behavior = (*Sculk)(nil)
+	_ Behavior = (*CopperBars)(nil)
+	_ Behavior = (*CopperGrate)(nil)
+	_ Behavior = (*CopperBulb)(nil)
 )
