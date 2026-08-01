@@ -86,4 +86,6 @@ var (
 	_ Behavior = (*RedstoneTorch)(nil)
 	_ Behavior = (*UnderwaterTorch)(nil)
 	_ Behavior = (*DaylightSensor)(nil)
+	_ Behavior = (*TripwireHook)(nil)
+	_ Behavior = (*Tripwire)(nil)
 )
