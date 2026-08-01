@@ -81,4 +81,6 @@ var (
 	_ Behavior = (*WoodenStairs)(nil)
 	_ Behavior = (*CopperStairs)(nil)
 	_ Behavior = (*Rail)(nil)
+	_ Behavior = (*RedstoneLamp)(nil)
+	_ Behavior = (*RedstoneOre)(nil)
 )
