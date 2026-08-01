@@ -61,10 +61,11 @@ func (w *fakeWorld) UseBreakOn(pos math.Vector3) bool {
 	w.breakCalls = append(w.breakCalls, pos)
 	return true
 }
-func (w *fakeWorld) GetFullLightAt(x, y, z int) int         { return 15 }
-func (w *fakeWorld) GetBlockLightAt(x, y, z int) int        { return 15 }
-func (w *fakeWorld) GetRealBlockSkyLightAt(x, y, z int) int { return 15 }
-func (w *fakeWorld) GetSunAnglePercentage() float64         { return 0.5 }
+func (w *fakeWorld) GetFullLightAt(x, y, z int) int                   { return 15 }
+func (w *fakeWorld) GetBlockLightAt(x, y, z int) int                  { return 15 }
+func (w *fakeWorld) GetRealBlockSkyLightAt(x, y, z int) int           { return 15 }
+func (w *fakeWorld) GetSunAnglePercentage() float64                   { return 0.5 }
+func (w *fakeWorld) GetNearbyEntities(bb math.AxisAlignedBB) []Entity { return nil }
 
 func TestButtonStateRoundTrips(t *testing.T) {
 	w := &fakeWorld{}

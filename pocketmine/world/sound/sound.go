@@ -39,3 +39,14 @@ type ScrapeSound struct{}
 
 // DoorSound is a port of pocketmine\world\sound\DoorSound.
 type DoorSound struct{}
+
+// PressurePlateActivateSound is a port of pocketmine\world\sound\PressurePlateActivateSound.
+// Stores the block's state ID rather than the whole Block - same reasoning as ItemUseOnBlockSound.
+type PressurePlateActivateSound struct {
+	BlockStateID int
+}
+
+// PressurePlateDeactivateSound is a port of pocketmine\world\sound\PressurePlateDeactivateSound.
+type PressurePlateDeactivateSound struct {
+	BlockStateID int
+}
