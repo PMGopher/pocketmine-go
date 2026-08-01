@@ -216,4 +216,7 @@ var (
 	_ Behavior = (*CakeWithDyedCandle)(nil)
 	_ Behavior = (*BrownMushroom)(nil)
 	_ Behavior = (*Sapling)(nil)
+	_ Behavior = (*TorchflowerCrop)(nil)
+	_ Behavior = (*PitcherCrop)(nil)
+	_ Behavior = (*DoublePitcherCrop)(nil)
 )
