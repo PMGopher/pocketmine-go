@@ -175,4 +175,6 @@ var (
 	_ Behavior = (*TallGrass)(nil)
 	_ Behavior = (*NetherRoots)(nil)
 	_ Behavior = (*Nylium)(nil)
+	_ Behavior = (*Snow)(nil)
+	_ Behavior = (*SnowLayer)(nil)
 )
