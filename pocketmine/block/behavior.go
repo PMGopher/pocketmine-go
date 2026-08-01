@@ -33,6 +33,7 @@ type Behavior interface {
 	GetTypeId() int
 	GetStateId() int
 	GetPosition() Position
+	GetName() string
 
 	// ReadStateFromWorld lets a block compute extra state derived from its surroundings (e.g.
 	// Fence/Wall/Thin's neighbor connections) right after being read from/placed in the world.
