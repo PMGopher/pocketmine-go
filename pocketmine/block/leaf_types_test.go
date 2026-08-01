@@ -204,4 +204,7 @@ var (
 	_ Behavior = (*WallBanner)(nil)
 	_ Behavior = (*FloorSign)(nil)
 	_ Behavior = (*WallSign)(nil)
+	_ Behavior = (*CeilingCenterHangingSign)(nil)
+	_ Behavior = (*CeilingEdgesHangingSign)(nil)
+	_ Behavior = (*WallHangingSign)(nil)
 )
