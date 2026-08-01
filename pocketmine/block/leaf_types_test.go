@@ -178,4 +178,6 @@ var (
 	_ Behavior = (*Snow)(nil)
 	_ Behavior = (*SnowLayer)(nil)
 	_ Behavior = (*Sugarcane)(nil)
+	_ Behavior = (*Beacon)(nil)
+	_ Behavior = (*CocoaBlock)(nil)
 )
