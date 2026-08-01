@@ -47,6 +47,10 @@ type Entity interface {
 	SetOnFire(seconds int)
 	IsOnFire() bool
 	Extinguish()
+	// ExtinguishWithCause is needed by Water.OnEntityInside, which (unlike the plain Extinguish()
+	// callers elsewhere) needs to report EntityExtinguishEvent's real cause (CAUSE_WATER) rather
+	// than Extinguish()'s CAUSE_CUSTOM default.
+	ExtinguishWithCause(cause int)
 	CanBeMovedByCurrents() bool
 	// Attack is needed by the several OnEntityInside/OnAttack methods across this package that
 	// deal fire/contact/lava damage (BaseFire, Cactus, Lava, Magma, SweetBerryBush, Campfire).

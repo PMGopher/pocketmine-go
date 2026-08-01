@@ -1,6 +1,9 @@
 package block
 
-import "pocketmine-go/pocketmine/world/sound"
+import (
+	"pocketmine-go/pocketmine/entity"
+	"pocketmine-go/pocketmine/world/sound"
+)
 
 // Water is a port of pocketmine\block\Water.
 type Water struct {
@@ -31,10 +34,10 @@ func (w *Water) checkForHarden() bool { return false }
 
 func (w *Water) GetMinAdjacentSourcesToFormSource() (int, bool) { return 2, true }
 
-func (w *Water) OnEntityInside(entity Entity) bool {
-	entity.ResetFallDistance()
-	if entity.IsOnFire() {
-		entity.Extinguish()
+func (w *Water) OnEntityInside(e Entity) bool {
+	e.ResetFallDistance()
+	if e.IsOnFire() {
+		e.ExtinguishWithCause(entity.EntityExtinguishCauseWater)
 	}
 	return true
 }

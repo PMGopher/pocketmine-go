@@ -21,6 +21,7 @@ func (fakeLivingEntity) GetMotion() math.Vector3              { return math.Vect
 func (fakeLivingEntity) SetOnFire(seconds int)                {}
 func (fakeLivingEntity) IsOnFire() bool                       { return false }
 func (fakeLivingEntity) Extinguish()                          {}
+func (fakeLivingEntity) ExtinguishWithCause(cause int)        {}
 func (fakeLivingEntity) CanBeMovedByCurrents() bool           { return true }
 func (fakeLivingEntity) Attack(source entity.DamageSource)    {}
 
@@ -86,6 +87,7 @@ func (fakeItemLikeEntity) GetMotion() math.Vector3              { return math.Ve
 func (fakeItemLikeEntity) SetOnFire(seconds int)                {}
 func (fakeItemLikeEntity) IsOnFire() bool                       { return false }
 func (fakeItemLikeEntity) Extinguish()                          {}
+func (fakeItemLikeEntity) ExtinguishWithCause(cause int)        {}
 func (fakeItemLikeEntity) CanBeMovedByCurrents() bool           { return true }
 func (fakeItemLikeEntity) Attack(source entity.DamageSource)    {}
 

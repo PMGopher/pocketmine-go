@@ -123,6 +123,7 @@ func (fakeSignPlayer) GetMotion() math.Vector3              { return math.Vector
 func (fakeSignPlayer) SetOnFire(seconds int)                {}
 func (fakeSignPlayer) IsOnFire() bool                       { return false }
 func (fakeSignPlayer) Extinguish()                          {}
+func (fakeSignPlayer) ExtinguishWithCause(cause int)        {}
 func (fakeSignPlayer) CanBeMovedByCurrents() bool           { return true }
 func (fakeSignPlayer) Attack(source entity.DamageSource)    {}
 func (fakeSignPlayer) GetHorizontalFacing() math.Facing     { return math.North }

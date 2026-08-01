@@ -1,6 +1,10 @@
 package block
 
-import "testing"
+import (
+	"testing"
+
+	"pocketmine-go/pocketmine/entity"
+)
 
 func newTestWater(w World) *Water {
 	wa := NewWater(mustBlockIdentifier(1041), "Test Water", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
@@ -75,16 +79,21 @@ func TestLiquidGetStillFormAndFlowingForm(t *testing.T) {
 
 type onFireTrackingEntity struct {
 	fakeItemLikeEntity
-	onFireSeconds int
-	extinguished  bool
-	resetCalled   bool
-	reportsOnFire bool
+	onFireSeconds   int
+	extinguished    bool
+	extinguishCause int
+	resetCalled     bool
+	reportsOnFire   bool
 }
 
 func (e *onFireTrackingEntity) SetOnFire(seconds int) { e.onFireSeconds = seconds }
 func (e *onFireTrackingEntity) Extinguish()           { e.extinguished = true }
-func (e *onFireTrackingEntity) IsOnFire() bool        { return e.reportsOnFire }
-func (e *onFireTrackingEntity) ResetFallDistance()    { e.resetCalled = true }
+func (e *onFireTrackingEntity) ExtinguishWithCause(cause int) {
+	e.extinguished = true
+	e.extinguishCause = cause
+}
+func (e *onFireTrackingEntity) IsOnFire() bool     { return e.reportsOnFire }
+func (e *onFireTrackingEntity) ResetFallDistance() { e.resetCalled = true }
 
 func TestWaterOnEntityInsideExtinguishesBurningEntity(t *testing.T) {
 	w := &fakeWorld{}
@@ -99,6 +108,9 @@ func TestWaterOnEntityInsideExtinguishesBurningEntity(t *testing.T) {
 	}
 	if !e.extinguished {
 		t.Error("expected a burning entity to be extinguished")
+	}
+	if e.extinguishCause != entity.EntityExtinguishCauseWater {
+		t.Errorf("extinguishCause = %d, want EntityExtinguishCauseWater", e.extinguishCause)
 	}
 }
 
