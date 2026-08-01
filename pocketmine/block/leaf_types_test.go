@@ -234,4 +234,6 @@ var (
 	_ Behavior = (*DyedShulkerBox)(nil)
 	_ Behavior = (*TrappedChest)(nil)
 	_ Behavior = (*UnknownBlock)(nil)
+	_ Behavior = (*Campfire)(nil)
+	_ Behavior = (*SoulCampfire)(nil)
 )
