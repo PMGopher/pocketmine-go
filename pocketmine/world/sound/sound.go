@@ -101,3 +101,9 @@ type DyeUseSound struct{}
 
 // InkSacUseSound is a port of pocketmine\world\sound\InkSacUseSound.
 type InkSacUseSound struct{}
+
+// FireworkExplosionSound is a port of pocketmine\world\sound\FireworkExplosionSound.
+type FireworkExplosionSound struct{}
+
+// FireworkLargeExplosionSound is a port of pocketmine\world\sound\FireworkLargeExplosionSound.
+type FireworkLargeExplosionSound struct{}
