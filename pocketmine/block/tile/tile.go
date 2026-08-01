@@ -27,8 +27,12 @@ type World interface {
 }
 
 // Item is the minimal surface Tile.CopyDataFromItem/NameableComponent need from an item.
+// GetNamedTag is needed by ShulkerBox.CopyDataFromItem's override, which (uniquely among
+// container tiles) reads the item's whole NBT as save data rather than just its
+// custom-block-data subset.
 type Item interface {
 	GetCustomBlockData() (*nbt.CompoundTag, bool)
+	GetNamedTag() *nbt.CompoundTag
 	HasCustomName() bool
 	GetCustomName() string
 }

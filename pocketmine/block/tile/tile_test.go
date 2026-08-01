@@ -29,6 +29,12 @@ type fakeItem struct {
 func (f fakeItem) GetCustomBlockData() (*nbt.CompoundTag, bool) { return f.blockNbt, f.hasBlkNbt }
 func (f fakeItem) HasCustomName() bool                          { return f.hasName }
 func (f fakeItem) GetCustomName() string                        { return f.customName }
+func (f fakeItem) GetNamedTag() *nbt.CompoundTag {
+	if f.blockNbt != nil {
+		return f.blockNbt
+	}
+	return nbt.NewCompoundTag()
+}
 
 func TestNoteSaveNBTRoundTrip(t *testing.T) {
 	w := &fakeWorld{}
