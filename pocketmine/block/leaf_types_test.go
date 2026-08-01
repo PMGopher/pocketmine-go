@@ -118,4 +118,7 @@ var (
 	_ Behavior = (*IronOre)(nil)
 	_ Behavior = (*NetherGoldOre)(nil)
 	_ Behavior = (*LapisOre)(nil)
+	_ Behavior = (*Clay)(nil)
+	_ Behavior = (*GildedBlackstone)(nil)
+	_ Behavior = (*HayBale)(nil)
 )

@@ -8,10 +8,12 @@ import (
 
 type fakeLivingEntity struct{}
 
-func (fakeLivingEntity) ResetFallDistance()        {}
-func (fakeLivingEntity) GetPosition() math.Vector3 { return math.Vector3{} }
-func (fakeLivingEntity) SetOnGround(onGround bool) {}
-func (fakeLivingEntity) IsLiving() bool            { return true }
+func (fakeLivingEntity) ResetFallDistance()                   {}
+func (fakeLivingEntity) GetPosition() math.Vector3            { return math.Vector3{} }
+func (fakeLivingEntity) SetOnGround(onGround bool)            {}
+func (fakeLivingEntity) GetFallDistance() float64             { return 0 }
+func (fakeLivingEntity) SetFallDistance(fallDistance float64) {}
+func (fakeLivingEntity) IsLiving() bool                       { return true }
 
 // entityWorld extends fakeWorld with a settable list of nearby entities, for exercising
 // PressurePlate.OnScheduledUpdate.
@@ -65,9 +67,11 @@ func TestStonePressurePlatePressesForLivingEntityOnly(t *testing.T) {
 // filter.
 type fakeItemLikeEntity struct{}
 
-func (fakeItemLikeEntity) ResetFallDistance()        {}
-func (fakeItemLikeEntity) GetPosition() math.Vector3 { return math.Vector3{} }
-func (fakeItemLikeEntity) SetOnGround(onGround bool) {}
+func (fakeItemLikeEntity) ResetFallDistance()                   {}
+func (fakeItemLikeEntity) GetPosition() math.Vector3            { return math.Vector3{} }
+func (fakeItemLikeEntity) SetOnGround(onGround bool)            {}
+func (fakeItemLikeEntity) GetFallDistance() float64             { return 0 }
+func (fakeItemLikeEntity) SetFallDistance(fallDistance float64) {}
 
 func TestWeightedPressurePlateSignalStrengthScalesWithEntityCount(t *testing.T) {
 	w := &entityWorld{}
