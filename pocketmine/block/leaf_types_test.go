@@ -144,4 +144,5 @@ var (
 	_ Behavior = (*DragonEgg)(nil)
 	_ Behavior = (*Bell)(nil)
 	_ Behavior = (*Grass)(nil)
+	_ Behavior = (*TNTBlock)(nil)
 )
