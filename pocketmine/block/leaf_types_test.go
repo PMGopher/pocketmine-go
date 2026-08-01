@@ -128,4 +128,6 @@ var (
 	_ Behavior = (*LitPumpkin)(nil)
 	_ Behavior = (*DriedKelp)(nil)
 	_ Behavior = (*FrostedIce)(nil)
+	_ Behavior = (*Azalea)(nil)
+	_ Behavior = (*CaveVines)(nil)
 )
