@@ -193,4 +193,6 @@ var (
 	_ Behavior = (*NetherReactor)(nil)
 	_ Behavior = (*Coral)(nil)
 	_ Behavior = (*CoralBlock)(nil)
+	_ Behavior = (*FloorCoralFan)(nil)
+	_ Behavior = (*WallCoralFan)(nil)
 )
