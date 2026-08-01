@@ -132,4 +132,6 @@ var (
 	_ Behavior = (*CaveVines)(nil)
 	_ Behavior = (*AmethystCluster)(nil)
 	_ Behavior = (*BuddingAmethyst)(nil)
+	_ Behavior = (*Light)(nil)
+	_ Behavior = (*Froglight)(nil)
 )
