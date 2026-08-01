@@ -107,3 +107,9 @@ type FireworkExplosionSound struct{}
 
 // FireworkLargeExplosionSound is a port of pocketmine\world\sound\FireworkLargeExplosionSound.
 type FireworkLargeExplosionSound struct{}
+
+// ChestOpenSound is a port of pocketmine\world\sound\ChestOpenSound.
+type ChestOpenSound struct{}
+
+// ChestCloseSound is a port of pocketmine\world\sound\ChestCloseSound.
+type ChestCloseSound struct{}
