@@ -6,14 +6,6 @@ import (
 	"pocketmine-go/pocketmine/math"
 )
 
-// ThinBlock is a forward-compatible marker for pocketmine\block\Thin (glass panes / iron bars —
-// not ported yet, since it needs the ReadStateFromWorld lifecycle hook this port doesn't have).
-// Same reasoning as FenceGate above.
-type ThinBlock interface {
-	Behavior
-	IsThinBlock() bool
-}
-
 // Wall is a port of pocketmine\block\Wall.
 type Wall struct {
 	Transparent
@@ -117,7 +109,7 @@ func (w *Wall) recalculateConnections() bool {
 	for _, facing := range math.HorizontalFacing {
 		side := w.GetSide(facing, 1)
 		geo := side.(blockGeometry)
-		_, isThin := side.(ThinBlock)
+		_, isThin := side.(*Thin)
 		_, isFenceGate := side.(*FenceGate)
 		connects := geo.HasSameTypeId(w.self) || isFenceGate || isThin ||
 			side.GetSupportType(math.Opposite(facing)) == blockutils.SupportTypeFull
