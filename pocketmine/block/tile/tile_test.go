@@ -9,9 +9,15 @@ import (
 
 type fakeWorld struct {
 	removed []Tile
+	tiles   map[[3]int]Tile
 }
 
 func (w *fakeWorld) RemoveTile(t Tile) { w.removed = append(w.removed, t) }
+
+func (w *fakeWorld) GetTileAt(x, y, z int) (Tile, bool) {
+	t, ok := w.tiles[[3]int{x, y, z}]
+	return t, ok
+}
 
 type fakeItem struct {
 	blockNbt   *nbt.CompoundTag

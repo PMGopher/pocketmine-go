@@ -22,6 +22,8 @@ const (
 // World is the minimal surface Tile needs from a world.
 type World interface {
 	RemoveTile(t Tile)
+	// GetTileAt is the minimal surface Chest's pairing logic needs to look up a neighboring tile.
+	GetTileAt(x, y, z int) (Tile, bool)
 }
 
 // Item is the minimal surface Tile.CopyDataFromItem/NameableComponent need from an item.
