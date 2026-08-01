@@ -195,4 +195,6 @@ var (
 	_ Behavior = (*CoralBlock)(nil)
 	_ Behavior = (*FloorCoralFan)(nil)
 	_ Behavior = (*WallCoralFan)(nil)
+	_ Behavior = (*BambooSapling)(nil)
+	_ Behavior = (*Bamboo)(nil)
 )
