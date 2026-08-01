@@ -199,4 +199,5 @@ var (
 	_ Behavior = (*Bamboo)(nil)
 	_ Behavior = (*Water)(nil)
 	_ Behavior = (*Lava)(nil)
+	_ Behavior = (*Note)(nil)
 )
