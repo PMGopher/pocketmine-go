@@ -25,6 +25,7 @@ type World interface {
 	GetRealBlockSkyLightAt(x, y, z int) int
 	GetSunAnglePercentage() float64
 	GetNearbyEntities(bb math.AxisAlignedBB) []Entity
+	GetHighestAdjacentFullLightAt(x, y, z int) int
 	// UseBreakOn is the simplified (no item/player/particles) form of World::useBreakOn, the only
 	// form used from within block package (Button.onNearbyBlockChange).
 	UseBreakOn(pos math.Vector3) bool

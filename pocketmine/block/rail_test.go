@@ -37,6 +37,7 @@ func (w *fakeRailWorld) GetBlockLightAt(x, y, z int) int                        
 func (w *fakeRailWorld) GetRealBlockSkyLightAt(x, y, z int) int                 { return 15 }
 func (w *fakeRailWorld) GetSunAnglePercentage() float64                         { return 0.5 }
 func (w *fakeRailWorld) GetNearbyEntities(bb math.AxisAlignedBB) []Entity       { return nil }
+func (w *fakeRailWorld) GetHighestAdjacentFullLightAt(x, y, z int) int          { return 15 }
 func (w *fakeRailWorld) UseBreakOn(pos math.Vector3) bool                       { return true }
 
 func newTestRailAt(w *fakeRailWorld, x, y, z int) *Rail {

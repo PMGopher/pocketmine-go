@@ -126,4 +126,6 @@ var (
 	_ Behavior = (*GlowingObsidian)(nil)
 	_ Behavior = (*Magma)(nil)
 	_ Behavior = (*LitPumpkin)(nil)
+	_ Behavior = (*DriedKelp)(nil)
+	_ Behavior = (*FrostedIce)(nil)
 )

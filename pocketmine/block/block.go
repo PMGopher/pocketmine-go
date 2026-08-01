@@ -197,6 +197,15 @@ func (b *Block) GetSide(side math.Facing, step int) Behavior {
 	)
 }
 
+// GetAllSides returns the six blocks adjacent to this one.
+func (b *Block) GetAllSides() []Behavior {
+	sides := make([]Behavior, 0, len(math.AllFacing))
+	for _, facing := range math.AllFacing {
+		sides = append(sides, b.GetSide(facing, 1))
+	}
+	return sides
+}
+
 // GetAdjacentSupportType returns the type of support the block on the given side provides back
 // towards this block.
 func (b *Block) GetAdjacentSupportType(facing math.Facing) blockutils.SupportType {
