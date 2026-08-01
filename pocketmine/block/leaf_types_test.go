@@ -149,4 +149,5 @@ var (
 	_ Behavior = (*BrownMushroomBlock)(nil)
 	_ Behavior = (*MushroomStem)(nil)
 	_ Behavior = (*Element)(nil)
+	_ Behavior = (*DoubleTallGrass)(nil)
 )
