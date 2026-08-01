@@ -6,14 +6,6 @@ import (
 	"pocketmine-go/pocketmine/math"
 )
 
-// FenceGate is a forward-compatible marker for pocketmine\block\FenceGate — declared here since
-// Wall.recalculateConnections is the only current consumer, matching the local-interface pattern
-// used elsewhere for not-yet-ported types.
-type FenceGate interface {
-	Behavior
-	IsFenceGate() bool
-}
-
 // ThinBlock is a forward-compatible marker for pocketmine\block\Thin (glass panes / iron bars —
 // not ported yet, since it needs the ReadStateFromWorld lifecycle hook this port doesn't have).
 // Same reasoning as FenceGate above.
@@ -126,7 +118,7 @@ func (w *Wall) recalculateConnections() bool {
 		side := w.GetSide(facing, 1)
 		geo := side.(blockGeometry)
 		_, isThin := side.(ThinBlock)
-		_, isFenceGate := side.(FenceGate)
+		_, isFenceGate := side.(*FenceGate)
 		connects := geo.HasSameTypeId(w.self) || isFenceGate || isThin ||
 			side.GetSupportType(math.Opposite(facing)) == blockutils.SupportTypeFull
 

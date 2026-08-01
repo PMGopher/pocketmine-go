@@ -36,3 +36,6 @@ type CopperWaxRemoveSound struct{}
 
 // ScrapeSound is a port of pocketmine\world\sound\ScrapeSound.
 type ScrapeSound struct{}
+
+// DoorSound is a port of pocketmine\world\sound\DoorSound.
+type DoorSound struct{}
