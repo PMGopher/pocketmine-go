@@ -236,4 +236,5 @@ var (
 	_ Behavior = (*UnknownBlock)(nil)
 	_ Behavior = (*Campfire)(nil)
 	_ Behavior = (*SoulCampfire)(nil)
+	_ Behavior = (*ItemFrame)(nil)
 )
