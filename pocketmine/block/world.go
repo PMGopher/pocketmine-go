@@ -22,6 +22,8 @@ type World interface {
 	ScheduleDelayedBlockUpdate(pos math.Vector3, delay int)
 	GetFullLightAt(x, y, z int) int
 	GetBlockLightAt(x, y, z int) int
+	GetRealBlockSkyLightAt(x, y, z int) int
+	GetSunAnglePercentage() float64
 	// UseBreakOn is the simplified (no item/player/particles) form of World::useBreakOn, the only
 	// form used from within block package (Button.onNearbyBlockChange).
 	UseBreakOn(pos math.Vector3) bool
