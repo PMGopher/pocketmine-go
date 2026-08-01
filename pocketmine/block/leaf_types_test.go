@@ -77,4 +77,5 @@ var (
 	_ Behavior = (*Slab)(nil)
 	_ Behavior = (*WoodenSlab)(nil)
 	_ Behavior = (*CopperSlab)(nil)
+	_ Behavior = (*Stair)(nil)
 )
