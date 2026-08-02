@@ -39,6 +39,7 @@ var (
 	vanillaCactusFlower      Behavior
 	vanillaOminousBanner     Behavior
 	vanillaOminousWallBanner Behavior
+	vanillaBamboo            Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -300,4 +301,17 @@ func VanillaOminousWallBanner() Behavior {
 		vanillaOminousWallBanner = NewOminousWallBanner(mustVanillaBlockIdentifier(OMINOUS_WALL_BANNER), "Ominous Wall Banner", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
 	}
 	return vanillaOminousWallBanner.Clone()
+}
+
+// VanillaBamboo is a port of VanillaBlocks::BAMBOO() - see VanillaBlocksInputs.php's
+// register("bamboo", ...): new BreakInfo(1.0, ToolType::AXE), [Tags::POTTABLE_PLANTS]. The real
+// BreakInfo is an anonymous subclass that also makes a sword break bamboo instantly
+// (getBreakTime() returns 0.0 for ToolType::SWORD) - BlockBreakInfo isn't self-dispatched in this
+// port (no concrete type overrides its methods anywhere else either), so that one behavioral
+// nuance is dropped here; every other field is copied exactly.
+func VanillaBamboo() Behavior {
+	if vanillaBamboo == nil {
+		vanillaBamboo = NewBamboo(mustVanillaBlockIdentifier(BAMBOO), "Bamboo", NewBlockTypeInfo(NewBlockBreakInfo(1.0, ToolTypeAxe, 0, nil, nil), []string{BlockTypeTagsPottablePlants}, nil))
+	}
+	return vanillaBamboo.Clone()
 }

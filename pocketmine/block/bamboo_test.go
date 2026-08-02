@@ -66,6 +66,47 @@ func (w *replaceableWorld) GetBlockAt(x, y, z int) Behavior {
 	return r
 }
 
+func TestBambooSaplingGrowReplacesSelfAndSpaceAbove(t *testing.T) {
+	w := newBTWorld()
+	placeReplaceableAt(w, 1, 3, 3)
+	b := newTestBambooSapling(w)
+
+	if !b.grow() {
+		t.Fatal("expected grow to succeed")
+	}
+	if len(w.setCalls) != 2 {
+		t.Fatalf("expected 2 SetBlock calls, got %d", len(w.setCalls))
+	}
+
+	own, ok := w.setCalls[0].blk.(*Bamboo)
+	if !ok || w.setCalls[0].pos.FloorY() != 2 {
+		t.Errorf("expected a *Bamboo at the sapling's own position (Y=2), got %#v at Y=%d", w.setCalls[0].blk, w.setCalls[0].pos.FloorY())
+	}
+	if own != nil && own.LeafSize != BambooNoLeaves {
+		t.Errorf("LeafSize at own position = %d, want BambooNoLeaves", own.LeafSize)
+	}
+
+	above, ok := w.setCalls[1].blk.(*Bamboo)
+	if !ok || w.setCalls[1].pos.FloorY() != 3 {
+		t.Errorf("expected a *Bamboo above (Y=3), got %#v at Y=%d", w.setCalls[1].blk, w.setCalls[1].pos.FloorY())
+	}
+	if above != nil && above.LeafSize != BambooSmallLeaves {
+		t.Errorf("LeafSize above = %d, want BambooSmallLeaves", above.LeafSize)
+	}
+}
+
+func TestBambooSaplingGrowFailsWhenSpaceAboveIsNotReplaceable(t *testing.T) {
+	w := newBTWorld()
+	b := newTestBambooSapling(w)
+
+	if b.grow() {
+		t.Error("expected grow to fail without replaceable space above")
+	}
+	if len(w.setCalls) != 0 {
+		t.Errorf("expected no SetBlock calls, got %d", len(w.setCalls))
+	}
+}
+
 func TestBambooSaplingBecomesReadyWhenSpaceAboveIsFree(t *testing.T) {
 	w := &replaceableWorld{}
 	b := newTestBambooSapling(w)

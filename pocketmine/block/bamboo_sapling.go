@@ -2,6 +2,7 @@ package block
 
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/event"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -55,10 +56,32 @@ func (b *BambooSapling) OnNearbyBlockChange() {
 // ported yet. Block's default OnInteract (return false) already matches this gap, so there's
 // nothing to override here.
 
-// grow is a port of BambooSapling::grow. It needs a fresh per-call BlockTransaction, the block
-// registry (VanillaBlocks.BAMBOO()), and StructureGrowEvent, none ported yet, so this is a no-op
-// stub returning false for now - see Sugarcane.grow's doc comment for the same category of gap.
-func (b *BambooSapling) grow() bool { return false }
+// grow is a port of BambooSapling::grow. Only ever called with a nil player currently
+// (OnRandomTick, below) - same reasoning as Bamboo.grow not taking a player parameter yet.
+func (b *BambooSapling) grow() bool {
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	if !b.self.(blockGeometry).GetSide(math.Up, 1).CanBeReplaced() {
+		return false
+	}
+
+	tx := NewBlockTransaction(world)
+	bamboo := VanillaBamboo().(*Bamboo)
+	above := bamboo.Clone().(*Bamboo)
+	above.LeafSize = BambooSmallLeaves
+	tx.AddBlock(b.position, bamboo)
+	tx.AddBlock(b.position.GetSide(math.Up, 1), above)
+
+	ev := &StructureGrowEvent{Block: b.self, Transaction: tx, Player: nil}
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
+	}
+
+	return tx.Apply()
+}
 
 func (b *BambooSapling) TicksRandomly() bool { return true }
 
