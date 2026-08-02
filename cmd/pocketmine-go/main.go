@@ -1,5 +1,6 @@
 // Command pocketmine-go is the entry point for this port: a standalone binary that opens a real
-// Minecraft Bedrock listener and lets a client connect and spawn.
+// Minecraft Bedrock listener, lets a client connect and spawn, and sends it real generated terrain
+// (a classic flat world) to stand on.
 //
 // The transport (RakNet) and the entire Bedrock game protocol on top of it (login, the encryption
 // handshake, resource pack negotiation, ...) are both provided by
@@ -9,11 +10,9 @@
 // game logic, which is what the rest of this port focuses on - gophertunnel gets a client all the
 // way to spawning in far less time than reimplementing the wire format from scratch would.
 //
-// This is still an early milestone, not a playable server: StartGame is sent with no real chunk
-// data (see handleConn's doc comment), so a connecting client will get through login and reach
-// the point of spawning, but will see an empty/void world since no terrain is sent yet. Real
-// chunk data - backed by a real World implementation of the block.World interface the whole
-// block package already codes against - is the next milestone.
+// This is still an early milestone, not a playable server: block interaction (breaking/placing),
+// inventory, and every other gameplay packet beyond spawning and seeing terrain aren't wired up
+// yet - see handleConn's read loop.
 package main
 
 import (
@@ -30,8 +29,19 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine"
+	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/log"
+	"pocketmine-go/pocketmine/network/mcpe/convert"
+	"pocketmine-go/pocketmine/network/mcpe/serializer"
+	"pocketmine-go/pocketmine/world"
+	"pocketmine-go/pocketmine/world/generator"
 )
+
+// spawnChunkRadius is how many chunks in every direction around (0,0) get sent to a joining
+// player, matching PocketMine-MP's own "spawn radius" concept (chunks always kept loaded/sent
+// around the world spawn) in spirit, though real per-player view-distance-driven chunk streaming
+// isn't ported - every player currently gets this same fixed area regardless of movement.
+const spawnChunkRadius = 4
 
 func main() {
 	port := flag.Int("port", 19132, "UDP port to listen on")
@@ -41,6 +51,16 @@ func main() {
 
 	logger := log.NewSimpleLogger()
 	log.SetGlobal(logger)
+
+	translator := convert.NewBlockTranslator()
+	flatGen := generator.NewFlat(generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()))
+	w := world.New(flatGen, translator, []block.Behavior{
+		block.VanillaAir(),
+		block.VanillaBedrock(),
+		block.VanillaStone(),
+		block.VanillaDirt(),
+		block.VanillaGrass(),
+	})
 
 	cfg := minecraft.ListenConfig{
 		StatusProvider: minecraft.NewStatusProvider(*motd, pocketmine.Name),
@@ -61,7 +81,7 @@ func main() {
 
 	logger.Info(fmt.Sprintf("%s %s is listening on %s", pocketmine.Name, pocketmine.Version().GetFullVersion(true), addr))
 
-	go acceptLoop(listener, logger)
+	go acceptLoop(listener, w, logger)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -70,16 +90,20 @@ func main() {
 	logger.Info("Shutting down...")
 }
 
-func acceptLoop(listener *minecraft.Listener, logger log.Logger) {
+func acceptLoop(listener *minecraft.Listener, w *world.World, logger log.Logger) {
 	for {
 		c, err := listener.Accept()
 		if err != nil {
 			// Accept only errors once the listener has been closed.
 			return
 		}
-		go handleConn(c.(*minecraft.Conn), listener, logger)
+		go handleConn(c.(*minecraft.Conn), listener, w, logger)
 	}
 }
+
+// spawnY is the Y coordinate a player stands on top of the classic flat preset's structure
+// (bedrock 1 + stone 59 + dirt 3 + grass 1 = 64 blocks tall, so the first free/air Y is 64).
+const spawnY = 64
 
 // handleConn drives one player's connection for as long as it stays open. By the time Accept
 // returns a *minecraft.Conn, gophertunnel has already completed the entire login handshake
@@ -92,7 +116,7 @@ func acceptLoop(listener *minecraft.Listener, logger log.Logger) {
 // handful of types wired up so far - see pocketmine/block/vanilla_blocks.go). A client can still
 // complete StartGame/spawn without it, just with incomplete item names/icons until that's filled
 // in.
-func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, logger log.Logger) {
+func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, logger log.Logger) {
 	defer conn.Close()
 	defer listener.Disconnect(conn, "server closed")
 
@@ -106,8 +130,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, logger log.L
 		EntityUniqueID:  1,
 		EntityRuntimeID: 1,
 		PlayerGameMode:  0, // survival
-		PlayerPosition:  mgl32.Vec3{0.5, 5, 0.5},
-		WorldSpawn:      protocol.BlockPos{0, 4, 0},
+		PlayerPosition:  mgl32.Vec3{0.5, spawnY, 0.5},
+		WorldSpawn:      protocol.BlockPos{0, spawnY, 0},
 		WorldGameMode:   0,
 		Time:            6000,
 		GameRules:       []protocol.GameRule{{Name: "showcoordinates", Value: true}},
@@ -116,7 +140,13 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, logger log.L
 		logger.Warning(fmt.Sprintf("%s failed to start game: %v", name, err))
 		return
 	}
-	logger.Info(fmt.Sprintf("%s spawned (no terrain yet - see main.go's doc comment)", name))
+	logger.Info(fmt.Sprintf("%s spawned, sending terrain...", name))
+
+	if err := sendSpawnChunks(conn, w); err != nil {
+		logger.Warning(fmt.Sprintf("%s: failed to send terrain: %v", name, err))
+		return
+	}
+	logger.Info(fmt.Sprintf("%s: terrain sent (%d chunks)", name, (2*spawnChunkRadius+1)*(2*spawnChunkRadius+1)))
 
 	for {
 		pk, err := conn.ReadPacket()
@@ -129,4 +159,32 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, logger log.L
 			// Chat isn't wired to anything yet - just proves packets round-trip both ways.
 		}
 	}
+}
+
+// sendSpawnChunks sends every chunk in a fixed square (see spawnChunkRadius) around the world
+// origin, then a NetworkChunkPublisherUpdate telling the client that area is loaded - the same two
+// pieces PocketMine-MP's own chunk-sending path needs, minus real per-player view-distance-driven
+// streaming as chunks come in and out of range (this port sends one fixed area to every player
+// today, regardless of where they go afterwards).
+func sendSpawnChunks(conn *minecraft.Conn, w *world.World) error {
+	for x := -spawnChunkRadius; x <= spawnChunkRadius; x++ {
+		for z := -spawnChunkRadius; z <= spawnChunkRadius; z++ {
+			chunk := w.GetOrLoadChunk(x, z)
+			payload := serializer.SerializeFullChunk(chunk, w.Translator())
+			pk := &packet.LevelChunk{
+				Position:      protocol.ChunkPos{int32(x), int32(z)},
+				SubChunkCount: uint32(serializer.GetSubChunkCount(chunk)),
+				RawPayload:    payload,
+			}
+			if err := conn.WritePacket(pk); err != nil {
+				return err
+			}
+		}
+	}
+
+	radiusBlocks := uint32(spawnChunkRadius) << 4
+	return conn.WritePacket(&packet.NetworkChunkPublisherUpdate{
+		Position: protocol.BlockPos{0, spawnY, 0},
+		Radius:   radiusBlocks,
+	})
 }
