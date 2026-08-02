@@ -30,6 +30,7 @@ var (
 	vanillaTorchflowerCrop Behavior
 	vanillaCrimsonNylium   Behavior
 	vanillaWarpedNylium    Behavior
+	vanillaAmethystCluster Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -205,4 +206,13 @@ func VanillaWarpedNylium() Behavior {
 		vanillaWarpedNylium = NewNylium(mustVanillaBlockIdentifier(WARPED_NYLIUM), "Warped Nylium", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.4, vanillaToolTierWood, nil), []string{BlockTypeTagsNylium}, nil), nil)
 	}
 	return vanillaWarpedNylium.Clone()
+}
+
+// VanillaAmethystCluster is a port of VanillaBlocks::AMETHYST_CLUSTER() - see
+// VanillaBlocksInputs.php's register("amethyst_cluster", ...): BreakInfo::pickaxe(1.5, ToolTier::WOOD).
+func VanillaAmethystCluster() Behavior {
+	if vanillaAmethystCluster == nil {
+		vanillaAmethystCluster = NewAmethystCluster(mustVanillaBlockIdentifier(AMETHYST_CLUSTER), "Amethyst Cluster", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.5, vanillaToolTierWood, nil), nil, nil))
+	}
+	return vanillaAmethystCluster.Clone()
 }
