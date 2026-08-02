@@ -45,6 +45,7 @@ var (
 	vanillaBigDripleafStem   Behavior
 	vanillaSmallDripleaf     Behavior
 	vanillaBigDripleafHead   Behavior
+	vanillaStone             Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -367,4 +368,14 @@ func VanillaBigDripleafHead() Behavior {
 		vanillaBigDripleafHead = NewBigDripleafHead(mustVanillaBlockIdentifier(BIG_DRIPLEAF_HEAD), "Big Dripleaf", NewBlockTypeInfo(NewBlockBreakInfo(0.1, ToolTypeNone, 0, nil, nil), nil, nil))
 	}
 	return vanillaBigDripleafHead.Clone()
+}
+
+// VanillaStone is a port of VanillaBlocks::STONE() - see VanillaBlocksInputs.php's
+// register("stone", ...): BreakInfo::pickaxe(1.5, ToolTier::WOOD, 30.0).
+func VanillaStone() Behavior {
+	if vanillaStone == nil {
+		blastResistance := 30.0
+		vanillaStone = NewStone(mustVanillaBlockIdentifier(STONE), "Stone", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.5, vanillaToolTierWood, &blastResistance), nil, nil))
+	}
+	return vanillaStone.Clone()
 }
