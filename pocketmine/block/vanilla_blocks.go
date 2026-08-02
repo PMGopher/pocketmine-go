@@ -55,6 +55,10 @@ var (
 	vanillaIronOre           Behavior
 	vanillaLapisLazuliOre    Behavior
 	vanillaRedstoneOre       Behavior
+	vanillaSand              Behavior
+	vanillaSandstone         Behavior
+	vanillaSnowLayer         Behavior
+	vanillaEmeraldOre        Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -477,4 +481,42 @@ func VanillaRedstoneOre() Behavior {
 		vanillaRedstoneOre = NewRedstoneOre(mustVanillaBlockIdentifier(REDSTONE_ORE), "Redstone Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
 	}
 	return vanillaRedstoneOre.Clone()
+}
+
+// VanillaEmeraldOre is a port of VanillaBlocks::EMERALD_ORE() - see VanillaBlocksInputs.php's
+// register("emerald_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+func VanillaEmeraldOre() Behavior {
+	if vanillaEmeraldOre == nil {
+		vanillaEmeraldOre = NewEmeraldOre(mustVanillaBlockIdentifier(EMERALD_ORE), "Emerald Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
+	}
+	return vanillaEmeraldOre.Clone()
+}
+
+// VanillaSand is a port of VanillaBlocks::SAND() - see VanillaBlocksInputs.php's
+// register("sand", ...): $sandTypeInfo = new Info(BreakInfo::shovel(0.5), [Tags::SAND]).
+func VanillaSand() Behavior {
+	if vanillaSand == nil {
+		vanillaSand = NewSand(mustVanillaBlockIdentifier(SAND), "Sand", NewBlockTypeInfo(BlockBreakInfoShovel(0.5, nil, nil), []string{BlockTypeTagsSand}, nil))
+	}
+	return vanillaSand.Clone()
+}
+
+// VanillaSandstone is a port of VanillaBlocks::SANDSTONE() - see VanillaBlocksInputs.php's
+// register("sandstone", ...): $sandstoneBreakInfo = new Info(BreakInfo::pickaxe(0.8, ToolTier::WOOD)).
+func VanillaSandstone() Behavior {
+	if vanillaSandstone == nil {
+		sandstone := &Opaque{Block: NewBlock(mustVanillaBlockIdentifier(SANDSTONE), "Sandstone", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.8, vanillaToolTierWood, nil), nil, nil))}
+		sandstone.Init(sandstone)
+		vanillaSandstone = sandstone
+	}
+	return vanillaSandstone.Clone()
+}
+
+// VanillaSnowLayer is a port of VanillaBlocks::SNOW_LAYER() - see VanillaBlocksInputs.php's
+// register("snow_layer", ...): BreakInfo::shovel(0.1, ToolTier::WOOD).
+func VanillaSnowLayer() Behavior {
+	if vanillaSnowLayer == nil {
+		vanillaSnowLayer = NewSnowLayer(mustVanillaBlockIdentifier(SNOW_LAYER), "Snow Layer", NewBlockTypeInfo(BlockBreakInfoShovel(0.1, vanillaToolTierWood, nil), nil, nil))
+	}
+	return vanillaSnowLayer.Clone()
 }

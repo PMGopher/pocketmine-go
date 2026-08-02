@@ -188,6 +188,10 @@ func (a chunkAdapter) GetHighestBlockAt(x, z int) (int, bool) {
 	return a.chunk.GetHighestBlockAt(x, z)
 }
 
+func (a chunkAdapter) GetBiomeID(x, y, z int) int32 {
+	return a.chunk.GetBiomeID(x, y, z)
+}
+
 // GetOrLoadChunkAtPosition is a port of World::getOrLoadChunkAtPosition. Uses generateChunkOnly,
 // not GetOrLoadChunk - see ensurePopulated's doc comment on why code reachable from inside a
 // populate pass (this is how populator.TallGrass looks up a chunk's heightmap) must not trigger

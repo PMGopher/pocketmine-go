@@ -1,6 +1,7 @@
 // Command pocketmine-go is the entry point for this port: a standalone binary that opens a real
 // Minecraft Bedrock listener, lets a client connect and spawn, and sends it real generated terrain
-// (a classic flat world) to stand on.
+// (Normal - noise-shaped, biome-varied hills/oceans/deserts/... - the same generator real
+// PocketMine-MP defaults to) to stand on.
 //
 // The transport (RakNet) and the entire Bedrock game protocol on top of it (login, the encryption
 // handshake, resource pack negotiation, ...) are both provided by
@@ -47,14 +48,15 @@ func main() {
 	port := flag.Int("port", 19132, "UDP port to listen on")
 	motd := flag.String("motd", pocketmine.Name, "message of the day shown in the server list")
 	maxPlayers := flag.Int("max-players", 20, "player count advertised in the server list")
+	seed := flag.Int("seed", 0, "world seed")
 	flag.Parse()
 
 	logger := log.NewSimpleLogger()
 	log.SetGlobal(logger)
 
 	translator := convert.NewBlockTranslator()
-	flatGen := generator.NewFlat(0, generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()), generator.VanillaFlatDecorationPopulators())
-	w := world.New(flatGen, translator, []block.Behavior{
+	gen := generator.NewNormal(*seed)
+	w := world.New(gen, translator, []block.Behavior{
 		block.VanillaAir(),
 		block.VanillaBedrock(),
 		block.VanillaStone(),
@@ -67,6 +69,12 @@ func main() {
 		block.VanillaLapisLazuliOre(),
 		block.VanillaGoldOre(),
 		block.VanillaDiamondOre(),
+		block.VanillaEmeraldOre(),
+		block.VanillaWater(),
+		block.VanillaSand(),
+		block.VanillaSandstone(),
+		block.VanillaSnowLayer(),
+		block.VanillaTallGrass(),
 	})
 
 	cfg := minecraft.ListenConfig{
@@ -88,7 +96,10 @@ func main() {
 
 	logger.Info(fmt.Sprintf("%s %s is listening on %s", pocketmine.Name, pocketmine.Version().GetFullVersion(true), addr))
 
-	go acceptLoop(listener, w, logger)
+	spawnY := computeSpawnY(w)
+	logger.Info(fmt.Sprintf("world seed %d, spawn height %d", *seed, spawnY))
+
+	go acceptLoop(listener, w, int64(*seed), spawnY, logger)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -97,20 +108,26 @@ func main() {
 	logger.Info("Shutting down...")
 }
 
-func acceptLoop(listener *minecraft.Listener, w *world.World, logger log.Logger) {
+// computeSpawnY finds the real ground level at the world origin (0,0) - unlike Flat's fixed-height
+// layer stack, Normal's terrain height varies by position, so this can't be a constant.
+func computeSpawnY(w *world.World) int32 {
+	chunk := w.GetOrLoadChunk(0, 0)
+	if h, ok := chunk.GetHighestBlockAt(0, 0); ok {
+		return int32(h) + 1
+	}
+	return 64
+}
+
+func acceptLoop(listener *minecraft.Listener, w *world.World, seed int64, spawnY int32, logger log.Logger) {
 	for {
 		c, err := listener.Accept()
 		if err != nil {
 			// Accept only errors once the listener has been closed.
 			return
 		}
-		go handleConn(c.(*minecraft.Conn), listener, w, logger)
+		go handleConn(c.(*minecraft.Conn), listener, w, seed, spawnY, logger)
 	}
 }
-
-// spawnY is the Y coordinate a player stands on top of the classic flat preset's structure
-// (bedrock 1 + stone 59 + dirt 3 + grass 1 = 64 blocks tall, so the first free/air Y is 64).
-const spawnY = 64
 
 // handleConn drives one player's connection for as long as it stays open. By the time Accept
 // returns a *minecraft.Conn, gophertunnel has already completed the entire login handshake
@@ -123,7 +140,7 @@ const spawnY = 64
 // handful of types wired up so far - see pocketmine/block/vanilla_blocks.go). A client can still
 // complete StartGame/spawn without it, just with incomplete item names/icons until that's filled
 // in.
-func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, logger log.Logger) {
+func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, seed int64, spawnY int32, logger log.Logger) {
 	defer conn.Close()
 	defer listener.Disconnect(conn, "server closed")
 
@@ -132,12 +149,12 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 
 	data := minecraft.GameData{
 		WorldName:       pocketmine.Name,
-		WorldSeed:       0,
+		WorldSeed:       seed,
 		Difficulty:      2, // normal
 		EntityUniqueID:  1,
 		EntityRuntimeID: 1,
 		PlayerGameMode:  0, // survival
-		PlayerPosition:  mgl32.Vec3{0.5, spawnY, 0.5},
+		PlayerPosition:  mgl32.Vec3{0.5, float32(spawnY), 0.5},
 		WorldSpawn:      protocol.BlockPos{0, spawnY, 0},
 		WorldGameMode:   0,
 		Time:            6000,
@@ -149,7 +166,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	}
 	logger.Info(fmt.Sprintf("%s spawned, sending terrain...", name))
 
-	if err := sendSpawnChunks(conn, w); err != nil {
+	if err := sendSpawnChunks(conn, w, spawnY); err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to send terrain: %v", name, err))
 		return
 	}
@@ -173,7 +190,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 // pieces PocketMine-MP's own chunk-sending path needs, minus real per-player view-distance-driven
 // streaming as chunks come in and out of range (this port sends one fixed area to every player
 // today, regardless of where they go afterwards).
-func sendSpawnChunks(conn *minecraft.Conn, w *world.World) error {
+func sendSpawnChunks(conn *minecraft.Conn, w *world.World, spawnY int32) error {
 	for x := -spawnChunkRadius; x <= spawnChunkRadius; x++ {
 		for z := -spawnChunkRadius; z <= spawnChunkRadius; z++ {
 			chunk := w.GetOrLoadChunk(x, z)

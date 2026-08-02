@@ -47,6 +47,10 @@ type Chunk interface {
 	// TallGrass::getHighestWorkableBlock - x/z are chunk-local (0-15), matching
 	// format.Chunk.GetHighestBlockAt.
 	GetHighestBlockAt(x, z int) (int, bool)
+	// GetBiomeID is needed by groundcover.GroundCover's port of GroundCover::populate, to look up
+	// each column's biome (and so its ground cover) - x/y/z are chunk-local, matching
+	// format.Chunk.GetBiomeID.
+	GetBiomeID(x, y, z int) int32
 }
 
 type Entity interface {

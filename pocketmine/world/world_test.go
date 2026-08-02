@@ -145,6 +145,47 @@ func TestPopulatingAChunkDoesNotCascadeToTheWholeWorld(t *testing.T) {
 	}
 }
 
+// TestNormalGeneratorPopulatesRealGroundCoverWithoutCascading exercises the Normal generator
+// end-to-end through World - real noise terrain, real biome-driven GroundCover/Ore/TallGrass
+// populators - covering both terrain-shape sanity (Normal has its own more detailed tests for
+// that) and the same population-cascade guard as
+// TestPopulatingAChunkDoesNotCascadeToTheWholeWorld, since Normal's populators can also write
+// across chunk borders (Ore's blast radius, same as Flat's).
+func TestNormalGeneratorPopulatesRealGroundCoverWithoutCascading(t *testing.T) {
+	tr := convert.NewBlockTranslator()
+	gen := generator.NewNormal(2024)
+	w := New(gen, tr, []block.Behavior{
+		block.VanillaAir(), block.VanillaBedrock(), block.VanillaStone(), block.VanillaDirt(), block.VanillaGrass(),
+		block.VanillaGravel(), block.VanillaCoalOre(), block.VanillaIronOre(), block.VanillaRedstoneOre(),
+		block.VanillaLapisLazuliOre(), block.VanillaGoldOre(), block.VanillaDiamondOre(), block.VanillaEmeraldOre(),
+		block.VanillaWater(), block.VanillaSand(), block.VanillaSandstone(), block.VanillaSnowLayer(), block.VanillaTallGrass(),
+	})
+
+	w.GetOrLoadChunk(0, 0)
+
+	if got := len(w.chunks); got > 9 {
+		t.Fatalf("len(w.chunks) after loading a single chunk = %d, want <= 9 (population cascaded further than the immediate neighbourhood)", got)
+	}
+
+	// GroundCover should have turned at least some exposed stone into a real biome-appropriate
+	// surface block (grass, sand, snow, ...) somewhere in the chunk - if every column were still
+	// bare stone/water, GroundCover silently did nothing.
+	coveredFound := false
+	for x := 0; x < 16 && !coveredFound; x++ {
+		for z := 0; z < 16 && !coveredFound; z++ {
+			for y := 55; y < 90 && !coveredFound; y++ {
+				switch w.GetBlockAt(x, y, z).GetTypeId() {
+				case block.GRASS, block.SAND, block.SNOW_LAYER, block.GRAVEL, block.DIRT:
+					coveredFound = true
+				}
+			}
+		}
+	}
+	if !coveredFound {
+		t.Error("expected GroundCover to have replaced some surface stone with a biome-appropriate block")
+	}
+}
+
 func TestGetOrLoadChunkAtPositionSetsBlockStateID(t *testing.T) {
 	w := newTestWorld()
 	pos := block.NewPosition(1, 0, 1, w)

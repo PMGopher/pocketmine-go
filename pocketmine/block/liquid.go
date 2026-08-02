@@ -34,6 +34,14 @@ type Liquid struct {
 
 func (l *Liquid) liquidBase() *Liquid { return l }
 
+// IsLiquid reports whether blk is a Liquid (Water, Lava, ...) - an exported `instanceof Liquid`
+// check for packages outside block that can't reach the unexported liquidBaser interface
+// themselves (e.g. populator/groundcover.GroundCover's port of `$id instanceof Liquid`).
+func IsLiquid(blk Behavior) bool {
+	_, ok := blk.(liquidBaser)
+	return ok
+}
+
 // liquidShaper lets concrete leaf types (Water, Lava) provide their own tick rate and override
 // checkForHarden, reached from Liquid's own OnNearbyBlockChange/OnScheduledUpdate via self-dispatch
 // - same self-dispatch shape as every other *Shaper in this port.
