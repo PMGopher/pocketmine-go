@@ -95,3 +95,68 @@ func TestBambooSeekToTopFindsTopOfStack(t *testing.T) {
 		t.Error("seekToTop() did not find the topmost bamboo block")
 	}
 }
+
+func newTestBambooForGrow(w World) *Bamboo {
+	b := NewBamboo(mustBlockIdentifier(1039), "Test Bamboo", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	b.SetPosition(w, 1, 2, 3)
+	return b
+}
+
+func placeReplaceableAt(w *btWorld, x, y, z int) {
+	r := &replaceableBlock{Block: NewBlock(mustBlockIdentifier(1040), "Replaceable Filler", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))}
+	r.Init(r)
+	r.SetPosition(w, x, y, z)
+	w.blocks[[3]int{x, y, z}] = r
+}
+
+func TestBambooGrowFromHeightOneAddsOneSmallLeavesBlockAbove(t *testing.T) {
+	w := newBTWorld()
+	placeReplaceableAt(w, 1, 3, 3) // space above must be replaceable
+	b := newTestBambooForGrow(w)
+
+	if !b.grow(12, 1) {
+		t.Fatal("expected grow to succeed")
+	}
+	if len(w.setCalls) != 1 {
+		t.Fatalf("expected 1 SetBlock call, got %d", len(w.setCalls))
+	}
+	grown, ok := w.setCalls[0].blk.(*Bamboo)
+	if !ok {
+		t.Fatalf("expected a *Bamboo, got %T", w.setCalls[0].blk)
+	}
+	if grown.LeafSize != BambooSmallLeaves {
+		t.Errorf("LeafSize = %d, want BambooSmallLeaves", grown.LeafSize)
+	}
+	if w.setCalls[0].pos.FloorY() != 3 {
+		t.Errorf("new block Y = %d, want 3 (directly above the original)", w.setCalls[0].pos.FloorY())
+	}
+}
+
+func TestBambooGrowFailsWhenSpaceAboveIsNotReplaceable(t *testing.T) {
+	w := newBTWorld() // default filler above is not replaceable
+	b := newTestBambooForGrow(w)
+
+	if b.grow(12, 1) {
+		t.Error("expected grow to fail without replaceable space above")
+	}
+	if len(w.setCalls) != 0 {
+		t.Errorf("expected no SetBlock calls, got %d", len(w.setCalls))
+	}
+}
+
+func TestBambooGrowFailsAtMaxHeight(t *testing.T) {
+	w := newBTWorld()
+	placeReplaceableAt(w, 1, 3, 3)
+	// Stack bamboo below the growing block up to maxHeight so the height-counting loop bails out.
+	below := NewBamboo(mustBlockIdentifier(1039), "Bamboo Below", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	below.SetPosition(w, 1, 1, 3)
+	w.blocks[[3]int{1, 1, 3}] = below
+	b := newTestBambooForGrow(w)
+
+	if b.grow(2, 1) {
+		t.Error("expected grow to fail once the stack reaches maxHeight")
+	}
+	if len(w.setCalls) != 0 {
+		t.Errorf("expected no SetBlock calls, got %d", len(w.setCalls))
+	}
+}
