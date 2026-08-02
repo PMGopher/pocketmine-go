@@ -28,6 +28,8 @@ var (
 	vanillaCaveVines       Behavior
 	vanillaTorchflower     Behavior
 	vanillaTorchflowerCrop Behavior
+	vanillaCrimsonNylium   Behavior
+	vanillaWarpedNylium    Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -182,4 +184,25 @@ func VanillaTorchflowerCrop() Behavior {
 		vanillaTorchflowerCrop = NewTorchflowerCrop(mustVanillaBlockIdentifier(TORCHFLOWER_CROP), "Torchflower Crop", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
 	}
 	return vanillaTorchflowerCrop.Clone()
+}
+
+// VanillaCrimsonNylium is a port of VanillaBlocks::CRIMSON_NYLIUM() - see VanillaBlocksInputs.php's
+// registerDelayed("crimson_nylium", ...): BreakInfo::pickaxe(0.4, ToolTier::WOOD), [Tags::NYLIUM].
+// Vegetation is nil (the real singleton lists CRIMSON_FUNGUS/CRIMSON_ROOTS, neither ported yet) -
+// harmless for Netherrack.tryTransform, the only current caller, which never reads it.
+func VanillaCrimsonNylium() Behavior {
+	if vanillaCrimsonNylium == nil {
+		vanillaCrimsonNylium = NewNylium(mustVanillaBlockIdentifier(CRIMSON_NYLIUM), "Crimson Nylium", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.4, vanillaToolTierWood, nil), []string{BlockTypeTagsNylium}, nil), nil)
+	}
+	return vanillaCrimsonNylium.Clone()
+}
+
+// VanillaWarpedNylium is a port of VanillaBlocks::WARPED_NYLIUM() - see VanillaBlocksInputs.php's
+// registerDelayed("warped_nylium", ...): BreakInfo::pickaxe(0.4, ToolTier::WOOD), [Tags::NYLIUM].
+// Vegetation is nil, same reasoning as VanillaCrimsonNylium.
+func VanillaWarpedNylium() Behavior {
+	if vanillaWarpedNylium == nil {
+		vanillaWarpedNylium = NewNylium(mustVanillaBlockIdentifier(WARPED_NYLIUM), "Warped Nylium", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.4, vanillaToolTierWood, nil), []string{BlockTypeTagsNylium}, nil), nil)
+	}
+	return vanillaWarpedNylium.Clone()
 }
