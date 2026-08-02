@@ -20,6 +20,7 @@ var (
 	vanillaNetherrack Behavior
 	vanillaObsidian   Behavior
 	vanillaSoulSoil   Behavior
+	vanillaCake       Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -100,4 +101,13 @@ func VanillaSoulSoil() Behavior {
 		vanillaSoulSoil = soil
 	}
 	return vanillaSoulSoil.Clone()
+}
+
+// VanillaCake is a port of VanillaBlocks::CAKE() - see VanillaBlocksInputs.php's
+// register("cake", ...): new BreakInfo(0.5) (no tool type, no tier).
+func VanillaCake() Behavior {
+	if vanillaCake == nil {
+		vanillaCake = NewCake(mustVanillaBlockIdentifier(CAKE), "Cake", NewBlockTypeInfo(NewBlockBreakInfo(0.5, ToolTypeNone, 0, nil, nil), nil, nil))
+	}
+	return vanillaCake.Clone()
 }

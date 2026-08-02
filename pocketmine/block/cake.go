@@ -64,6 +64,12 @@ func (c *Cake) OnInteract(item Item, face math.Facing, clickVector math.Vector3,
 
 func (c *Cake) GetDropsForCompatibleTool(item Item) []Item { return nil }
 
-// GetResidue should return a clone with Bites incremented, or VanillaBlocks.AIR() once bites
-// exceeds the max - needs the unported block registry, same gap documented on OnInteract above.
-func (c *Cake) GetResidue() Behavior { return c.self }
+// GetResidue is a port of Cake::getResidue.
+func (c *Cake) GetResidue() Behavior {
+	clone := c.self.Clone().(*Cake)
+	clone.Bites++
+	if clone.Bites > cakeMaxBites {
+		return VanillaAir()
+	}
+	return clone
+}

@@ -129,3 +129,92 @@ func TestCakeWithDyedCandleDefaultsToWhite(t *testing.T) {
 		t.Errorf("GetColor() = %v, want White", c.GetColor())
 	}
 }
+
+func TestCakeGetResidueIncrementsBites(t *testing.T) {
+	w := &fakeWorld{}
+	c := newTestCake(w)
+	c.Bites = 2
+
+	residue, ok := c.GetResidue().(*Cake)
+	if !ok {
+		t.Fatalf("GetResidue() = %T, want *Cake", c.GetResidue())
+	}
+	if residue.Bites != 3 {
+		t.Errorf("residue.Bites = %d, want 3", residue.Bites)
+	}
+	if c.Bites != 2 {
+		t.Error("expected GetResidue not to mutate the original")
+	}
+}
+
+func TestCakeGetResidueBecomesAirAtMaxBites(t *testing.T) {
+	w := &fakeWorld{}
+	c := newTestCake(w)
+	c.Bites = cakeMaxBites
+
+	if _, ok := c.GetResidue().(*Air); !ok {
+		t.Errorf("GetResidue() = %T, want *Air", c.GetResidue())
+	}
+}
+
+func TestCakeOnConsumeWritesResidueToWorld(t *testing.T) {
+	w := &fakeWorld{}
+	c := newTestCake(w)
+	c.Bites = 0
+
+	c.OnConsume(fakeLivingEntity{})
+
+	residue, ok := w.lastSetBlock.(*Cake)
+	if !ok {
+		t.Fatalf("expected SetBlock to be called with a *Cake, got %T", w.lastSetBlock)
+	}
+	if residue.Bites != 1 {
+		t.Errorf("residue.Bites = %d, want 1", residue.Bites)
+	}
+}
+
+func TestCakeWithCandleGetResidueIsABiteOneCake(t *testing.T) {
+	w := &fakeWorld{}
+	c := NewCakeWithCandle(mustBlockIdentifier(1057), "Test Cake With Candle", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	c.SetPosition(w, 1, 2, 3)
+
+	residue, ok := c.GetResidue().(*Cake)
+	if !ok {
+		t.Fatalf("GetResidue() = %T, want *Cake", c.GetResidue())
+	}
+	if residue.Bites != 1 {
+		t.Errorf("residue.Bites = %d, want 1", residue.Bites)
+	}
+}
+
+func TestCakeWithCandleOnConsumeSwapsToResidue(t *testing.T) {
+	w := &fakeWorld{}
+	c := NewCakeWithCandle(mustBlockIdentifier(1057), "Test Cake With Candle", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	c.SetPosition(w, 1, 2, 3)
+
+	c.OnConsume(fakeLivingEntity{})
+
+	if _, ok := w.lastSetBlock.(*Cake); !ok {
+		t.Fatalf("expected SetBlock to be called with a *Cake, got %T", w.lastSetBlock)
+	}
+}
+
+// TestCakeWithDyedCandleGetResidueInheritsFromCakeWithCandle confirms self-dispatch through
+// cakeShaper reaches the promoted CakeWithCandle.GetResidue (a plain, uncolored Cake) rather than
+// falling through to some other default - CakeWithDyedCandle doesn't override GetResidue itself,
+// matching the PHP original.
+func TestCakeWithDyedCandleGetResidueInheritsFromCakeWithCandle(t *testing.T) {
+	w := &fakeWorld{}
+	c := NewCakeWithDyedCandle(mustBlockIdentifier(1058), "Test Cake With Dyed Candle", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	c.SetPosition(w, 1, 2, 3)
+
+	c.OnConsume(fakeLivingEntity{})
+
+	residue, ok := w.lastSetBlock.(*Cake)
+	if !ok {
+		t.Fatalf("expected SetBlock to be called with a *Cake, got %T", w.lastSetBlock)
+	}
+	if residue.Bites != 1 {
+		t.Errorf("residue.Bites = %d, want 1", residue.Bites)
+	}
+}

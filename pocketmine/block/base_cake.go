@@ -55,7 +55,17 @@ func (b *BaseCake) RequiresHunger() bool { return true }
 // nothing to return a slice of yet.
 func (b *BaseCake) GetAdditionalEffects() {}
 
-// OnConsume should replace this block with GetResidue() (VanillaBlocks-typed clones/AIR) - needs
-// the unported block registry to build the residue with correct BlockIdentifier/type info, same
-// gap as Farmland/GrassPath's VanillaBlocks.DIRT() swaps, so this is a no-op for now.
-func (b *BaseCake) OnConsume(consumer Living) {}
+// cakeShaper lets OnConsume reach a concrete leaf's GetResidue override - same self-dispatch shape
+// as fireShaper.
+type cakeShaper interface {
+	GetResidue() Behavior
+}
+
+// OnConsume is a port of BaseCake::onConsume.
+func (b *BaseCake) OnConsume(consumer Living) {
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return
+	}
+	_ = world.SetBlock(b.position, b.self.(cakeShaper).GetResidue())
+}

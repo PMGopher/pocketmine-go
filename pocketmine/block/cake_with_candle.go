@@ -48,6 +48,13 @@ func (c *CakeWithCandle) GetCandle() *Candle {
 	return &Candle{Count: candleMinCount}
 }
 
+// GetResidue is a port of CakeWithCandle::getResidue.
+func (c *CakeWithCandle) GetResidue() Behavior {
+	cake := VanillaCake().(*Cake)
+	cake.SetBites(1)
+	return cake
+}
+
 // OnInteract is a port of CakeWithCandle::onInteract.
 func (c *CakeWithCandle) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if c.Lit && face != math.Up {
@@ -61,7 +68,7 @@ func (c *CakeWithCandle) OnInteract(item Item, face math.Facing, clickVector mat
 
 func (c *CakeWithCandle) GetDropsForCompatibleTool(item Item) []Item { return nil }
 
-// OnConsume is a port of CakeWithCandle::onConsume, minus the residue swap (see BaseCake.OnConsume's
-// doc comment) and the world.dropItem(candle) call, which needs real Item construction from the
-// unported item package.
+// OnConsume is a port of CakeWithCandle::onConsume, minus the world.dropItem(candle) call, which
+// needs World.DropItem (not in the ported World interface - same recurring gap as
+// SweetBerryBush's doc comment). The residue swap (delegated to BaseCake.OnConsume) is real.
 func (c *CakeWithCandle) OnConsume(consumer Living) { c.BaseCake.OnConsume(consumer) }
