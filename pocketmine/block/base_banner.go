@@ -7,11 +7,22 @@ import (
 )
 
 // bannerShaper lets concrete leaf types (FloorBanner, WallBanner) report which side supports them
-// and (optionally) their ominous variant - same self-dispatch shape as every other *Shaper in
-// this port.
+// - same self-dispatch shape as every other *Shaper in this port.
 type bannerShaper interface {
 	GetSupportingFace() math.Facing
 }
+
+// ominousBannerVersioner is satisfied by BaseBanner's concrete leaves (FloorBanner, WallBanner)
+// that override getOminousVersion - separate from bannerShaper since BaseOminousBanner's own
+// leaves (OminousFloorBanner, OminousWallBanner) satisfy bannerShaper but have no ominous version
+// of their own to report.
+type ominousBannerVersioner interface {
+	GetOminousVersion() Behavior
+}
+
+// GetOminousVersion is a port of BaseBanner::getOminousVersion's default (VanillaBlocks::AIR()).
+// FloorBanner/WallBanner override this to their real ominous counterpart.
+func (b *BaseBanner) GetOminousVersion() Behavior { return VanillaAir() }
 
 // BaseBanner is a port of pocketmine\block\BaseBanner. Like Crops/Stem/BaseCoral, this isn't
 // meant to be instantiated directly - a concrete leaf type (FloorBanner, WallBanner) must embed
@@ -23,11 +34,7 @@ type BaseBanner struct {
 	Patterns []blockutils.BannerPatternLayer
 }
 
-// ReadStateFromWorld is a port of BaseBanner::readStateFromWorld. The ominous-banner branch
-// (getOminousVersion, needing the block registry to construct VanillaBlocks.OMINOUS_BANNER()) is
-// skipped when hit - a documented gap, same category as everywhere else VanillaBlocks is needed -
-// so an ominous banner tile is read as a plain banner with whatever color/patterns it happens to
-// have instead of switching block type.
+// ReadStateFromWorld is a port of BaseBanner::readStateFromWorld.
 func (b *BaseBanner) ReadStateFromWorld() Behavior {
 	b.Block.ReadStateFromWorld()
 
@@ -37,10 +44,13 @@ func (b *BaseBanner) ReadStateFromWorld() Behavior {
 	}
 	t, _ := world.GetTile(b.position)
 	if bannerTile, ok := t.(*tile.Banner); ok {
-		if bannerTile.GetType() != tile.BannerTypeOminous {
-			b.Color = bannerTile.GetBaseColor()
-			b.Patterns = bannerTile.GetPatterns()
+		if bannerTile.GetType() == tile.BannerTypeOminous {
+			// illager banner is implemented as a separate block, as it doesn't support base color
+			// or custom patterns
+			return b.self.(ominousBannerVersioner).GetOminousVersion()
 		}
+		b.Color = bannerTile.GetBaseColor()
+		b.Patterns = bannerTile.GetPatterns()
 	}
 	return b.self
 }

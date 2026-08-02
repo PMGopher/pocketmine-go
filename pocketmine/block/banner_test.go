@@ -68,6 +68,44 @@ func TestBaseBannerReadStateFromWorldSkipsOminousTile(t *testing.T) {
 	}
 }
 
+func TestFloorBannerReadStateFromWorldReturnsOminousVersionForOminousTile(t *testing.T) {
+	w := &bannerTileWorld{}
+	bannerTile := tile.NewBanner(nil, math.Vector3{})
+	bannerTile.SetType(tile.BannerTypeOminous)
+	w.tile = bannerTile
+
+	f := newTestFloorBanner(w)
+	f.SetRotation(7)
+	got := f.ReadStateFromWorld()
+
+	ominous, ok := got.(*OminousFloorBanner)
+	if !ok {
+		t.Fatalf("expected ReadStateFromWorld to return a *OminousFloorBanner, got %T", got)
+	}
+	if ominous.GetRotation() != 7 {
+		t.Errorf("GetRotation() = %d, want 7 (carried over from the original banner)", ominous.GetRotation())
+	}
+}
+
+func TestWallBannerReadStateFromWorldReturnsOminousVersionForOminousTile(t *testing.T) {
+	w := &bannerTileWorld{}
+	bannerTile := tile.NewBanner(nil, math.Vector3{})
+	bannerTile.SetType(tile.BannerTypeOminous)
+	w.tile = bannerTile
+
+	wb := newTestWallBanner(w)
+	wb.SetFacing(math.East)
+	got := wb.ReadStateFromWorld()
+
+	ominous, ok := got.(*OminousWallBanner)
+	if !ok {
+		t.Fatalf("expected ReadStateFromWorld to return a *OminousWallBanner, got %T", got)
+	}
+	if ominous.GetFacing() != math.East {
+		t.Errorf("GetFacing() = %v, want East (carried over from the original banner)", ominous.GetFacing())
+	}
+}
+
 func TestFloorBannerPlaceOnlyOnUpFace(t *testing.T) {
 	w := &candleWorld{}
 	tx := &fakeBlockTransaction{}

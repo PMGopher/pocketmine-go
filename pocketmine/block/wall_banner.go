@@ -32,6 +32,13 @@ func (w *WallBanner) DescribeBlockItemState(d runtime.DataDescriber) { w.Describ
 
 func (w *WallBanner) GetSupportingFace() math.Facing { return math.Opposite(w.Facing) }
 
+// GetOminousVersion is a port of WallBanner::getOminousVersion.
+func (w *WallBanner) GetOminousVersion() Behavior {
+	ominous := VanillaOminousWallBanner().(*OminousWallBanner)
+	ominous.SetFacing(w.Facing)
+	return ominous
+}
+
 func (w *WallBanner) Place(tx BlockTransaction, item Item, blockReplace Behavior, blockClicked Behavior, face math.Facing, clickVector math.Vector3, player Player) bool {
 	if math.FacingAxis(face) == math.AxisY {
 		return false

@@ -14,29 +14,31 @@ import "fmt"
 // Real BreakInfo/tag configuration for each entry is copied from VanillaBlocksInputs.php, not
 // guessed - see each var's comment for the exact source line.
 var (
-	vanillaAir             Behavior
-	vanillaDirt            Behavior
-	vanillaWater           Behavior
-	vanillaNetherrack      Behavior
-	vanillaObsidian        Behavior
-	vanillaSoulSoil        Behavior
-	vanillaCake            Behavior
-	vanillaConcrete        Behavior
-	vanillaMelon           Behavior
-	vanillaPumpkin         Behavior
-	vanillaSugarcane       Behavior
-	vanillaCaveVines       Behavior
-	vanillaTorchflower     Behavior
-	vanillaTorchflowerCrop Behavior
-	vanillaCrimsonNylium   Behavior
-	vanillaWarpedNylium    Behavior
-	vanillaAmethystCluster Behavior
-	vanillaCobblestone     Behavior
-	vanillaBasalt          Behavior
-	vanillaGrass           Behavior
-	vanillaMycelium        Behavior
-	vanillaCactus          Behavior
-	vanillaCactusFlower    Behavior
+	vanillaAir               Behavior
+	vanillaDirt              Behavior
+	vanillaWater             Behavior
+	vanillaNetherrack        Behavior
+	vanillaObsidian          Behavior
+	vanillaSoulSoil          Behavior
+	vanillaCake              Behavior
+	vanillaConcrete          Behavior
+	vanillaMelon             Behavior
+	vanillaPumpkin           Behavior
+	vanillaSugarcane         Behavior
+	vanillaCaveVines         Behavior
+	vanillaTorchflower       Behavior
+	vanillaTorchflowerCrop   Behavior
+	vanillaCrimsonNylium     Behavior
+	vanillaWarpedNylium      Behavior
+	vanillaAmethystCluster   Behavior
+	vanillaCobblestone       Behavior
+	vanillaBasalt            Behavior
+	vanillaGrass             Behavior
+	vanillaMycelium          Behavior
+	vanillaCactus            Behavior
+	vanillaCactusFlower      Behavior
+	vanillaOminousBanner     Behavior
+	vanillaOminousWallBanner Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -279,4 +281,23 @@ func VanillaCactusFlower() Behavior {
 		vanillaCactusFlower = NewCactusFlower(mustVanillaBlockIdentifier(CACTUS_FLOWER), "Cactus Flower", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
 	}
 	return vanillaCactusFlower.Clone()
+}
+
+// VanillaOminousBanner is a port of VanillaBlocks::OMINOUS_BANNER() - see
+// VanillaBlocksInputs.php's register("ominous_banner", ...): BreakInfo::axe(1.0) (no tool tier).
+func VanillaOminousBanner() Behavior {
+	if vanillaOminousBanner == nil {
+		vanillaOminousBanner = NewOminousFloorBanner(mustVanillaBlockIdentifier(OMINOUS_BANNER), "Ominous Banner", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
+	}
+	return vanillaOminousBanner.Clone()
+}
+
+// VanillaOminousWallBanner is a port of VanillaBlocks::OMINOUS_WALL_BANNER() - see
+// VanillaBlocksInputs.php's register("ominous_wall_banner", ...): BreakInfo::axe(1.0) (no tool
+// tier, same $bannerBreakInfo as VanillaOminousBanner).
+func VanillaOminousWallBanner() Behavior {
+	if vanillaOminousWallBanner == nil {
+		vanillaOminousWallBanner = NewOminousWallBanner(mustVanillaBlockIdentifier(OMINOUS_WALL_BANNER), "Ominous Wall Banner", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
+	}
+	return vanillaOminousWallBanner.Clone()
 }
