@@ -1,25 +1,33 @@
-// Command pocketmine-go is the first real entry point for this port: a standalone binary that
-// opens a RakNet listener (via github.com/sandertv/go-raknet) on the standard Bedrock port and
-// answers unconnected pings, so the server shows up in a Minecraft client's server list with a
-// MOTD and player count.
+// Command pocketmine-go is the entry point for this port: a standalone binary that opens a real
+// Minecraft Bedrock listener and lets a client connect and spawn.
 //
-// This is deliberately NOT a full Minecraft Bedrock server yet. RakNet only gets a client to the
-// point of a raw, reliable connection - the actual Bedrock game protocol on top of it (login,
-// encryption handshake, resource packs, chunk/entity data, ...) isn't implemented at all in this
-// port yet. A client that tries to actually join will connect at the RakNet level (see the log
-// line for each accepted connection) and then time out, since no login response is ever sent.
+// The transport (RakNet) and the entire Bedrock game protocol on top of it (login, the encryption
+// handshake, resource pack negotiation, ...) are both provided by
+// github.com/sandertv/gophertunnel - the same library (by the same author as go-raknet) that
+// Dragonfly is built on. Hand-porting PocketMine-MP's network/mcpe/protocol package from PHP would
+// be its own enormous, mostly mechanical undertaking with no relation to PocketMine-MP's actual
+// game logic, which is what the rest of this port focuses on - gophertunnel gets a client all the
+// way to spawning in far less time than reimplementing the wire format from scratch would.
+//
+// This is still an early milestone, not a playable server: StartGame is sent with no real chunk
+// data (see handleConn's doc comment), so a connecting client will get through login and reach
+// the point of spawning, but will see an empty/void world since no terrain is sent yet. Real
+// chunk data - backed by a real World implementation of the block.World interface the whole
+// block package already codes against - is the next milestone.
 package main
 
 import (
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 
-	"github.com/sandertv/go-raknet"
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/sandertv/gophertunnel/minecraft"
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
+	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/log"
@@ -34,17 +42,24 @@ func main() {
 	logger := log.NewSimpleLogger()
 	log.SetGlobal(logger)
 
+	cfg := minecraft.ListenConfig{
+		StatusProvider: minecraft.NewStatusProvider(*motd, pocketmine.Name),
+		// Xbox Live authentication needs a real Microsoft account handshake and outbound HTTPS
+		// access neither of which this early milestone needs - disabling it is the same tradeoff
+		// PocketMine-MP's own `xbox-auth: false` setting makes for offline/LAN play.
+		AuthenticationDisabled: true,
+		MaximumPlayers:         *maxPlayers,
+	}
+
 	addr := ":" + strconv.Itoa(*port)
-	listener, err := raknet.Listen(addr)
+	listener, err := cfg.Listen("raknet", addr)
 	if err != nil {
-		logger.Critical(fmt.Sprintf("failed to start RakNet listener on %s: %v", addr, err))
+		logger.Critical(fmt.Sprintf("failed to start listener on %s: %v", addr, err))
 		os.Exit(1)
 	}
 	defer listener.Close()
 
-	listener.PongData([]byte(buildPongData(*motd, *port, 0, *maxPlayers, listener.ID())))
-
-	logger.Info(fmt.Sprintf("%s %s is listening on %s (RakNet only - no Bedrock game protocol yet)", pocketmine.Name, pocketmine.Version().GetFullVersion(true), addr))
+	logger.Info(fmt.Sprintf("%s %s is listening on %s", pocketmine.Name, pocketmine.Version().GetFullVersion(true), addr))
 
 	go acceptLoop(listener, logger)
 
@@ -55,50 +70,63 @@ func main() {
 	logger.Info("Shutting down...")
 }
 
-// acceptLoop accepts RakNet connections and logs each one. It doesn't (and can't yet) speak the
-// Bedrock game protocol on top of the connection, so it just proves the transport layer is real
-// and working, then closes the connection.
-func acceptLoop(listener *raknet.Listener, logger log.Logger) {
+func acceptLoop(listener *minecraft.Listener, logger log.Logger) {
 	for {
-		conn, err := listener.Accept()
+		c, err := listener.Accept()
 		if err != nil {
 			// Accept only errors once the listener has been closed.
 			return
 		}
-		go handleConn(conn, logger)
+		go handleConn(c.(*minecraft.Conn), listener, logger)
 	}
 }
 
-func handleConn(conn net.Conn, logger log.Logger) {
+// handleConn drives one player's connection for as long as it stays open. By the time Accept
+// returns a *minecraft.Conn, gophertunnel has already completed the entire login handshake
+// (encryption, resource pack negotiation) internally - StartGame is the first thing this port
+// itself is responsible for.
+//
+// GameData.Items is left empty: gophertunnel is a protocol library, not a game implementation, so
+// it doesn't ship the vanilla item table the way Dragonfly's separate data package does, and this
+// port doesn't have one yet either (its own VanillaBlocks/VanillaItems registries only cover the
+// handful of types wired up so far - see pocketmine/block/vanilla_blocks.go). A client can still
+// complete StartGame/spawn without it, just with incomplete item names/icons until that's filled
+// in.
+func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, logger log.Logger) {
 	defer conn.Close()
-	logger.Info(fmt.Sprintf("RakNet connection accepted from %s (no Bedrock login handling yet - it will time out)", conn.RemoteAddr()))
+	defer listener.Disconnect(conn, "server closed")
 
-	buf := make([]byte, 1500)
-	n, err := conn.Read(buf)
-	if err != nil {
+	name := conn.IdentityData().DisplayName
+	logger.Info(fmt.Sprintf("%s connecting from %s", name, conn.RemoteAddr()))
+
+	data := minecraft.GameData{
+		WorldName:       pocketmine.Name,
+		WorldSeed:       0,
+		Difficulty:      2, // normal
+		EntityUniqueID:  1,
+		EntityRuntimeID: 1,
+		PlayerGameMode:  0, // survival
+		PlayerPosition:  mgl32.Vec3{0.5, 5, 0.5},
+		WorldSpawn:      protocol.BlockPos{0, 4, 0},
+		WorldGameMode:   0,
+		Time:            6000,
+		GameRules:       []protocol.GameRule{{Name: "showcoordinates", Value: true}},
+	}
+	if err := conn.StartGame(data); err != nil {
+		logger.Warning(fmt.Sprintf("%s failed to start game: %v", name, err))
 		return
 	}
-	logger.Debug(fmt.Sprintf("received %d bytes from %s (packet ID 0x%02x) - discarded, Bedrock protocol not implemented", n, conn.RemoteAddr(), buf[0]))
-}
+	logger.Info(fmt.Sprintf("%s spawned (no terrain yet - see main.go's doc comment)", name))
 
-// buildPongData builds the MCPE unconnected-pong payload Minecraft Bedrock clients parse to show
-// this server in their server list: a semicolon-separated string of
-// "MCPE;<motd>;<protocol version>;<version name>;<player count>;<max players>;<server GUID>;
-// <motd2>;<gamemode>;<gamemode numeric>;<port ipv4>;<port ipv6>;".
-//
-// The protocol version/version name fields are placeholders (this port doesn't speak the real
-// Bedrock protocol yet, so no actual version negotiation happens) - real clients will still show
-// the server in their list, but will fail to join past the RakNet handshake.
-func buildPongData(motd string, port, playerCount, maxPlayers int, serverGUID int64) string {
-	const (
-		protocolVersion = 0
-		versionName     = "0.0.0"
-		gamemode        = "Survival"
-		gamemodeNumeric = 1
-	)
-	return fmt.Sprintf(
-		"MCPE;%s;%d;%s;%d;%d;%d;%s;%s;%d;%d;%d;",
-		motd, protocolVersion, versionName, playerCount, maxPlayers, serverGUID,
-		motd, gamemode, gamemodeNumeric, port, port,
-	)
+	for {
+		pk, err := conn.ReadPacket()
+		if err != nil {
+			logger.Info(fmt.Sprintf("%s disconnected", name))
+			return
+		}
+		switch pk.(type) {
+		case *packet.Text:
+			// Chat isn't wired to anything yet - just proves packets round-trip both ways.
+		}
+	}
 }
