@@ -63,6 +63,20 @@ func (s *SubChunk) GetHighestBlockAt(x, z int) (int, bool) {
 // GetBiomeArray is a port of SubChunk::getBiomeArray.
 func (s *SubChunk) GetBiomeArray() *PalettedBlockArray { return s.biomes }
 
+// Clone is a port of SubChunk's implicit __clone (deep-copies every block layer and the biome
+// array, matching the PHP original's `array_map(fn($array) => clone $array, ...)`).
+func (s *SubChunk) Clone() *SubChunk {
+	layers := make([]*PalettedBlockArray, len(s.blockLayers))
+	for i, layer := range s.blockLayers {
+		layers[i] = layer.Clone()
+	}
+	return &SubChunk{
+		emptyBlockID: s.emptyBlockID,
+		blockLayers:  layers,
+		biomes:       s.biomes.Clone(),
+	}
+}
+
 // CollectGarbage is a port of SubChunk::collectGarbage.
 func (s *SubChunk) CollectGarbage() {
 	cleaned := make([]*PalettedBlockArray, 0, len(s.blockLayers))

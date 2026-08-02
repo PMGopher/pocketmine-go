@@ -46,6 +46,7 @@ var (
 	vanillaSmallDripleaf     Behavior
 	vanillaBigDripleafHead   Behavior
 	vanillaStone             Behavior
+	vanillaBedrock           Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -378,4 +379,13 @@ func VanillaStone() Behavior {
 		vanillaStone = NewStone(mustVanillaBlockIdentifier(STONE), "Stone", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.5, vanillaToolTierWood, &blastResistance), nil, nil))
 	}
 	return vanillaStone.Clone()
+}
+
+// VanillaBedrock is a port of VanillaBlocks::BEDROCK() - see VanillaBlocksInputs.php's
+// register("bedrock", ...): BreakInfo::indestructible(18000000.0).
+func VanillaBedrock() Behavior {
+	if vanillaBedrock == nil {
+		vanillaBedrock = NewBedrock(mustVanillaBlockIdentifier(BEDROCK), "Bedrock", NewBlockTypeInfo(BlockBreakInfoIndestructible(18000000.0), nil, nil))
+	}
+	return vanillaBedrock.Clone()
 }

@@ -2,6 +2,21 @@ package format
 
 import "testing"
 
+func TestChunkCloneIsIndependentOfOriginal(t *testing.T) {
+	c := NewChunk(nil, false, 0, 1)
+	c.SetBlockStateID(0, 0, 0, 5)
+
+	clone := c.Clone()
+	clone.SetBlockStateID(0, 0, 0, 99)
+
+	if got := c.GetBlockStateID(0, 0, 0); got != 5 {
+		t.Errorf("expected mutating the clone not to affect the original, got %d", got)
+	}
+	if got := clone.GetBlockStateID(0, 0, 0); got != 99 {
+		t.Errorf("GetBlockStateID(0,0,0) on the clone = %d, want 99", got)
+	}
+}
+
 func TestChunkGetBlockStateIDDefaultsToEmpty(t *testing.T) {
 	c := NewChunk(nil, false, 42, 1)
 	if got := c.GetBlockStateID(0, 0, 0); got != 42 {

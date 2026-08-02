@@ -102,3 +102,14 @@ func (c *Chunk) CollectGarbage() {
 		sc.CollectGarbage()
 	}
 }
+
+// Clone is a port of Chunk's implicit __clone (deep-copies every subchunk - PHP's own comment on
+// why entities/tiles aren't cloned too, "impractical to do so, too many dependencies", doesn't
+// apply here since neither is part of this port's Chunk yet at all).
+func (c *Chunk) Clone() *Chunk {
+	clone := &Chunk{terrainPopulated: c.terrainPopulated}
+	for i, sc := range c.subChunks {
+		clone.subChunks[i] = sc.Clone()
+	}
+	return clone
+}

@@ -54,6 +54,24 @@ func NewPalettedBlockArray(fillValue int32) *PalettedBlockArray {
 
 func (p *PalettedBlockArray) GetBitsPerBlock() int { return p.bitsPerBlock }
 
+// Clone is a port of PalettedBlockArray's implicit PHP `clone` semantics (native extension objects
+// are copied by value on `clone` too) - a deep copy, since palette/index/words are all reference
+// types in Go.
+func (p *PalettedBlockArray) Clone() *PalettedBlockArray {
+	c := &PalettedBlockArray{
+		bitsPerBlock: p.bitsPerBlock,
+		palette:      make([]int32, len(p.palette)),
+		index:        make(map[int32]int, len(p.index)),
+		words:        make([]uint32, len(p.words)),
+	}
+	copy(c.palette, p.palette)
+	for k, v := range p.index {
+		c.index[k] = v
+	}
+	copy(c.words, p.words)
+	return c
+}
+
 // GetPalette is a port of PalettedBlockArray::getPalette. Returns a copy - callers must not be
 // able to corrupt the array's internal palette/index invariant by mutating the result.
 func (p *PalettedBlockArray) GetPalette() []int32 {

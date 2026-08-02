@@ -2,6 +2,25 @@ package format
 
 import "testing"
 
+func TestCloneIsIndependentOfOriginal(t *testing.T) {
+	p := NewPalettedBlockArray(0)
+	p.Set(0, 0, 0, 1)
+	p.Set(0, 0, 1, 2)
+
+	clone := p.Clone()
+	clone.Set(0, 0, 0, 99)
+
+	if got := p.Get(0, 0, 0); got != 1 {
+		t.Errorf("expected mutating the clone not to affect the original, got %d", got)
+	}
+	if got := clone.Get(0, 0, 0); got != 99 {
+		t.Errorf("Get(0,0,0) on the clone = %d, want 99", got)
+	}
+	if got := clone.Get(0, 0, 1); got != 2 {
+		t.Errorf("expected the clone to start with the original's values, got %d", got)
+	}
+}
+
 func TestNewPalettedBlockArrayIsUniform(t *testing.T) {
 	p := NewPalettedBlockArray(7)
 	if p.GetBitsPerBlock() != 0 {
