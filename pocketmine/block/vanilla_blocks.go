@@ -22,6 +22,8 @@ var (
 	vanillaSoulSoil   Behavior
 	vanillaCake       Behavior
 	vanillaConcrete   Behavior
+	vanillaMelon      Behavior
+	vanillaPumpkin    Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -122,4 +124,22 @@ func VanillaConcrete() Behavior {
 		vanillaConcrete = NewConcrete(mustVanillaBlockIdentifier(CONCRETE), "Concrete", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.8, vanillaToolTierWood, nil), nil, nil))
 	}
 	return vanillaConcrete.Clone()
+}
+
+// VanillaMelon is a port of VanillaBlocks::MELON() - see VanillaBlocksInputs.php's
+// register("melon", ...): BreakInfo::axe(1.0).
+func VanillaMelon() Behavior {
+	if vanillaMelon == nil {
+		vanillaMelon = NewMelon(mustVanillaBlockIdentifier(MELON), "Melon Block", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
+	}
+	return vanillaMelon.Clone()
+}
+
+// VanillaPumpkin is a port of VanillaBlocks::PUMPKIN() - see VanillaBlocksInputs.php's
+// register("pumpkin", ...): BreakInfo::axe(1.0).
+func VanillaPumpkin() Behavior {
+	if vanillaPumpkin == nil {
+		vanillaPumpkin = NewPumpkin(mustVanillaBlockIdentifier(PUMPKIN), "Pumpkin", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
+	}
+	return vanillaPumpkin.Clone()
 }

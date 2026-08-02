@@ -29,3 +29,5 @@ func (p *PumpkinStem) Clone() Behavior {
 }
 
 func (p *PumpkinStem) GetPlantTypeID() int { return PUMPKIN }
+
+func (p *PumpkinStem) GetPlant() Behavior { return VanillaPumpkin() }

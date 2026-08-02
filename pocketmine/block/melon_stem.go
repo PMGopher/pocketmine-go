@@ -29,3 +29,5 @@ func (m *MelonStem) Clone() Behavior {
 }
 
 func (m *MelonStem) GetPlantTypeID() int { return MELON }
+
+func (m *MelonStem) GetPlant() Behavior { return VanillaMelon() }

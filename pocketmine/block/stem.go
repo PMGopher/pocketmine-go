@@ -1,17 +1,20 @@
 package block
 
 import (
+	"math/rand"
+
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
 )
 
 // stemShaper lets concrete Stem leaf types (MelonStem, PumpkinStem) report which block type they
-// grow into, without needing an actual Block instance from the unported block registry
-// (VanillaBlocks) - PHP's getPlant() returns a real Block just to compare hasSameTypeId/getTypeId
-// against, so a type ID is all Stem's own logic actually needs. Same self-dispatch problem and
-// solution shape as RailShaper/pressurePlateShaper/candleShaper.
+// grow into. GetPlantTypeID predates VanillaBlocks (a cheap type-ID-only comparison,
+// still used by OnNearbyBlockChange); GetPlant returns the real grown block now that
+// VanillaMelon/VanillaPumpkin exist, needed by OnRandomTick's sprout-sideways logic. Same
+// self-dispatch shape as RailShaper/pressurePlateShaper/candleShaper.
 type stemShaper interface {
 	GetPlantTypeID() int
+	GetPlant() Behavior
 }
 
 // Stem is a port of pocketmine\block\Stem. Like Crops (which it embeds), this isn't meant to be
@@ -54,11 +57,45 @@ func (s *Stem) OnNearbyBlockChange() {
 
 func (s *Stem) TicksRandomly() bool { return s.Age < CropsMaxAge || s.Facing == math.Up }
 
-// OnRandomTick should grow via CropGrowthHelper.CanGrow and BlockEventHelper.Grow, then either
-// advance age or - once at max age - sprout the plant (MELON/PUMPKIN) sideways onto an eligible
-// neighbouring Air block. Needs CropGrowthHelper and BlockEventHelper, neither ported yet (same
-// gap as Crops.OnRandomTick's doc comment), so this is a no-op for now.
-func (s *Stem) OnRandomTick() {}
+// OnRandomTick is a port of Stem::onRandomTick.
+func (s *Stem) OnRandomTick() {
+	if s.Facing != math.Up || !CropGrowthCanGrow(s.self) {
+		return
+	}
+
+	if s.Age < CropsMaxAge {
+		clone := s.self.Clone()
+		clone.(Ageable).SetAge(s.Age + 1)
+		Grow(s.self, clone, nil)
+		return
+	}
+
+	grow := s.self.(stemShaper).GetPlant()
+	for _, side := range math.HorizontalFacing {
+		neighbor := s.self.(blockGeometry).GetSide(side, 1)
+		if neighbor.(blockGeometry).HasSameTypeId(grow) {
+			return
+		}
+	}
+
+	facing := math.HorizontalFacing[rand.Intn(len(math.HorizontalFacing))]
+	sideBlock := s.self.(blockGeometry).GetSide(facing, 1)
+	if sideBlock.GetTypeId() != AIR {
+		return
+	}
+	below := sideBlock.(blockGeometry).GetSide(math.Down, 1)
+	if !below.(blockGeometry).HasTypeTag(BlockTypeTagsDirt) {
+		return
+	}
+	if Grow(sideBlock, grow, nil) {
+		world, err := s.position.GetWorld()
+		if err != nil {
+			return
+		}
+		s.Facing = facing
+		_ = world.SetBlock(s.position, s.self)
+	}
+}
 
 // GetDropsForCompatibleTool should return [s.AsItem().SetCount(FortuneDropHelper.Binomial(...))] —
 // needs real Item construction from the unported item package (see

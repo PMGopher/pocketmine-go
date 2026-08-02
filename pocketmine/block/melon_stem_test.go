@@ -88,3 +88,11 @@ func TestStemDefaultFacingIsUp(t *testing.T) {
 		t.Errorf("default Facing = %v, want Up", m.Facing)
 	}
 }
+
+func TestMelonStemGetPlantReturnsAMelonBlock(t *testing.T) {
+	w := &stemWorld{}
+	m := newTestMelonStem(w)
+	if got := m.GetPlant(); got.GetTypeId() != MELON {
+		t.Errorf("GetPlant().GetTypeId() = %d, want MELON (%d)", got.GetTypeId(), MELON)
+	}
+}
