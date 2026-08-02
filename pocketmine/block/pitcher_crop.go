@@ -59,22 +59,39 @@ func (p *PitcherCrop) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	}
 }
 
-// grow (PitcherCrop::grow) would either advance Age via BlockEventHelper.Grow, or - at MAX_AGE -
-// build a two-block BlockTransaction turning this into a DoublePitcherCrop pair via
-// StructureGrowEvent. Both branches need the unported block registry (VanillaBlocks) and
-// BlockEventHelper/StructureGrowEvent, so this isn't ported - same category of gap as
-// Sapling.grow/TorchflowerCrop's getNextState.
+// grow is a port of PitcherCrop::grow, minus the at-MAX_AGE branch (turning into a
+// DoublePitcherCrop pair): that needs a real two-block BlockTransaction with an atomic Apply(),
+// which doesn't exist in this port (only the AddBlock-only interface used by Place does) - a
+// different, unrelated gap from the block-registry one the rest of this file's growth logic
+// needed. Below MAX_AGE, advancing age by one via Grow() is fully real.
+func (p *PitcherCrop) grow(player Player) bool {
+	if p.Age >= pitcherCropMaxAge {
+		return false
+	}
+	clone := p.self.Clone().(*PitcherCrop)
+	clone.SetAge(p.Age + 1)
+	return Grow(p.self, clone, player)
+}
 
-// OnInteract's fertilizer-driven grow needs a Fertilizer item marker, not ported yet - same gap
-// documented on Crops/SweetBerryBush/CocoaBlock/Sapling/TorchflowerCrop's OnInteract. Block's
-// default OnInteract (return false) already matches this gap, so there's nothing to override
-// here.
+// OnInteract is a port of PitcherCrop::onInteract. `$item instanceof Fertilizer` is checked via
+// item type ID (bone meal is the only Fertilizer-marked item in the PHP original), same
+// structural-marker convention as Crops.OnInteract.
+func (p *PitcherCrop) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if item.GetTypeId() == itemTypeIDsBoneMeal && p.grow(player) {
+		item.Pop()
+		return true
+	}
+	return false
+}
 
 func (p *PitcherCrop) TicksRandomly() bool { return true }
 
-// OnRandomTick should use CropGrowthHelper.CanGrow then grow() - same gap as
-// TorchflowerCrop.OnRandomTick, so this is a no-op for now.
-func (p *PitcherCrop) OnRandomTick() {}
+// OnRandomTick is a port of PitcherCrop::onRandomTick.
+func (p *PitcherCrop) OnRandomTick() {
+	if CropGrowthCanGrow(p.self) {
+		p.grow(nil)
+	}
+}
 
 // AsItem should return VanillaItems.PITCHER_POD() — needs the unported item package (see
 // Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.

@@ -68,3 +68,64 @@ func TestPitcherCropCollisionBoxShrinksAfterAgeZero(t *testing.T) {
 		t.Error("expected the collision box to differ between age 0 and a later age")
 	}
 }
+
+func TestPitcherCropGrowAdvancesAgeBelowMax(t *testing.T) {
+	w := &fakeWorld{}
+	p := newTestPitcherCrop(w)
+	p.Age = 0
+
+	if !p.grow(nil) {
+		t.Fatal("expected grow to report growth happened")
+	}
+	grown, ok := w.lastSetBlock.(*PitcherCrop)
+	if !ok {
+		t.Fatalf("expected SetBlock to be called with a *PitcherCrop, got %T", w.lastSetBlock)
+	}
+	if grown.Age != 1 {
+		t.Errorf("grown.Age = %d, want 1", grown.Age)
+	}
+}
+
+func TestPitcherCropGrowReturnsFalseAtMaxAge(t *testing.T) {
+	w := &fakeWorld{}
+	p := newTestPitcherCrop(w)
+	p.Age = pitcherCropMaxAge
+
+	if p.grow(nil) {
+		t.Error("expected grow to return false at max age (turning into DoublePitcherCrop isn't ported)")
+	}
+	if w.lastSetBlock != nil {
+		t.Error("expected no state change at max age")
+	}
+}
+
+func TestPitcherCropOnInteractFertilizesWithBoneMeal(t *testing.T) {
+	w := &fakeWorld{}
+	p := newTestPitcherCrop(w)
+	p.Age = 0
+	boneMeal := fakeItem{typeID: itemTypeIDsBoneMeal}
+
+	if !p.OnInteract(boneMeal, math.Up, math.Vector3{}, nil, nil) {
+		t.Fatal("expected OnInteract to return true")
+	}
+}
+
+func TestPitcherCropOnInteractIgnoresNonFertilizerItems(t *testing.T) {
+	w := &fakeWorld{}
+	p := newTestPitcherCrop(w)
+
+	if p.OnInteract(fakeItem{}, math.Up, math.Vector3{}, nil, nil) {
+		t.Error("expected OnInteract to return false for a non-fertilizer item")
+	}
+}
+
+func TestPitcherCropOnInteractReturnsFalseAtMaxAgeEvenWithBoneMeal(t *testing.T) {
+	w := &fakeWorld{}
+	p := newTestPitcherCrop(w)
+	p.Age = pitcherCropMaxAge
+	boneMeal := fakeItem{typeID: itemTypeIDsBoneMeal}
+
+	if p.OnInteract(boneMeal, math.Up, math.Vector3{}, nil, nil) {
+		t.Error("expected OnInteract to return false when grow() can't advance past max age")
+	}
+}
