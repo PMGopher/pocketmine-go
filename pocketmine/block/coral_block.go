@@ -35,9 +35,7 @@ func (c *CoralBlock) OnNearbyBlockChange() {
 	}
 }
 
-// OnScheduledUpdate is a port of CoralBlock::onScheduledUpdate. Dying itself
-// (BlockEventHelper.Die, which needs a dead clone via the block registry) isn't ported yet, so
-// the water check runs but doesn't yet have anything to trigger.
+// OnScheduledUpdate is a port of CoralBlock::onScheduledUpdate.
 func (c *CoralBlock) OnScheduledUpdate() {
 	if c.Dead {
 		return
@@ -51,7 +49,9 @@ func (c *CoralBlock) OnScheduledUpdate() {
 		}
 	}
 	if !hasWater {
-		// TODO: BlockEventHelper.Die(c, deadClone) once the block registry is ported.
+		deadClone := c.self.Clone()
+		deadClone.(CoralMaterial).SetDead(true)
+		Die(c.self, deadClone)
 	}
 }
 

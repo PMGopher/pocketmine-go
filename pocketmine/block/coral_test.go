@@ -78,3 +78,50 @@ func TestCoralDeadDoesNotScheduleUpdate(t *testing.T) {
 		t.Errorf("expected no scheduled update while dead, got delay %d", w.scheduleDelay)
 	}
 }
+
+func TestCoralOnScheduledUpdateDiesWithoutWater(t *testing.T) {
+	w := &candleWorld{}
+	c := newTestCoral(w)
+
+	c.OnScheduledUpdate()
+
+	dead, ok := w.lastSetBlock.(*Coral)
+	if !ok {
+		t.Fatalf("expected SetBlock to be called with a *Coral, got %T", w.lastSetBlock)
+	}
+	if !dead.Dead {
+		t.Error("expected the replacement coral to be dead")
+	}
+}
+
+func TestCoralOnScheduledUpdateSurvivesSurroundedByWater(t *testing.T) {
+	w := &containerTileWorld{tiles: map[[3]int]Tile{}, blocks: map[[3]int]Behavior{}}
+	c := newTestCoral(w)
+	origin := math.Vector3{X: 1, Y: 2, Z: 3}
+	for _, face := range math.AllFacing {
+		side := origin.GetSide(face, 1)
+		water := &stemTestBlock{typeID: WATER}
+		water.Block = NewBlock(mustBlockIdentifier(1041), "Water Filler", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+		water.Init(water)
+		water.SetPosition(w, side.FloorX(), side.FloorY(), side.FloorZ())
+		w.blocks[[3]int{side.FloorX(), side.FloorY(), side.FloorZ()}] = water
+	}
+
+	c.OnScheduledUpdate()
+
+	if w.lastSetBlock != nil {
+		t.Errorf("expected no death when surrounded by water, got SetBlock(%T)", w.lastSetBlock)
+	}
+}
+
+func TestCoralOnScheduledUpdateDoesNothingWhenAlreadyDead(t *testing.T) {
+	w := &candleWorld{}
+	c := newTestCoral(w)
+	c.Dead = true
+
+	c.OnScheduledUpdate()
+
+	if w.lastSetBlock != nil {
+		t.Errorf("expected no SetBlock while already dead, got SetBlock(%T)", w.lastSetBlock)
+	}
+}

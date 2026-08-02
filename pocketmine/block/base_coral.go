@@ -36,12 +36,12 @@ func (b *BaseCoral) isCoveredWithWater() bool {
 	return false
 }
 
-// OnScheduledUpdate is a port of BaseCoral::onScheduledUpdate. Dying itself
-// (BlockEventHelper.Die, which needs a dead clone via the block registry) isn't ported yet, so
-// the water check runs but doesn't yet have anything to trigger.
+// OnScheduledUpdate is a port of BaseCoral::onScheduledUpdate.
 func (b *BaseCoral) OnScheduledUpdate() {
 	if !b.Dead && !b.isCoveredWithWater() {
-		// TODO: BlockEventHelper.Die(b, deadClone) once the block registry is ported.
+		deadClone := b.self.Clone()
+		deadClone.(CoralMaterial).SetDead(true)
+		Die(b.self, deadClone)
 	}
 }
 
