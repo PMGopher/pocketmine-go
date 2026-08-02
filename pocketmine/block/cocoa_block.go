@@ -1,6 +1,8 @@
 package block
 
 import (
+	"math/rand"
+
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
@@ -79,9 +81,22 @@ func (c *CocoaBlock) OnNearbyBlockChange() {
 
 func (c *CocoaBlock) TicksRandomly() bool { return c.Age < CocoaBlockMaxAge }
 
-// OnRandomTick should grow via BlockEventHelper, not ported yet, so this is a no-op for now (same
-// gap category as Crops.OnRandomTick).
-func (c *CocoaBlock) OnRandomTick() {}
+// OnRandomTick is a port of CocoaBlock::onRandomTick.
+func (c *CocoaBlock) OnRandomTick() {
+	if rand.Intn(5) == 0 { // mt_rand(1, 5) === 1
+		c.grow(nil)
+	}
+}
+
+// grow is a port of CocoaBlock::grow.
+func (c *CocoaBlock) grow(player Player) bool {
+	if c.Age < CocoaBlockMaxAge {
+		next := c.self.Clone().(*CocoaBlock)
+		next.Age++
+		return Grow(c.self, next, player)
+	}
+	return false
+}
 
 // GetDropsForCompatibleTool/AsItem should return VanillaItems.COCOA_BEANS() (scaled when mature)
 // — needs the unported item package (see Block.GetDropsForCompatibleTool's doc comment), so both

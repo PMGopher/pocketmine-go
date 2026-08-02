@@ -89,9 +89,20 @@ func (s *SweetBerryBush) GetDropsForCompatibleTool(item Item) []Item { return ni
 
 func (s *SweetBerryBush) TicksRandomly() bool { return s.Age < SweetBerryBushStageMature }
 
-// OnRandomTick should grow via BlockEventHelper.Grow (deferred/unported), so this is a no-op for
-// now even though the random roll itself is portable.
-func (s *SweetBerryBush) OnRandomTick() {}
+// OnRandomTick is a port of SweetBerryBush::onRandomTick.
+func (s *SweetBerryBush) OnRandomTick() {
+	if s.Age < SweetBerryBushStageMature && rand.Intn(3) == 1 { // mt_rand(0, 2) === 1
+		s.growOnce()
+	}
+}
+
+// growOnce is the deterministic clone-increment-Grow act from OnRandomTick, split out from the
+// random roll above so it's directly testable - same pattern as CocoaBlock.grow.
+func (s *SweetBerryBush) growOnce() bool {
+	next := s.self.Clone().(*SweetBerryBush)
+	next.Age++
+	return Grow(s.self, next, nil)
+}
 
 func (s *SweetBerryBush) HasEntityCollision() bool { return true }
 

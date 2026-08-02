@@ -65,6 +65,39 @@ func TestCocoaBlockBreaksWhenLogRemoved(t *testing.T) {
 	}
 }
 
+func TestCocoaBlockGrowAdvancesAge(t *testing.T) {
+	w := &fakeWorld{}
+	c := newTestCocoaBlock(w)
+	c.Age = 0
+
+	if !c.grow(nil) {
+		t.Fatal("expected grow to report success")
+	}
+	grown, ok := w.lastSetBlock.(*CocoaBlock)
+	if !ok {
+		t.Fatalf("expected SetBlock to be called with a *CocoaBlock, got %T", w.lastSetBlock)
+	}
+	if grown.Age != 1 {
+		t.Errorf("Age = %d, want 1", grown.Age)
+	}
+	if c.Age != 0 {
+		t.Errorf("original Age = %d, want unchanged 0 (grow must not mutate the original)", c.Age)
+	}
+}
+
+func TestCocoaBlockGrowDoesNothingAtMaxAge(t *testing.T) {
+	w := &fakeWorld{}
+	c := newTestCocoaBlock(w)
+	c.Age = CocoaBlockMaxAge
+
+	if c.grow(nil) {
+		t.Error("expected grow to report failure at max age")
+	}
+	if w.lastSetBlock != nil {
+		t.Errorf("expected no SetBlock at max age, got SetBlock(%T)", w.lastSetBlock)
+	}
+}
+
 func TestCocoaBlockStaysWhenLogPresent(t *testing.T) {
 	w := &neighborWorld{at: [3]int{0, 2, 3}} // West of (1,2,3) = Opposite(East)
 	jungle := newTestJungleWood(w)

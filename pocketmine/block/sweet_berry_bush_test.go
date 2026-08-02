@@ -47,3 +47,35 @@ func TestSweetBerryBushOnEntityInsideSparesLivingWhileSapling(t *testing.T) {
 		t.Errorf("GetHealth() = %v, want unchanged %v (a sapling shouldn't damage entities)", living.GetHealth(), startHealth)
 	}
 }
+
+func TestSweetBerryBushGrowOnceAdvancesAge(t *testing.T) {
+	w := &fakeWorld{}
+	s := newTestSweetBerryBush(w)
+	s.Age = SweetBerryBushStageSapling
+
+	if !s.growOnce() {
+		t.Fatal("expected growOnce to report success")
+	}
+	grown, ok := w.lastSetBlock.(*SweetBerryBush)
+	if !ok {
+		t.Fatalf("expected SetBlock to be called with a *SweetBerryBush, got %T", w.lastSetBlock)
+	}
+	if grown.Age != SweetBerryBushStageBushNoBerries {
+		t.Errorf("Age = %d, want %d", grown.Age, SweetBerryBushStageBushNoBerries)
+	}
+	if s.Age != SweetBerryBushStageSapling {
+		t.Errorf("original Age = %d, want unchanged %d (growOnce must not mutate the original)", s.Age, SweetBerryBushStageSapling)
+	}
+}
+
+func TestSweetBerryBushOnRandomTickDoesNothingWhenMature(t *testing.T) {
+	w := &fakeWorld{}
+	s := newTestSweetBerryBush(w)
+	s.Age = SweetBerryBushStageMature
+
+	s.OnRandomTick()
+
+	if w.lastSetBlock != nil {
+		t.Errorf("expected no growth once mature, got SetBlock(%T)", w.lastSetBlock)
+	}
+}
