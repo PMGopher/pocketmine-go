@@ -83,16 +83,31 @@ func (c *CaveVines) Place(tx BlockTransaction, item Item, blockReplace Behavior,
 	return c.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract's fertilizer-growth branch needs BlockEventHelper (unported); the berry-picking
-// branch needs World.DropItem (not in the ported World interface) and real Item construction, so
-// this is a no-op for now; it still returns false when there's nothing to pick and no fertilizer,
-// matching the PHP original's final `return false;`.
+// OnInteract is a port of CaveVines::onInteract, minus the berry-picking branch: it needs
+// World.DropItem (not in the ported World interface) and AsItem() producing a real Item, so this
+// reports the interaction as handled without actually picking, rather than silently clearing the
+// berries with no drop. The fertilizer-growth branch is fully real; bone meal is checked by item
+// type ID, same structural-marker convention as Crops.OnInteract.
 func (c *CaveVines) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	return false
+	if c.Berries {
+		return true
+	}
+	if item.GetTypeId() != itemTypeIDsBoneMeal {
+		return false
+	}
+	newState := c.self.Clone().(*CaveVines)
+	newState.Berries = true
+	newState.Head = true
+	if down, ok := c.self.(blockGeometry).GetSide(math.Down, 1).(blockGeometry); ok {
+		newState.Head = !down.HasSameTypeId(c.self)
+	}
+	if Grow(c.self, newState, player) {
+		item.Pop()
+	}
+	return true
 }
 
-// OnRandomTick's downward growth into a new CaveVines segment needs World.IsInWorld and the block
-// registry (VanillaBlocks); only the "head" flag recompute is fully portable.
+// OnRandomTick is a port of CaveVines::onRandomTick.
 func (c *CaveVines) OnRandomTick() {
 	head := true
 	if down, ok := c.GetSide(math.Down, 1).(blockGeometry); ok {
@@ -106,6 +121,26 @@ func (c *CaveVines) OnRandomTick() {
 			}
 		}
 	}
+
+	if c.Age >= CaveVinesMaxAge || rand.Intn(10) != 0 { // mt_rand(1, 10) === 1
+		return
+	}
+	world, err := c.position.GetWorld()
+	if err != nil {
+		return
+	}
+	growthPos := c.position.GetSide(math.Down, 1)
+	if !world.IsInWorld(growthPos.FloorX(), growthPos.FloorY(), growthPos.FloorZ()) {
+		return
+	}
+	blk := world.GetBlockAt(growthPos.FloorX(), growthPos.FloorY(), growthPos.FloorZ())
+	if blk.GetTypeId() != AIR {
+		return
+	}
+	newState := VanillaCaveVines().(*CaveVines)
+	newState.SetAge(c.Age + 1)
+	newState.SetBerries(rand.Intn(9) == 0) // mt_rand(1, 9) === 1
+	Grow(blk, newState, nil)
 }
 
 func (c *CaveVines) TicksRandomly() bool { return true }
