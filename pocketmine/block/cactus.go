@@ -1,6 +1,8 @@
 package block
 
 import (
+	"math/rand"
+
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/entity"
@@ -82,7 +84,64 @@ func (c *Cactus) OnNearbyBlockChange() {
 
 func (c *Cactus) TicksRandomly() bool { return true }
 
-// OnRandomTick should grow the cactus (or occasionally a CactusFlower) upward - needs
-// World.IsInWorld, BlockEventHelper, and the block registry (VanillaBlocks), none ported yet, so
-// this is a no-op for now.
-func (c *Cactus) OnRandomTick() {}
+// OnRandomTick is a port of Cactus::onRandomTick. Unlike most SetBlock callers in this package,
+// the final self-persist calls ignore their error (`_ = world.SetBlock(...)`) rather than bailing
+// out, matching the PHP original's fire-and-forget `$world->setBlock($this->position, $this,
+// update: false)` at every return path.
+func (c *Cactus) OnRandomTick() {
+	geo := c.self.(blockGeometry)
+	up := geo.GetSide(math.Up, 1)
+	if up.GetTypeId() != AIR {
+		return
+	}
+
+	world, err := c.position.GetWorld()
+	if err != nil {
+		return
+	}
+
+	upPos := c.position.GetSide(math.Up, 1)
+	if !world.IsInWorld(upPos.FloorX(), upPos.FloorY(), upPos.FloorZ()) {
+		return
+	}
+
+	height := 1
+	for height < CactusMaxHeight && geo.GetSide(math.Down, height).(blockGeometry).HasSameTypeId(c.self) {
+		height++
+	}
+
+	if c.Age == 9 {
+		canGrowFlower := true
+		upGeo := up.(blockGeometry)
+		for _, side := range math.HorizontalFacing {
+			if upGeo.GetSide(side, 1).IsSolid() {
+				canGrowFlower = false
+				break
+			}
+		}
+
+		if canGrowFlower {
+			chance := 10
+			if height >= CactusMaxHeight {
+				chance = 25
+			}
+			if rand.Intn(100)+1 <= chance {
+				if Grow(up, VanillaCactusFlower(), nil) {
+					c.Age = 0
+					_ = world.SetBlock(c.position, c.self)
+				}
+				return
+			}
+		}
+	}
+
+	if c.Age == CactusMaxAge {
+		c.Age = 0
+		if height < CactusMaxHeight {
+			Grow(up, VanillaCactus(), nil)
+		}
+	} else {
+		c.Age++
+	}
+	_ = world.SetBlock(c.position, c.self)
+}

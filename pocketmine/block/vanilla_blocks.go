@@ -35,6 +35,8 @@ var (
 	vanillaBasalt          Behavior
 	vanillaGrass           Behavior
 	vanillaMycelium        Behavior
+	vanillaCactus          Behavior
+	vanillaCactusFlower    Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -259,4 +261,22 @@ func VanillaMycelium() Behavior {
 		vanillaMycelium = NewMycelium(mustVanillaBlockIdentifier(MYCELIUM), "Mycelium", NewBlockTypeInfo(BlockBreakInfoShovel(0.6, nil, nil), []string{BlockTypeTagsDirt}, nil))
 	}
 	return vanillaMycelium.Clone()
+}
+
+// VanillaCactus is a port of VanillaBlocks::CACTUS() - see VanillaBlocksInputs.php's
+// register("cactus", ...): new BreakInfo(0.4) (no tool type, no tier), [Tags::POTTABLE_PLANTS].
+func VanillaCactus() Behavior {
+	if vanillaCactus == nil {
+		vanillaCactus = NewCactus(mustVanillaBlockIdentifier(CACTUS), "Cactus", NewBlockTypeInfo(NewBlockBreakInfo(0.4, ToolTypeNone, 0, nil, nil), []string{BlockTypeTagsPottablePlants}, nil))
+	}
+	return vanillaCactus.Clone()
+}
+
+// VanillaCactusFlower is a port of VanillaBlocks::CACTUS_FLOWER() - see VanillaBlocksInputs.php's
+// register("cactus_flower", ...): BreakInfo::instant().
+func VanillaCactusFlower() Behavior {
+	if vanillaCactusFlower == nil {
+		vanillaCactusFlower = NewCactusFlower(mustVanillaBlockIdentifier(CACTUS_FLOWER), "Cactus Flower", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	}
+	return vanillaCactusFlower.Clone()
 }
