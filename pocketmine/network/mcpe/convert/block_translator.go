@@ -56,3 +56,22 @@ func (t *BlockTranslator) InternalIDToNetworkID(blk block.Behavior) int32 {
 // full state data, only the ID, unlike the PHP original's persistent (NBT-based) serialization
 // path.
 func (t *BlockTranslator) FallbackStateID() int32 { return t.fallbackStateID }
+
+// NetworkIDForCachedState looks up a network runtime ID for a bare internal state ID that was
+// already translated via InternalIDToNetworkID at least once. This has no direct PHP equivalent -
+// PHP's internalIdToNetworkId always takes a bare int state ID and can reconstruct a Block from it
+// via a global block factory; this port's Chunk/SubChunk/PalettedBlockArray (deliberately) only
+// ever store compact int32 state IDs, not live block.Behavior instances, so chunk serialization
+// - which only has those bare IDs on hand - can't call InternalIDToNetworkID directly. In
+// practice this is never a cache miss: every ID a chunk can contain was placed there by generator
+// code that had a real Behavior in hand and called InternalIDToNetworkID with it first (that's
+// how the world/generator package's Flat generator populates a chunk), warming this exact cache
+// entry as a side effect. Falls back to the same minecraft:info_update state as
+// InternalIDToNetworkID for the one case that isn't true today: a chunk touched by a
+// BlockTranslator instance different from the one serializing it.
+func (t *BlockTranslator) NetworkIDForCachedState(internalStateID int32) int32 {
+	if networkID, ok := t.networkIDCache[int(internalStateID)]; ok {
+		return networkID
+	}
+	return t.fallbackStateID
+}
