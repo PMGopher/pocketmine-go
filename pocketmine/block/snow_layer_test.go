@@ -58,3 +58,32 @@ func TestSnowLayerGetSupportTypeFullOnlyAtMaxLayers(t *testing.T) {
 		t.Error("expected SupportTypeFull at max layers")
 	}
 }
+
+func TestSnowLayerOnRandomTickMeltsWhenWellLit(t *testing.T) {
+	w := &fakeWorld{} // GetBlockLightAt returns 15 by default
+	s := newTestSnowLayer(w)
+
+	s.OnRandomTick()
+
+	if _, ok := w.lastSetBlock.(*Air); !ok {
+		t.Fatalf("expected SetBlock to be called with a *Air, got %T", w.lastSetBlock)
+	}
+}
+
+// dimSnowWorld reports block light below the melt threshold.
+type dimSnowWorld struct {
+	fakeWorld
+}
+
+func (w *dimSnowWorld) GetBlockLightAt(x, y, z int) int { return 5 }
+
+func TestSnowLayerOnRandomTickDoesNothingWhenDark(t *testing.T) {
+	w := &dimSnowWorld{}
+	s := newTestSnowLayer(w)
+
+	s.OnRandomTick()
+
+	if w.lastSetBlock != nil {
+		t.Errorf("expected no melt, got SetBlock(%T)", w.lastSetBlock)
+	}
+}

@@ -78,10 +78,17 @@ func (s *SnowLayer) Place(tx BlockTransaction, item Item, blockReplace Behavior,
 
 func (s *SnowLayer) TicksRandomly() bool { return true }
 
-// OnRandomTick should melt into Air via BlockEventHelper.Melt when well-lit - needs
-// BlockEventHelper and the block registry (VanillaBlocks), neither ported yet, so this is a no-op
-// for now.
-func (s *SnowLayer) OnRandomTick() {}
+// OnRandomTick is a port of SnowLayer::onRandomTick.
+func (s *SnowLayer) OnRandomTick() {
+	world, err := s.position.GetWorld()
+	if err != nil {
+		return
+	}
+	pos := s.position.AsVector3()
+	if world.GetBlockLightAt(pos.FloorX(), pos.FloorY(), pos.FloorZ()) >= 12 {
+		Melt(s.self, VanillaAir())
+	}
+}
 
 // GetDropsForCompatibleTool should return [VanillaItems.SNOWBALL().SetCount(max(1, Layers/2))] —
 // needs real Item construction from the unported item package (see
