@@ -24,6 +24,7 @@ var (
 	vanillaConcrete   Behavior
 	vanillaMelon      Behavior
 	vanillaPumpkin    Behavior
+	vanillaSugarcane  Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -142,4 +143,13 @@ func VanillaPumpkin() Behavior {
 		vanillaPumpkin = NewPumpkin(mustVanillaBlockIdentifier(PUMPKIN), "Pumpkin", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
 	}
 	return vanillaPumpkin.Clone()
+}
+
+// VanillaSugarcane is a port of VanillaBlocks::SUGARCANE() - see VanillaBlocksInputs.php's
+// register("sugarcane", ...): BreakInfo::instant().
+func VanillaSugarcane() Behavior {
+	if vanillaSugarcane == nil {
+		vanillaSugarcane = NewSugarcane(mustVanillaBlockIdentifier(SUGARCANE), "Sugarcane", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	}
+	return vanillaSugarcane.Clone()
 }

@@ -33,6 +33,9 @@ type World interface {
 	// GetPotentialLightAt is needed by CropGrowthHasEnoughLight - max(potential sky light, block
 	// light) at the given coordinates.
 	GetPotentialLightAt(x, y, z int) int
+	// IsInWorld is needed by Sugarcane.grow's upward growth loop, to stop climbing before going
+	// past the world height limit.
+	IsInWorld(x, y, z int) bool
 	// UseBreakOn is the simplified (no item/player/particles) form of World::useBreakOn, the only
 	// form used from within block package (Button.onNearbyBlockChange).
 	UseBreakOn(pos math.Vector3) bool

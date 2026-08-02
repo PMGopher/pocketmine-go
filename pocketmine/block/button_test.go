@@ -61,6 +61,7 @@ func (w *fakeWorld) UseBreakOn(pos math.Vector3) bool {
 	w.breakCalls = append(w.breakCalls, pos)
 	return true
 }
+func (w *fakeWorld) IsInWorld(x, y, z int) bool                       { return true }
 func (w *fakeWorld) GetFullLightAt(x, y, z int) int                   { return 15 }
 func (w *fakeWorld) GetBlockLightAt(x, y, z int) int                  { return 15 }
 func (w *fakeWorld) GetRealBlockSkyLightAt(x, y, z int) int           { return 15 }

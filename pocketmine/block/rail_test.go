@@ -41,6 +41,7 @@ func (w *fakeRailWorld) GetHighestAdjacentFullLightAt(x, y, z int) int          
 func (w *fakeRailWorld) GetHighestAdjacentBlockLightAt(x, y, z int) int         { return 15 }
 func (w *fakeRailWorld) GetPotentialLightAt(x, y, z int) int                    { return 15 }
 func (w *fakeRailWorld) UseBreakOn(pos math.Vector3) bool                       { return true }
+func (w *fakeRailWorld) IsInWorld(x, y, z int) bool                             { return true }
 
 func newTestRailAt(w *fakeRailWorld, x, y, z int) *Rail {
 	idInfo, err := NewBlockIdentifier(2000, nil)

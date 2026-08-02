@@ -1,6 +1,10 @@
 package block
 
-import "testing"
+import (
+	"testing"
+
+	"pocketmine-go/pocketmine/math"
+)
 
 // sugarcaneWorld returns a fixed type ID for every GetBlockAt call except at "self" positions
 // (where a real Sugarcane stack can be placed by the test).
@@ -63,5 +67,68 @@ func TestSugarcaneAgesUpWhenSupportedByNearbyWater(t *testing.T) {
 	}
 	if s.Age != 1 {
 		t.Errorf("Age = %d, want 1", s.Age)
+	}
+}
+
+func TestSugarcaneGrowSpawnsAboveWhenAirAvailableAndResetsAge(t *testing.T) {
+	w := &sugarcaneWorld{fillerTypeID: AIR, blocks: map[[3]int]Behavior{}}
+	s := newTestSugarcane(w)
+	s.Age = SugarcaneMaxAge
+
+	if !s.grow(s.position, nil) {
+		t.Error("expected grow to report growth happened")
+	}
+	if s.Age != 0 {
+		t.Errorf("Age = %d, want 0 after growing", s.Age)
+	}
+}
+
+func TestSugarcaneGrowReturnsFalseWhenBlockedByNonSugarcane(t *testing.T) {
+	w := &sugarcaneWorld{fillerTypeID: DIRT, blocks: map[[3]int]Behavior{}}
+	s := newTestSugarcane(w)
+	s.Age = SugarcaneMaxAge
+
+	if s.grow(s.position, nil) {
+		t.Error("expected grow to report no growth when blocked by a non-sugarcane block")
+	}
+	if s.Age != 0 {
+		t.Errorf("Age = %d, want 0 (still reset even without growth)", s.Age)
+	}
+}
+
+// sugarcaneNoHeightWorld reports every coordinate as outside the world, to exercise grow's
+// IsInWorld height-limit check.
+type sugarcaneNoHeightWorld struct {
+	sugarcaneWorld
+}
+
+func (w *sugarcaneNoHeightWorld) IsInWorld(x, y, z int) bool { return false }
+
+func TestSugarcaneGrowStopsAtWorldHeightLimit(t *testing.T) {
+	w := &sugarcaneNoHeightWorld{sugarcaneWorld{fillerTypeID: AIR, blocks: map[[3]int]Behavior{}}}
+	s := newTestSugarcane(w)
+	s.Age = SugarcaneMaxAge
+
+	if s.grow(s.position, nil) {
+		t.Error("expected grow to report no growth past the world height limit")
+	}
+}
+
+func TestSugarcaneOnInteractFertilizesWithBoneMeal(t *testing.T) {
+	w := &sugarcaneWorld{fillerTypeID: AIR, blocks: map[[3]int]Behavior{}}
+	s := newTestSugarcane(w)
+	boneMeal := fakeItem{typeID: itemTypeIDsBoneMeal}
+
+	if !s.OnInteract(boneMeal, math.Up, math.Vector3{}, nil, nil) {
+		t.Fatal("expected OnInteract to return true")
+	}
+}
+
+func TestSugarcaneOnInteractIgnoresNonFertilizerItems(t *testing.T) {
+	w := &sugarcaneWorld{fillerTypeID: AIR, blocks: map[[3]int]Behavior{}}
+	s := newTestSugarcane(w)
+
+	if s.OnInteract(fakeItem{}, math.Up, math.Vector3{}, nil, nil) {
+		t.Error("expected OnInteract to return false for a non-fertilizer item")
 	}
 }

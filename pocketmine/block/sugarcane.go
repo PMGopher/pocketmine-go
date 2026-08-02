@@ -43,24 +43,47 @@ func (s *Sugarcane) seekToBottom() Position {
 	return bottom
 }
 
-// grow is a port of Sugarcane::grow. The loop that spawns new sugarcane above via
-// BlockEventHelper.Grow needs BlockEventHelper and World.IsInWorld, neither ported yet, so it's
-// skipped - this always resets age and returns false (never grew) for now.
-func (s *Sugarcane) grow(pos Position) bool {
+// grow is a port of Sugarcane::grow.
+func (s *Sugarcane) grow(pos Position, player Player) bool {
 	world, err := pos.GetWorld()
 	if err != nil {
 		return false
+	}
+	grew := false
+	for y := 1; y < 3; y++ {
+		if !world.IsInWorld(pos.FloorX(), pos.FloorY()+y, pos.FloorZ()) {
+			break
+		}
+		b := world.GetBlockAt(pos.FloorX(), pos.FloorY()+y, pos.FloorZ())
+		if b.GetTypeId() == AIR {
+			if Grow(b, VanillaSugarcane(), player) {
+				grew = true
+			} else {
+				break
+			}
+		} else if !b.(blockGeometry).HasSameTypeId(s.self) {
+			break
+		}
 	}
 	s.Age = 0
 	if err := world.SetBlock(pos, s.self); err != nil {
 		panic(err)
 	}
-	return false
+	return grew
 }
 
-// OnInteract's fertilizer-driven grow needs a Fertilizer item marker, not ported yet. Block's
-// default OnInteract (return false) already matches this gap, so there's nothing to override
-// here.
+// OnInteract is a port of Sugarcane::onInteract. `$item instanceof Fertilizer` is checked via
+// item type ID (bone meal is the only Fertilizer-marked item in the PHP original), same
+// structural-marker convention as Crops.OnInteract.
+func (s *Sugarcane) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if item.GetTypeId() != itemTypeIDsBoneMeal {
+		return false
+	}
+	if s.grow(s.seekToBottom(), player) {
+		item.Pop()
+	}
+	return true
+}
 
 func (s *Sugarcane) canBeSupportedAt(blk Behavior) bool {
 	support := blk.(blockGeometry).GetSide(math.Down, 1)
@@ -97,7 +120,7 @@ func (s *Sugarcane) OnRandomTick() {
 		return
 	}
 	if s.Age == SugarcaneMaxAge {
-		s.grow(s.position)
+		s.grow(s.position, nil)
 	} else {
 		s.Age++
 		if err := world.SetBlock(s.position, s.self); err != nil {

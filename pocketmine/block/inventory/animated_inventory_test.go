@@ -35,6 +35,7 @@ func (w *fakeWorld) GetHighestAdjacentFullLightAt(x, y, z int) int          { re
 func (w *fakeWorld) GetHighestAdjacentBlockLightAt(x, y, z int) int         { return 15 }
 func (w *fakeWorld) GetPotentialLightAt(x, y, z int) int                    { return 15 }
 func (w *fakeWorld) UseBreakOn(pos math.Vector3) bool                       { return true }
+func (w *fakeWorld) IsInWorld(x, y, z int) bool                             { return true }
 
 type fakePlayer struct{ name string }
 
