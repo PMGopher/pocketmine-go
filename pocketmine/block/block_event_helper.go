@@ -57,6 +57,32 @@ func Die(oldState Behavior, newState Behavior) bool {
 	return true
 }
 
+// BlockSpreadEvent is a port of pocketmine\event\block\BlockSpreadEvent.
+type BlockSpreadEvent struct {
+	BlockChangeEvent
+
+	Source Behavior
+}
+
+func (e *BlockSpreadEvent) GetSource() Behavior { return e.Source }
+
+// Spread is a port of pocketmine\block\utils\BlockEventHelper::spread.
+func Spread(oldState Behavior, newState Behavior, source Behavior) bool {
+	ev := &BlockSpreadEvent{BlockChangeEvent: BlockChangeEvent{Block: oldState, NewState: newState}, Source: source}
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
+	}
+	world, err := oldState.GetPosition().GetWorld()
+	if err != nil {
+		return false
+	}
+	if err := world.SetBlock(oldState.GetPosition(), ev.NewState); err != nil {
+		return false
+	}
+	return true
+}
+
 // BlockGrowEvent is a port of pocketmine\event\block\BlockGrowEvent.
 type BlockGrowEvent struct {
 	BlockChangeEvent

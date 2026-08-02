@@ -1,5 +1,11 @@
 package block
 
+import (
+	"math/rand"
+
+	"pocketmine-go/pocketmine/math"
+)
+
 // Nylium is a port of pocketmine\block\Nylium.
 type Nylium struct {
 	Opaque
@@ -25,10 +31,35 @@ func (n *Nylium) IsAffectedBySilkTouch() bool { return true }
 
 func (n *Nylium) TicksRandomly() bool { return true }
 
-// OnRandomTick should revert to Netherrack when covered, or spread onto nearby Netherrack via
-// BlockEventHelper - needs the unported block registry (VanillaBlocks) and BlockEventHelper, so
-// this is a no-op for now (same gap category as Mycelium/Grass's OnRandomTick).
-func (n *Nylium) OnRandomTick() {}
+// OnRandomTick is a port of Nylium::onRandomTick.
+func (n *Nylium) OnRandomTick() {
+	world, err := n.position.GetWorld()
+	if err != nil {
+		return
+	}
+	if !n.self.(blockGeometry).GetSide(math.Up, 1).IsTransparent() {
+		Spread(n.self, VanillaNetherrack(), n.self)
+		return
+	}
+
+	pos := n.position.AsVector3()
+	for i := 0; i < 4; i++ {
+		rx := pos.FloorX() - 1 + rand.Intn(3)
+		ry := pos.FloorY() - 2 + rand.Intn(3)
+		rz := pos.FloorZ() - 1 + rand.Intn(3)
+		n.tryConvertNetherrackAt(world, rx, ry, rz)
+	}
+}
+
+// tryConvertNetherrackAt is the deterministic (given world coordinates) rest of the spread loop in
+// Nylium::onRandomTick, split out from the random position sample above so it's directly testable
+// - same pattern as Grass.trySpreadOnto/Mycelium.trySpreadOnto.
+func (n *Nylium) tryConvertNetherrackAt(world World, x, y, z int) {
+	blk := world.GetBlockAt(x, y, z)
+	if blk.GetTypeId() == NETHERRACK && world.GetBlockAt(x, y+1, z).IsTransparent() {
+		Spread(blk, n.self.Clone(), n.self)
+	}
+}
 
 // OnInteract should fertilizer-grow Vegetation blocks nearby - needs a Fertilizer item marker and
 // World.GetBlock(Position)/IsInWorld, none ported yet. Block's default OnInteract (return false)

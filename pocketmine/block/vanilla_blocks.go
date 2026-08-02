@@ -33,6 +33,8 @@ var (
 	vanillaAmethystCluster Behavior
 	vanillaCobblestone     Behavior
 	vanillaBasalt          Behavior
+	vanillaGrass           Behavior
+	vanillaMycelium        Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -239,4 +241,22 @@ func VanillaBasalt() Behavior {
 		vanillaBasalt = NewSimplePillar(mustVanillaBlockIdentifier(BASALT), "Basalt", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.25, vanillaToolTierWood, &blastResistance), nil, nil))
 	}
 	return vanillaBasalt.Clone()
+}
+
+// VanillaGrass is a port of VanillaBlocks::GRASS() - see VanillaBlocksInputs.php's
+// register("grass", ...): BreakInfo::shovel(0.6), [Tags::DIRT].
+func VanillaGrass() Behavior {
+	if vanillaGrass == nil {
+		vanillaGrass = NewGrass(mustVanillaBlockIdentifier(GRASS), "Grass", NewBlockTypeInfo(BlockBreakInfoShovel(0.6, nil, nil), []string{BlockTypeTagsDirt}, nil))
+	}
+	return vanillaGrass.Clone()
+}
+
+// VanillaMycelium is a port of VanillaBlocks::MYCELIUM() - see VanillaBlocksInputs.php's
+// register("mycelium", ...): BreakInfo::shovel(0.6), [Tags::DIRT].
+func VanillaMycelium() Behavior {
+	if vanillaMycelium == nil {
+		vanillaMycelium = NewMycelium(mustVanillaBlockIdentifier(MYCELIUM), "Mycelium", NewBlockTypeInfo(BlockBreakInfoShovel(0.6, nil, nil), []string{BlockTypeTagsDirt}, nil))
+	}
+	return vanillaMycelium.Clone()
 }

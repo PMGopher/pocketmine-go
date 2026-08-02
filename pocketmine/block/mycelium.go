@@ -1,5 +1,11 @@
 package block
 
+import (
+	"math/rand"
+
+	blockutils "pocketmine-go/pocketmine/block/utils"
+)
+
 // Mycelium is a port of pocketmine\block\Mycelium.
 type Mycelium struct {
 	Opaque
@@ -21,11 +27,31 @@ func (m *Mycelium) IsAffectedBySilkTouch() bool { return true }
 
 func (m *Mycelium) TicksRandomly() bool { return true }
 
-// OnRandomTick should pick a random nearby Dirt block (of DirtType::NORMAL, with a Transparent
-// block above it) and spread mycelium onto it via BlockEventHelper::spread - needs the unported
-// block registry (VanillaBlocks) and BlockEventHelper, so this is a no-op for now (see
-// Block.GetDropsForCompatibleTool's doc comment for the same category of gap).
-func (m *Mycelium) OnRandomTick() {}
+// OnRandomTick is a port of Mycelium::onRandomTick. The "//TODO: light levels" comment in the PHP
+// original is copied as-is - not a gap introduced by this port.
+func (m *Mycelium) OnRandomTick() {
+	world, err := m.position.GetWorld()
+	if err != nil {
+		return
+	}
+	pos := m.position.AsVector3()
+	x := pos.FloorX() - 1 + rand.Intn(3)
+	y := pos.FloorY() - 2 + rand.Intn(5)
+	z := pos.FloorZ() - 1 + rand.Intn(3)
+	m.trySpreadOnto(world, x, y, z)
+}
+
+// trySpreadOnto is the deterministic (given world coordinates) rest of Mycelium::onRandomTick,
+// split out from the random position sample above so it's directly testable - same pattern as
+// Grass.trySpreadOnto.
+func (m *Mycelium) trySpreadOnto(world World, x, y, z int) {
+	blk := world.GetBlockAt(x, y, z)
+	if dirt, ok := blk.(*Dirt); ok && dirt.GetDirtType() == blockutils.DirtTypeNormal {
+		if world.GetBlockAt(x, y+1, z).IsTransparent() {
+			Spread(dirt, VanillaMycelium(), m.self)
+		}
+	}
+}
 
 // GetDropsForCompatibleTool should return [VanillaBlocks.DIRT().AsItem()] — needs the unported
 // block registry and real Item construction (see Block.GetDropsForCompatibleTool's doc comment),
