@@ -40,6 +40,7 @@ var (
 	vanillaOminousBanner     Behavior
 	vanillaOminousWallBanner Behavior
 	vanillaBamboo            Behavior
+	vanillaChorusPlant       Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -314,4 +315,13 @@ func VanillaBamboo() Behavior {
 		vanillaBamboo = NewBamboo(mustVanillaBlockIdentifier(BAMBOO), "Bamboo", NewBlockTypeInfo(NewBlockBreakInfo(1.0, ToolTypeAxe, 0, nil, nil), []string{BlockTypeTagsPottablePlants}, nil))
 	}
 	return vanillaBamboo.Clone()
+}
+
+// VanillaChorusPlant is a port of VanillaBlocks::CHORUS_PLANT() - see VanillaBlocksInputs.php's
+// register("chorus_plant", ...): BreakInfo::axe(0.4).
+func VanillaChorusPlant() Behavior {
+	if vanillaChorusPlant == nil {
+		vanillaChorusPlant = NewChorusPlant(mustVanillaBlockIdentifier(CHORUS_PLANT), "Chorus Plant", NewBlockTypeInfo(BlockBreakInfoAxe(0.4, nil, nil), nil, nil))
+	}
+	return vanillaChorusPlant.Clone()
 }

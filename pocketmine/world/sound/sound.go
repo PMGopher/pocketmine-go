@@ -142,3 +142,9 @@ type RecordStopSound struct{}
 type FizzSound struct {
 	Pitch float64
 }
+
+// ChorusFlowerGrowSound is a port of pocketmine\world\sound\ChorusFlowerGrowSound.
+type ChorusFlowerGrowSound struct{}
+
+// ChorusFlowerDieSound is a port of pocketmine\world\sound\ChorusFlowerDieSound.
+type ChorusFlowerDieSound struct{}
