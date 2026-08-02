@@ -57,7 +57,14 @@ func (c *CoralBlock) OnScheduledUpdate() {
 
 func (c *CoralBlock) IsAffectedBySilkTouch() bool { return true }
 
-// GetDropsForCompatibleTool should return [(clone-with-Dead-true).AsItem()] — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (c *CoralBlock) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of CoralBlock::getDropsForCompatibleTool - coral always
+// drops its dead form, regardless of whether the block itself is alive or dead when broken.
+func (c *CoralBlock) GetDropsForCompatibleTool(item Item) []Item {
+	dead := c.self.Clone()
+	dead.(CoralMaterial).SetDead(true)
+	dropped := asItemOrNil(dead)
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}

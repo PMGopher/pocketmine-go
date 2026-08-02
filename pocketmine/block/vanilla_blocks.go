@@ -44,6 +44,7 @@ var (
 	vanillaDoublePitcherCrop Behavior
 	vanillaBigDripleafStem   Behavior
 	vanillaSmallDripleaf     Behavior
+	vanillaBigDripleafHead   Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -356,4 +357,14 @@ func VanillaSmallDripleaf() Behavior {
 		vanillaSmallDripleaf = NewSmallDripleaf(mustVanillaBlockIdentifier(SMALL_DRIPLEAF), "Small Dripleaf", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeShears, 1), nil, nil))
 	}
 	return vanillaSmallDripleaf.Clone()
+}
+
+// VanillaBigDripleafHead is a port of VanillaBlocks::BIG_DRIPLEAF_HEAD() - see
+// VanillaBlocksInputs.php's register("big_dripleaf_head", ...): new BreakInfo(0.1) (no tool type,
+// no tier).
+func VanillaBigDripleafHead() Behavior {
+	if vanillaBigDripleafHead == nil {
+		vanillaBigDripleafHead = NewBigDripleafHead(mustVanillaBlockIdentifier(BIG_DRIPLEAF_HEAD), "Big Dripleaf", NewBlockTypeInfo(NewBlockBreakInfo(0.1, ToolTypeNone, 0, nil, nil), nil, nil))
+	}
+	return vanillaBigDripleafHead.Clone()
 }

@@ -74,8 +74,14 @@ func (e *EnderChest) OnInteract(item Item, face math.Facing, clickVector math.Ve
 	return true
 }
 
-// GetDropsForCompatibleTool should return [VanillaBlocks.OBSIDIAN().AsItem().SetCount(8)] - needs
-// the unported block registry and real Item construction (see Block.GetDropsForCompatibleTool's
-// doc comment), so it's left as Block's default for now.
+// GetDropsForCompatibleTool is a port of EnderChest::getDropsForCompatibleTool.
+func (e *EnderChest) GetDropsForCompatibleTool(item Item) []Item {
+	dropped := asItemOrNil(VanillaObsidian())
+	if dropped == nil {
+		return nil
+	}
+	dropped.SetCount(8)
+	return []Item{dropped}
+}
 
 func (e *EnderChest) IsAffectedBySilkTouch() bool { return true }

@@ -116,6 +116,23 @@ func TestSmallDripleafPlaceFailsWithoutSpaceAbove(t *testing.T) {
 	}
 }
 
+func TestSmallDripleafGetDropsForCompatibleToolOnlyFromBottom(t *testing.T) {
+	withFakeItemBlockFactory(t)
+	w := &fakeWorld{}
+
+	bottom := newTestSmallDripleaf(w, 1, 2, 3)
+	drops := bottom.GetDropsForCompatibleTool(fakeItem{})
+	if len(drops) != 1 {
+		t.Fatalf("expected 1 drop from the bottom half, got %d", len(drops))
+	}
+
+	top := newTestSmallDripleaf(w, 1, 3, 3)
+	top.Top = true
+	if drops := top.GetDropsForCompatibleTool(fakeItem{}); drops != nil {
+		t.Errorf("expected no drops from the top half, got %v", drops)
+	}
+}
+
 func TestSmallDripleafSurvivesWithClaySupportAndOtherHalf(t *testing.T) {
 	w := &vineWorld{blocks: map[[3]int]Behavior{}}
 	clay := &stemTestBlock{typeID: CLAY}

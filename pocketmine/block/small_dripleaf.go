@@ -100,10 +100,18 @@ func (s *SmallDripleaf) GetAffectedBlocks() []Behavior {
 	return s.Block.GetAffectedBlocks()
 }
 
-// GetDropsForCompatibleTool should return [s.AsItem()] for the bottom half — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (s *SmallDripleaf) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of SmallDripleaf::getDropsForCompatibleTool - only the
+// bottom half drops anything.
+func (s *SmallDripleaf) GetDropsForCompatibleTool(item Item) []Item {
+	if s.Top {
+		return nil
+	}
+	dropped := asItemOrNil(s.self)
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}
 
 func (s *SmallDripleaf) GetFlameEncouragement() int { return 15 }
 

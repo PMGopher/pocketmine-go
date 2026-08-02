@@ -12,11 +12,17 @@ type fakeItemBlock struct {
 	wrapped Behavior
 }
 
+// GetCount/SetCount shadow fakeItem's no-op stubs (fakeItem is embedded by value there since most
+// callers don't care about count tracking) with real state, since drop-count-scaling code
+// (EnderChest's SetCount(8), etc.) needs to see its SetCount call actually take effect.
+func (f *fakeItemBlock) GetCount() int      { return f.count }
+func (f *fakeItemBlock) SetCount(count int) { f.count = count }
+
 func withFakeItemBlockFactory(t *testing.T) {
 	t.Helper()
 	old := NewItemBlockFunc
 	NewItemBlockFunc = func(blk Behavior) Item {
-		return &fakeItemBlock{fakeItem: fakeItem{typeID: -blk.GetTypeId()}, wrapped: blk}
+		return &fakeItemBlock{fakeItem: fakeItem{typeID: -blk.GetTypeId(), count: 1}, wrapped: blk}
 	}
 	t.Cleanup(func() { NewItemBlockFunc = old })
 }

@@ -43,6 +43,24 @@ func TestEnderChestOnInteractIncrementsViewerCountWhenUnblocked(t *testing.T) {
 	}
 }
 
+func TestEnderChestGetDropsForCompatibleToolReturnsEightObsidian(t *testing.T) {
+	withFakeItemBlockFactory(t)
+	w := &fakeWorld{}
+	e := newTestEnderChest(w)
+
+	drops := e.GetDropsForCompatibleTool(fakeItem{})
+	if len(drops) != 1 {
+		t.Fatalf("expected 1 drop, got %d", len(drops))
+	}
+	wrapped, ok := drops[0].(*fakeItemBlock)
+	if !ok || wrapped.wrapped.GetTypeId() != OBSIDIAN {
+		t.Fatalf("expected an Obsidian drop, got %#v", drops[0])
+	}
+	if wrapped.GetCount() != 8 {
+		t.Errorf("GetCount() = %d, want 8", wrapped.GetCount())
+	}
+}
+
 func TestEnderChestOnInteractDoesNotIncrementWhenLidBlocked(t *testing.T) {
 	w := &containerTileWorld{tiles: map[[3]int]Tile{}}
 	e := newTestEnderChest(w)
