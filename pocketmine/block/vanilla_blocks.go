@@ -41,6 +41,7 @@ var (
 	vanillaOminousWallBanner Behavior
 	vanillaBamboo            Behavior
 	vanillaChorusPlant       Behavior
+	vanillaDoublePitcherCrop Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -324,4 +325,13 @@ func VanillaChorusPlant() Behavior {
 		vanillaChorusPlant = NewChorusPlant(mustVanillaBlockIdentifier(CHORUS_PLANT), "Chorus Plant", NewBlockTypeInfo(BlockBreakInfoAxe(0.4, nil, nil), nil, nil))
 	}
 	return vanillaChorusPlant.Clone()
+}
+
+// VanillaDoublePitcherCrop is a port of VanillaBlocks::DOUBLE_PITCHER_CROP() - see
+// VanillaBlocksInputs.php's register("double_pitcher_crop", ...): BreakInfo::instant().
+func VanillaDoublePitcherCrop() Behavior {
+	if vanillaDoublePitcherCrop == nil {
+		vanillaDoublePitcherCrop = NewDoublePitcherCrop(mustVanillaBlockIdentifier(DOUBLE_PITCHER_CROP), "Double Pitcher Crop", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	}
+	return vanillaDoublePitcherCrop.Clone()
 }

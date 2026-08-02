@@ -2,6 +2,7 @@ package block
 
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/event"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -59,15 +60,35 @@ func (p *PitcherCrop) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	}
 }
 
-// grow is a port of PitcherCrop::grow, minus the at-MAX_AGE branch (turning into a
-// DoublePitcherCrop pair): that needs a real two-block BlockTransaction with an atomic Apply(),
-// which doesn't exist in this port (only the AddBlock-only interface used by Place does) - a
-// different, unrelated gap from the block-registry one the rest of this file's growth logic
-// needed. Below MAX_AGE, advancing age by one via Grow() is fully real.
+// grow is a port of PitcherCrop::grow.
 func (p *PitcherCrop) grow(player Player) bool {
-	if p.Age >= pitcherCropMaxAge {
+	if p.Age > pitcherCropMaxAge {
 		return false
 	}
+
+	if p.Age == pitcherCropMaxAge {
+		up := p.self.(blockGeometry).GetSide(math.Up, 1)
+		if up.GetTypeId() != AIR {
+			return false
+		}
+
+		world, err := p.position.GetWorld()
+		if err != nil {
+			return false
+		}
+		tx := NewBlockTransaction(world)
+		bottom := VanillaDoublePitcherCrop().(*DoublePitcherCrop)
+		bottom.SetTop(false)
+		top := VanillaDoublePitcherCrop().(*DoublePitcherCrop)
+		top.SetTop(true)
+		tx.AddBlock(p.position, bottom)
+		tx.AddBlock(p.position.GetSide(math.Up, 1), top)
+
+		ev := &StructureGrowEvent{Block: p.self, Transaction: tx, Player: player}
+		event.Call(ev)
+		return !ev.IsCancelled() && tx.Apply()
+	}
+
 	clone := p.self.Clone().(*PitcherCrop)
 	clone.SetAge(p.Age + 1)
 	return Grow(p.self, clone, player)

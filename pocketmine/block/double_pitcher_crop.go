@@ -2,6 +2,7 @@ package block
 
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/event"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -47,9 +48,44 @@ func (d *DoublePitcherCrop) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	}
 }
 
-// grow (DoublePitcherCrop::grow) would advance Age and rebuild both halves via a
-// BlockTransaction/StructureGrowEvent - needs the unported block registry and event, same gap as
-// PitcherCrop.grow, so it's not ported.
+// grow is a port of DoublePitcherCrop::grow.
+func (d *DoublePitcherCrop) grow(player Player) bool {
+	if d.Age >= doublePitcherCropMaxAge {
+		return false
+	}
+
+	var bottomBlock, topBlock Behavior
+	if d.Top {
+		bottomBlock = d.self.(blockGeometry).GetSide(math.Down, 1)
+		topBlock = d.self
+	} else {
+		bottomBlock = d.self
+		topBlock = d.self.(blockGeometry).GetSide(math.Up, 1)
+	}
+	if topBlock.GetTypeId() != AIR && !topBlock.(blockGeometry).HasSameTypeId(d.self) {
+		return false
+	}
+
+	world, err := d.position.GetWorld()
+	if err != nil {
+		return false
+	}
+
+	newAge := d.Age + 1
+	tx := NewBlockTransaction(world)
+	bottom := d.self.Clone().(*DoublePitcherCrop)
+	bottom.Age = newAge
+	bottom.SetTop(false)
+	top := d.self.Clone().(*DoublePitcherCrop)
+	top.Age = newAge
+	top.SetTop(true)
+	tx.AddBlock(bottomBlock.GetPosition(), bottom)
+	tx.AddBlock(topBlock.GetPosition(), top)
+
+	ev := &StructureGrowEvent{Block: bottomBlock, Transaction: tx, Player: player}
+	event.Call(ev)
+	return !ev.IsCancelled() && tx.Apply()
+}
 
 // OnInteract's fertilizer-driven grow needs a Fertilizer item marker, not ported yet - same gap
 // documented on PitcherCrop/TorchflowerCrop/Sapling's OnInteract. Block's default OnInteract
@@ -58,9 +94,13 @@ func (d *DoublePitcherCrop) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 // TicksRandomly is a port of DoublePitcherCrop::ticksRandomly - only the bottom half grows.
 func (d *DoublePitcherCrop) TicksRandomly() bool { return d.Age < doublePitcherCropMaxAge && !d.Top }
 
-// OnRandomTick should use CropGrowthHelper.CanGrow then grow() on the bottom half - same gap as
-// PitcherCrop.OnRandomTick, so this is a no-op for now.
-func (d *DoublePitcherCrop) OnRandomTick() {}
+// OnRandomTick is a port of DoublePitcherCrop::onRandomTick - only the bottom half of the plant
+// can grow randomly.
+func (d *DoublePitcherCrop) OnRandomTick() {
+	if CropGrowthCanGrow(d.self) && !d.Top {
+		d.grow(nil)
+	}
+}
 
 // GetDropsForCompatibleTool should return VanillaBlocks.PITCHER_PLANT().AsItem() once mature, or
 // VanillaItems.PITCHER_POD() otherwise - needs the unported block registry and item package (see

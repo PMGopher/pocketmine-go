@@ -86,16 +86,65 @@ func TestPitcherCropGrowAdvancesAgeBelowMax(t *testing.T) {
 	}
 }
 
-func TestPitcherCropGrowReturnsFalseAtMaxAge(t *testing.T) {
-	w := &fakeWorld{}
+// pitcherCropGrowWorld returns AIR everywhere by default (so the space above a max-age pitcher
+// crop is free to grow into) and records every SetBlock call, unlike fakeWorld which only
+// remembers the last one and returns nil from GetBlockAt (which would panic once grow() started
+// reading the block above).
+type pitcherCropGrowWorld struct {
+	fakeWorld
+	blocks   map[[3]int]Behavior
+	setCalls []cactusSetCall
+}
+
+func (w *pitcherCropGrowWorld) GetBlockAt(x, y, z int) Behavior {
+	if b, ok := w.blocks[[3]int{x, y, z}]; ok {
+		return b
+	}
+	air := NewAir(mustBlockIdentifier(AIR), "Air", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	air.SetPosition(w, x, y, z)
+	return air
+}
+
+func (w *pitcherCropGrowWorld) SetBlock(pos Position, blk Behavior) error {
+	w.setCalls = append(w.setCalls, cactusSetCall{pos, blk})
+	w.lastSetPos, w.lastSetBlock = pos, blk
+	return nil
+}
+
+func TestPitcherCropGrowAtMaxAgeBecomesDoublePitcherCropWhenSpaceAboveIsFree(t *testing.T) {
+	w := &pitcherCropGrowWorld{blocks: map[[3]int]Behavior{}}
+	p := newTestPitcherCrop(w)
+	p.Age = pitcherCropMaxAge
+
+	if !p.grow(nil) {
+		t.Fatal("expected grow to succeed at max age with free space above")
+	}
+	if len(w.setCalls) != 2 {
+		t.Fatalf("expected 2 SetBlock calls (bottom + top), got %d", len(w.setCalls))
+	}
+	bottom, ok := w.setCalls[0].blk.(*DoublePitcherCrop)
+	if !ok || bottom.Top || w.setCalls[0].pos.FloorY() != 2 {
+		t.Errorf("expected a non-top *DoublePitcherCrop at Y=2, got %#v at Y=%d", w.setCalls[0].blk, w.setCalls[0].pos.FloorY())
+	}
+	top, ok := w.setCalls[1].blk.(*DoublePitcherCrop)
+	if !ok || !top.Top || w.setCalls[1].pos.FloorY() != 3 {
+		t.Errorf("expected a top *DoublePitcherCrop at Y=3, got %#v at Y=%d", w.setCalls[1].blk, w.setCalls[1].pos.FloorY())
+	}
+}
+
+func TestPitcherCropGrowAtMaxAgeFailsWhenSpaceAboveIsBlocked(t *testing.T) {
+	w := &pitcherCropGrowWorld{blocks: map[[3]int]Behavior{}}
+	blocker := newTestBlock(false)
+	blocker.SetPosition(w, 1, 3, 3)
+	w.blocks[[3]int{1, 3, 3}] = blocker
 	p := newTestPitcherCrop(w)
 	p.Age = pitcherCropMaxAge
 
 	if p.grow(nil) {
-		t.Error("expected grow to return false at max age (turning into DoublePitcherCrop isn't ported)")
+		t.Error("expected grow to fail at max age when the space above is blocked")
 	}
-	if w.lastSetBlock != nil {
-		t.Error("expected no state change at max age")
+	if len(w.setCalls) != 0 {
+		t.Errorf("expected no SetBlock calls, got %d", len(w.setCalls))
 	}
 }
 
@@ -119,13 +168,13 @@ func TestPitcherCropOnInteractIgnoresNonFertilizerItems(t *testing.T) {
 	}
 }
 
-func TestPitcherCropOnInteractReturnsFalseAtMaxAgeEvenWithBoneMeal(t *testing.T) {
-	w := &fakeWorld{}
+func TestPitcherCropOnInteractAtMaxAgeBecomesDoublePitcherCropWithBoneMeal(t *testing.T) {
+	w := &pitcherCropGrowWorld{blocks: map[[3]int]Behavior{}}
 	p := newTestPitcherCrop(w)
 	p.Age = pitcherCropMaxAge
 	boneMeal := fakeItem{typeID: itemTypeIDsBoneMeal}
 
-	if p.OnInteract(boneMeal, math.Up, math.Vector3{}, nil, nil) {
-		t.Error("expected OnInteract to return false when grow() can't advance past max age")
+	if !p.OnInteract(boneMeal, math.Up, math.Vector3{}, nil, nil) {
+		t.Error("expected OnInteract to return true - grow() now handles the max-age DoublePitcherCrop branch")
 	}
 }
