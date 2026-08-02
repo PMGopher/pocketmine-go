@@ -83,3 +83,27 @@ func TestItemBlockSatisfiesItemBlockLikeMarker(t *testing.T) {
 		t.Error("expected ItemBlock to satisfy block.ItemBlockLike")
 	}
 }
+
+// TestBlockAsItemUsesRealItemBlockFactory is the end-to-end proof that this package's init()
+// correctly wires block.NewItemBlockFunc: block.Block.AsItem() (which can't import this package -
+// it already imports block, so the reverse would be a real cycle) should produce a real *ItemBlock
+// with the item type ID PHP's ItemTypeIds::fromBlockTypeId defines (-blockTypeId), once this
+// package is merely imported anywhere in the program (as this test file already does).
+func TestBlockAsItemUsesRealItemBlockFactory(t *testing.T) {
+	dirt := newTestDirtBlock().(*block.Dirt)
+
+	got, err := dirt.AsItem()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ib, ok := got.(*ItemBlock)
+	if !ok {
+		t.Fatalf("expected a *ItemBlock, got %T", got)
+	}
+	if want := -dirt.GetTypeId(); ib.GetTypeId() != want {
+		t.Errorf("GetTypeId() = %d, want %d (negated block type ID)", ib.GetTypeId(), want)
+	}
+	if ib.GetBlock().GetTypeId() != dirt.GetTypeId() {
+		t.Errorf("wrapped block type ID = %d, want %d", ib.GetBlock().GetTypeId(), dirt.GetTypeId())
+	}
+}

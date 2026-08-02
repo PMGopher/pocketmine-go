@@ -24,6 +24,16 @@ func NewItemBlock(identifier ItemIdentifier, blk block.Behavior) *ItemBlock {
 	return ib
 }
 
+// init wires block.NewItemBlockFunc to a real ItemBlock constructor - see that var's doc comment
+// in block/item.go for why this indirection exists (block can't import item directly). The item
+// type ID is -blk.GetTypeId(): ItemTypeIds::fromBlockTypeId in the PHP original is exactly this
+// negation, not a lookup table, so no block-type-ID-to-item-type-ID registry is needed here.
+func init() {
+	block.NewItemBlockFunc = func(blk block.Behavior) block.Item {
+		return NewItemBlock(NewItemIdentifier(-blk.GetTypeId()), blk)
+	}
+}
+
 // Clone deep-copies the wrapped block too, not just the ItemBlock's own fields.
 func (i *ItemBlock) Clone() Item {
 	c := *i

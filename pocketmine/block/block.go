@@ -158,12 +158,15 @@ func (b *Block) encodeFullState() (int, error) {
 	return result, nil
 }
 
-// AsItem returns this block as an item: block-only state (facing, powered, etc.) is discarded,
-// block-item state (colour, wood type, etc.) is preserved.
+// AsItem is a port of Block::asItem: block-only state (facing, powered, etc.) is discarded,
+// block-item state (colour, wood type, etc.) is preserved, and the result is wrapped in an
+// ItemBlock via NewItemBlockFunc (see item.go's doc comment on why that's a factory var rather
+// than a direct call - block can't import the item package that provides it).
 //
-// PHP wraps the result in ItemBlock; the item package doesn't exist yet, so this returns the
-// normalized Behavior clone directly. Once item.ItemBlock exists, wrap this call's result in it.
-func (b *Block) AsItem() (Behavior, error) {
+// Errors if NewItemBlockFunc hasn't been set, i.e. the running program never imported the item
+// package - every real program does (it's how blocks and items get wired together at all), so
+// this only bites tests that exercise AsItem() paths without importing item too.
+func (b *Block) AsItem() (Item, error) {
 	normalized := b.defaultState.Clone()
 	itemData, err := b.encodeBlockItemState()
 	if err != nil {
@@ -172,7 +175,10 @@ func (b *Block) AsItem() (Behavior, error) {
 	if err := normalized.DecodeBlockItemState(itemData); err != nil {
 		return nil, err
 	}
-	return normalized, nil
+	if NewItemBlockFunc == nil {
+		return nil, fmt.Errorf("block: AsItem called but NewItemBlockFunc is nil (the item package was never imported)")
+	}
+	return NewItemBlockFunc(normalized), nil
 }
 
 // GetSide returns the Block on the given side of this one, step tiles away. Panics if this
@@ -319,26 +325,46 @@ func (b *Block) GetDrops(item Item) []Item {
 	return b.self.GetDropsForIncompatibleTool(item)
 }
 
-// GetDropsForCompatibleTool/GetSilkTouchDrops should each return []Item{b.AsItem()} — the
-// block's item form — matching PHP's `return [$this->asItem()];`. AsItem() currently returns a
-// Behavior (see its doc comment: real Item support needs item.ItemBlock, which needs the item
-// package), which doesn't satisfy the Item interface, so these return nil for now rather than a
-// value that would be wrong in a different way. Revisit once AsItem() can produce a real Item.
-func (b *Block) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool/GetSilkTouchDrops are ports of Block's defaults, both matching PHP's
+// `return [$this->asItem()];`. AsItem() errors when NewItemBlockFunc is nil (the item package
+// isn't linked into the running program - notably, block's own test suite never can: item already
+// imports block, so block's internal tests importing item back would be a real Go import cycle);
+// on error these just fall back to no drops, exactly like their previous permanent stub did,
+// rather than panicking over a condition that's normal for those tests.
+func (b *Block) GetDropsForCompatibleTool(item Item) []Item {
+	asItem, err := b.AsItem()
+	if err != nil {
+		return nil
+	}
+	return []Item{asItem}
+}
 
 func (b *Block) GetDropsForIncompatibleTool(item Item) []Item { return nil }
 
-func (b *Block) GetSilkTouchDrops(item Item) []Item { return nil }
+func (b *Block) GetSilkTouchDrops(item Item) []Item {
+	asItem, err := b.AsItem()
+	if err != nil {
+		return nil
+	}
+	return []Item{asItem}
+}
 
 func (b *Block) GetXpDropAmount() int { return 0 }
 
 func (b *Block) IsAffectedBySilkTouch() bool { return false }
 
-// GetPickedItem is a simplified port of Block::getPickedItem(). Like GetDropsForCompatibleTool,
-// this should return b.AsItem() (plus, if addUserData is true, a tile's NBT copied onto it — the
-// Tile marker interface doesn't have GetCleanedNBT yet); both need the item package to return an
-// actual Item, so this returns nil for now.
-func (b *Block) GetPickedItem(addUserData bool) Item { return nil }
+// GetPickedItem is a simplified port of Block::getPickedItem(): the addUserData branch (copying a
+// tile's cleaned NBT onto the item) is skipped, since the Tile marker interface doesn't expose
+// GetCleanedNBT yet - same gap category as everywhere else Tile is too narrow. See
+// GetDropsForCompatibleTool's doc comment for why AsItem() failing falls back to nil rather than
+// panicking.
+func (b *Block) GetPickedItem(addUserData bool) Item {
+	asItem, err := b.AsItem()
+	if err != nil {
+		return nil
+	}
+	return asItem
+}
 
 func (b *Block) GetFuelTime() int           { return 0 }
 func (b *Block) GetMaxStackSize() int       { return 64 }
