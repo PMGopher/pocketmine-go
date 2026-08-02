@@ -131,3 +131,4 @@ func (fakeSignPlayer) IsSneaking() bool                     { return false }
 func (fakeSignPlayer) GetYaw() float64                      { return 0 }
 func (fakeSignPlayer) GetID() int                           { return 99 }
 func (fakeSignPlayer) GetEyePos() math.Vector3              { return math.Vector3{X: 1, Y: 3.62, Z: 4} }
+func (fakeSignPlayer) IsSurvival() bool                     { return true }

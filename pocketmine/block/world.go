@@ -27,6 +27,9 @@ type World interface {
 	GetSunAnglePercentage() float64
 	GetNearbyEntities(bb math.AxisAlignedBB) []Entity
 	GetHighestAdjacentFullLightAt(x, y, z int) int
+	// GetHighestAdjacentBlockLightAt is needed by Ice.OnRandomTick - block-emitted light only,
+	// distinct from GetHighestAdjacentFullLightAt (which also counts sky light).
+	GetHighestAdjacentBlockLightAt(x, y, z int) int
 	// UseBreakOn is the simplified (no item/player/particles) form of World::useBreakOn, the only
 	// form used from within block package (Button.onNearbyBlockChange).
 	UseBreakOn(pos math.Vector3) bool
@@ -76,6 +79,8 @@ type Player interface {
 	GetID() int
 	// GetEyePos is needed by Barrel.Place's look-direction-based facing logic.
 	GetEyePos() math.Vector3
+	// IsSurvival is needed by Ice.OnBreak's survival-only water-swap gate.
+	IsSurvival() bool
 }
 
 type Projectile interface {

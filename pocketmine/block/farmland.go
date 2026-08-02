@@ -2,7 +2,9 @@ package block
 
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/utils"
 )
 
 const (
@@ -66,17 +68,22 @@ func (f *Farmland) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	return []math.AxisAlignedBB{math.OneAABB().TrimmedCopy(math.Up, 1.0/16)}
 }
 
-// OnNearbyBlockChange should replace itself with VanillaBlocks.DIRT() when the block above becomes
-// solid — needs the unported block registry (VanillaBlocks), so this is a no-op for now (see
-// Block.GetDropsForCompatibleTool's doc comment for the same category of gap).
-func (f *Farmland) OnNearbyBlockChange() {}
+// OnNearbyBlockChange is a port of Farmland::onNearbyBlockChange.
+func (f *Farmland) OnNearbyBlockChange() {
+	if f.self.(blockGeometry).GetSide(math.Up, 1).IsSolid() {
+		world, err := f.position.GetWorld()
+		if err != nil {
+			return
+		}
+		_ = world.SetBlock(f.position, VanillaDirt())
+	}
+}
 
 func (f *Farmland) TicksRandomly() bool { return true }
 
 // OnRandomTick doesn't fire FarmlandHydrationChangeEvent (deferred concrete event subclass), so
-// hydration changes are never cancellable yet; and the "dry out completely -> become Dirt" step
-// needs the unported block registry, so that specific transition is skipped (the wetness/water
-// search bookkeeping above it still runs faithfully).
+// hydration changes are never cancellable yet; the "dry out completely -> become Dirt" step is
+// otherwise real.
 func (f *Farmland) OnRandomTick() {
 	world, err := f.position.GetWorld()
 	if err != nil {
@@ -93,8 +100,10 @@ func (f *Farmland) OnRandomTick() {
 				panic(err)
 			}
 			changed = true
+		} else {
+			_ = world.SetBlock(f.position, VanillaDirt())
+			changed = true
 		}
-		// else: should become VanillaBlocks.DIRT() - see doc comment above.
 	} else if f.Wetness < FarmlandMaxWetness {
 		f.Wetness = FarmlandMaxWetness
 		if err := world.SetBlock(f.position, f.self); err != nil {
@@ -110,11 +119,20 @@ func (f *Farmland) OnRandomTick() {
 	}
 }
 
-// OnEntityLand should trample the farmland into VanillaBlocks.DIRT() when a Living entity lands
-// hard enough (subject to EntityTrampleFarmlandEvent, an unported concrete event subclass) - both
-// that event and the block registry are out of scope for now, so this always defers to the
-// default fall-damage behavior, matching the PHP original's `return null;` outcome either way.
-func (f *Farmland) OnEntityLand(entity Entity) (float64, bool) { return 0, false }
+// OnEntityLand is a port of Farmland::onEntityLand. It always defers to the default fall-damage
+// behavior either way, matching the PHP original's `return null;` outcome.
+func (f *Farmland) OnEntityLand(e Entity) (float64, bool) {
+	if living, ok := e.(Living); ok && utils.GetRandomFloat() < living.GetFallDistance()-0.5 {
+		ev := entity.NewEntityTrampleFarmlandEvent(living, f.self)
+		entity.Call(ev)
+		if !ev.IsCancelled() {
+			if world, err := f.position.GetWorld(); err == nil {
+				_ = world.SetBlock(f.position, VanillaDirt())
+			}
+		}
+	}
+	return 0, false
+}
 
 func (f *Farmland) canHydrate() bool {
 	world, err := f.position.GetWorld()

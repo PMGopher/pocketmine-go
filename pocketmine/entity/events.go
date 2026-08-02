@@ -286,3 +286,20 @@ func NewEntityExtinguishEvent(entity EntityLike, cause int) *EntityExtinguishEve
 }
 
 func (e *EntityExtinguishEvent) GetCause() int { return e.cause }
+
+// EntityTrampleFarmlandEvent is a port of pocketmine\event\entity\EntityTrampleFarmlandEvent.
+// PHP types the entity as Living specifically (not just Entity) - callers are expected to only
+// construct this after already checking `$entity instanceof Living`, same as this port's
+// equivalent block.Living type-assertion pattern.
+type EntityTrampleFarmlandEvent struct {
+	EntityEvent
+	event.CancellableTrait
+
+	block DamagerBlock
+}
+
+func NewEntityTrampleFarmlandEvent(livingEntity EntityLike, farmlandBlock DamagerBlock) *EntityTrampleFarmlandEvent {
+	return &EntityTrampleFarmlandEvent{EntityEvent: EntityEvent{entity: livingEntity}, block: farmlandBlock}
+}
+
+func (e *EntityTrampleFarmlandEvent) GetBlock() DamagerBlock { return e.block }

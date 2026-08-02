@@ -21,19 +21,31 @@ func (i *Ice) GetLightFilter() int { return 2 }
 
 func (i *Ice) GetFrictionFactor() float64 { return 0.98 }
 
-// OnBreak should replace itself with VanillaBlocks.WATER() when broken without silk touch by a
-// survival (or console) player — needs Item.HasEnchantment and the not-yet-ported block registry
-// (VanillaBlocks), so this always falls back to the default (no water left behind) for now.
+// OnBreak is a port of Ice::onBreak. Item.HasEnchantment(SILK_TOUCH) isn't ported (the
+// enchantment system isn't ported at all yet - same "always false" convention as every other
+// HasEnchantment check in this port, see candle_component.go), so the silk-touch exemption never
+// applies; the survival-only gate is otherwise real.
 func (i *Ice) OnBreak(item Item, player Player, returnedItems *[]Item) bool {
+	if player == nil || player.IsSurvival() {
+		Melt(i.self, VanillaWater())
+		return true
+	}
 	return i.Block.OnBreak(item, player, returnedItems)
 }
 
 func (i *Ice) TicksRandomly() bool { return true }
 
-// OnRandomTick should melt into VanillaBlocks.WATER() via BlockEventHelper when adjacent light is
-// high enough — needs World.GetHighestAdjacentBlockLight and the block registry, neither ported
-// yet, so this is a no-op for now (same category of gap as Vine's growth TODO).
-func (i *Ice) OnRandomTick() {}
+// OnRandomTick is a port of Ice::onRandomTick.
+func (i *Ice) OnRandomTick() {
+	world, err := i.position.GetWorld()
+	if err != nil {
+		return
+	}
+	pos := i.position.AsVector3()
+	if world.GetHighestAdjacentBlockLightAt(pos.FloorX(), pos.FloorY(), pos.FloorZ()) >= 12 {
+		Melt(i.self, VanillaWater())
+	}
+}
 
 // GetDropsForCompatibleTool deliberately returns nothing — ice melts instead of dropping itself,
 // matching the PHP original's `return [];` (this isn't a not-yet-ported gap).

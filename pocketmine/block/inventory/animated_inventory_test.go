@@ -32,6 +32,7 @@ func (w *fakeWorld) GetRealBlockSkyLightAt(x, y, z int) int                 { re
 func (w *fakeWorld) GetSunAnglePercentage() float64                         { return 1 }
 func (w *fakeWorld) GetNearbyEntities(bb math.AxisAlignedBB) []block.Entity { return nil }
 func (w *fakeWorld) GetHighestAdjacentFullLightAt(x, y, z int) int          { return 15 }
+func (w *fakeWorld) GetHighestAdjacentBlockLightAt(x, y, z int) int         { return 15 }
 func (w *fakeWorld) UseBreakOn(pos math.Vector3) bool                       { return true }
 
 type fakePlayer struct{ name string }

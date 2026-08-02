@@ -84,12 +84,8 @@ func (f *FrostedIce) checkAdjacentBlocks(requirement int) bool {
 	return false
 }
 
-// tryMelt updates the ice's age, destroying it (returning true) if appropriate.
-//
-// When fully aged, this should replace itself with VanillaBlocks.WATER() via BlockEventHelper —
-// needs the unported block registry, so for now it just reports "destroyed" without actually
-// changing the block (see Block.GetDropsForCompatibleTool's doc comment for the same category of
-// gap).
+// tryMelt is a port of FrostedIce::tryMelt: updates the ice's age, or replaces it with
+// VanillaWater() (destroying it, returning true) once fully aged.
 func (f *FrostedIce) tryMelt() bool {
 	world, err := f.position.GetWorld()
 	if err != nil {
@@ -97,6 +93,7 @@ func (f *FrostedIce) tryMelt() bool {
 	}
 
 	if f.Age >= FrostedIceMaxAge {
+		Melt(f.self, VanillaWater())
 		return true
 	}
 

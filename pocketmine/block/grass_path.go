@@ -23,10 +23,16 @@ func (g *GrassPath) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	return []math.AxisAlignedBB{math.OneAABB().TrimmedCopy(math.Up, 1.0/16)}
 }
 
-// OnNearbyBlockChange should turn this block into VanillaBlocks.DIRT() when a solid block is
-// placed above it — needs the unported block registry (VanillaBlocks), so this is a no-op for
-// now (see Block.GetDropsForCompatibleTool's doc comment for the same category of gap).
-func (g *GrassPath) OnNearbyBlockChange() {}
+// OnNearbyBlockChange is a port of GrassPath::onNearbyBlockChange.
+func (g *GrassPath) OnNearbyBlockChange() {
+	if g.self.(blockGeometry).GetSide(math.Up, 1).IsSolid() {
+		world, err := g.position.GetWorld()
+		if err != nil {
+			return
+		}
+		_ = world.SetBlock(g.position, VanillaDirt())
+	}
+}
 
 func (g *GrassPath) IsAffectedBySilkTouch() bool { return true }
 
