@@ -71,3 +71,56 @@ func TestTorchflowerCropReadyState(t *testing.T) {
 		t.Error("expected SetReady(true) to make IsReady() true")
 	}
 }
+
+func TestTorchflowerCropGetNextStateAdvancesToReadyCrop(t *testing.T) {
+	w := &fakeWorld{}
+	tc := newTestTorchflowerCrop(w)
+	tc.Ready = false
+
+	next, ok := tc.getNextState().(*TorchflowerCrop)
+	if !ok {
+		t.Fatalf("getNextState() = %T, want *TorchflowerCrop", tc.getNextState())
+	}
+	if !next.Ready {
+		t.Error("expected the next state to be a ready TorchflowerCrop")
+	}
+}
+
+func TestTorchflowerCropGetNextStateBecomesTorchflowerWhenReady(t *testing.T) {
+	w := &fakeWorld{}
+	tc := newTestTorchflowerCrop(w)
+	tc.Ready = true
+
+	if got := tc.getNextState().GetTypeId(); got != TORCHFLOWER {
+		t.Errorf("getNextState().GetTypeId() = %d, want TORCHFLOWER (%d)", got, TORCHFLOWER)
+	}
+}
+
+func TestTorchflowerCropOnInteractFertilizesWithBoneMeal(t *testing.T) {
+	w := &fakeWorld{}
+	tc := newTestTorchflowerCrop(w)
+	boneMeal := fakeItem{typeID: itemTypeIDsBoneMeal}
+
+	if !tc.OnInteract(boneMeal, math.Up, math.Vector3{}, nil, nil) {
+		t.Fatal("expected OnInteract to return true")
+	}
+	grown, ok := w.lastSetBlock.(*TorchflowerCrop)
+	if !ok {
+		t.Fatalf("expected SetBlock to be called with a *TorchflowerCrop, got %T", w.lastSetBlock)
+	}
+	if !grown.Ready {
+		t.Error("expected the grown state to be ready")
+	}
+}
+
+func TestTorchflowerCropOnInteractIgnoresNonFertilizerItems(t *testing.T) {
+	w := &fakeWorld{}
+	tc := newTestTorchflowerCrop(w)
+
+	if tc.OnInteract(fakeItem{}, math.Up, math.Vector3{}, nil, nil) {
+		t.Error("expected OnInteract to return false for a non-fertilizer item")
+	}
+	if w.lastSetBlock != nil {
+		t.Error("expected no state change for a non-fertilizer item")
+	}
+}

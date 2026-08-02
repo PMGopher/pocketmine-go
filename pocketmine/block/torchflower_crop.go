@@ -48,20 +48,37 @@ func (t *TorchflowerCrop) OnNearbyBlockChange() {
 	}
 }
 
-// getNextState would return VanillaBlocks.TORCHFLOWER() or VanillaBlocks.TORCHFLOWER_CROP() with
-// Ready set - needs the unported block registry, same gap as Sapling.grow, so it's not ported.
+// getNextState is a port of TorchflowerCrop::getNextState.
+func (t *TorchflowerCrop) getNextState() Behavior {
+	if t.Ready {
+		return VanillaTorchflower()
+	}
+	crop := VanillaTorchflowerCrop().(*TorchflowerCrop)
+	crop.SetReady(true)
+	return crop
+}
 
-// OnInteract's fertilizer-driven growth (via BlockEventHelper.Grow) needs a Fertilizer item
-// marker and the block registry, neither ported yet - same gap documented on
-// Crops/SweetBerryBush/CocoaBlock/Sapling's OnInteract. Block's default OnInteract (return false)
-// already matches this gap, so there's nothing to override here.
+// OnInteract is a port of TorchflowerCrop::onInteract. `$item instanceof Fertilizer` is checked
+// via item type ID (bone meal is the only Fertilizer-marked item in the PHP original), same
+// structural-marker convention as Crops.OnInteract.
+func (t *TorchflowerCrop) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if item.GetTypeId() != itemTypeIDsBoneMeal {
+		return false
+	}
+	if Grow(t.self, t.getNextState(), player) {
+		item.Pop()
+	}
+	return true
+}
 
 func (t *TorchflowerCrop) TicksRandomly() bool { return true }
 
-// OnRandomTick should use CropGrowthHelper.CanGrow and BlockEventHelper.Grow (block/utils, not
-// ported) to decide whether to advance to the next growth state - same gap as
-// NetherWartPlant.OnRandomTick, so this is a no-op for now.
-func (t *TorchflowerCrop) OnRandomTick() {}
+// OnRandomTick is a port of TorchflowerCrop::onRandomTick.
+func (t *TorchflowerCrop) OnRandomTick() {
+	if CropGrowthCanGrow(t.self) {
+		Grow(t.self, t.getNextState(), nil)
+	}
+}
 
 // AsItem should return VanillaItems.TORCHFLOWER_SEEDS() — needs the unported item package (see
 // Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.

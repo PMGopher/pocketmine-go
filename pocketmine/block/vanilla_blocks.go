@@ -14,18 +14,20 @@ import "fmt"
 // Real BreakInfo/tag configuration for each entry is copied from VanillaBlocksInputs.php, not
 // guessed - see each var's comment for the exact source line.
 var (
-	vanillaAir        Behavior
-	vanillaDirt       Behavior
-	vanillaWater      Behavior
-	vanillaNetherrack Behavior
-	vanillaObsidian   Behavior
-	vanillaSoulSoil   Behavior
-	vanillaCake       Behavior
-	vanillaConcrete   Behavior
-	vanillaMelon      Behavior
-	vanillaPumpkin    Behavior
-	vanillaSugarcane  Behavior
-	vanillaCaveVines  Behavior
+	vanillaAir             Behavior
+	vanillaDirt            Behavior
+	vanillaWater           Behavior
+	vanillaNetherrack      Behavior
+	vanillaObsidian        Behavior
+	vanillaSoulSoil        Behavior
+	vanillaCake            Behavior
+	vanillaConcrete        Behavior
+	vanillaMelon           Behavior
+	vanillaPumpkin         Behavior
+	vanillaSugarcane       Behavior
+	vanillaCaveVines       Behavior
+	vanillaTorchflower     Behavior
+	vanillaTorchflowerCrop Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -162,4 +164,22 @@ func VanillaCaveVines() Behavior {
 		vanillaCaveVines = NewCaveVines(mustVanillaBlockIdentifier(CAVE_VINES), "Cave Vines", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
 	}
 	return vanillaCaveVines.Clone()
+}
+
+// VanillaTorchflower is a port of VanillaBlocks::TORCHFLOWER() - see VanillaBlocksInputs.php's
+// register("torchflower", ...): BreakInfo::instant(), [Tags::POTTABLE_PLANTS] ($flowerTypeInfo).
+func VanillaTorchflower() Behavior {
+	if vanillaTorchflower == nil {
+		vanillaTorchflower = NewFlower(mustVanillaBlockIdentifier(TORCHFLOWER), "Torchflower", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), []string{BlockTypeTagsPottablePlants}, nil))
+	}
+	return vanillaTorchflower.Clone()
+}
+
+// VanillaTorchflowerCrop is a port of VanillaBlocks::TORCHFLOWER_CROP() - see
+// VanillaBlocksInputs.php's register("torchflower_crop", ...): BreakInfo::instant().
+func VanillaTorchflowerCrop() Behavior {
+	if vanillaTorchflowerCrop == nil {
+		vanillaTorchflowerCrop = NewTorchflowerCrop(mustVanillaBlockIdentifier(TORCHFLOWER_CROP), "Torchflower Crop", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	}
+	return vanillaTorchflowerCrop.Clone()
 }
