@@ -2,6 +2,7 @@ package block
 
 import (
 	"pocketmine-go/pocketmine/entity"
+	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
@@ -32,11 +33,49 @@ func (l *Lava) TickRate() int { return 30 }
 
 func (l *Lava) GetFlowDecayPerBlock() int { return 2 } // TODO: this is 1 in the nether
 
-// checkForHarden is a port of Lava::checkForHarden. The PHP original turns adjacent Water into
-// Obsidian/Cobblestone (or, on Soul Soil, adjacent Blue Ice into Basalt) via liquidCollide, which
-// needs BlockEventHelper.Form and the block registry, neither ported yet, so this is a no-op stub
-// for now (same category of gap as everywhere else BlockEventHelper is needed).
-func (l *Lava) checkForHarden() bool { return false }
+// getAdjacentBlocksExceptDown is a port of Lava::getAdjacentBlocksExceptDown.
+func (l *Lava) getAdjacentBlocksExceptDown() []Behavior {
+	geo := l.self.(blockGeometry)
+	var result []Behavior
+	for _, face := range math.AllFacing {
+		if face == math.Down {
+			continue
+		}
+		result = append(result, geo.GetSide(face, 1))
+	}
+	return result
+}
+
+// checkForHarden is a port of Lava::checkForHarden. BLUE_ICE isn't ported as its own singleton
+// yet, so the soul-soil/Basalt branch checks the raw type ID (BLUE_ICE below), matching the PHP
+// original's getTypeId() === BlockTypeIds::BLUE_ICE comparison exactly.
+func (l *Lava) checkForHarden() bool {
+	if l.Falling {
+		return false
+	}
+	for _, colliding := range l.getAdjacentBlocksExceptDown() {
+		if _, ok := colliding.(*Water); ok {
+			if l.Decay == 0 {
+				l.liquidCollide(colliding, VanillaObsidian())
+				return true
+			} else if l.Decay <= 4 {
+				l.liquidCollide(colliding, VanillaCobblestone())
+				return true
+			}
+		}
+	}
+
+	if l.self.(blockGeometry).GetSide(math.Down, 1).GetTypeId() == SOUL_SOIL {
+		for _, colliding := range l.getAdjacentBlocksExceptDown() {
+			if colliding.GetTypeId() == BLUE_ICE {
+				l.liquidCollide(colliding, VanillaBasalt())
+				return true
+			}
+		}
+	}
+
+	return false
+}
 
 // OnEntityInside is a port of Lava::onEntityInside.
 func (l *Lava) OnEntityInside(e Entity) bool {

@@ -4,6 +4,8 @@ import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/utils"
+	"pocketmine-go/pocketmine/world/sound"
 )
 
 const LiquidMaxDecay = 7
@@ -115,10 +117,39 @@ func (l *Liquid) GetFlowDecayPerBlock() int { return 1 }
 // source-forming behaviour (matching the PHP original's nullable int return).
 func (l *Liquid) GetMinAdjacentSourcesToFormSource() (int, bool) { return 0, false }
 
-// checkForHarden is a port of Liquid::checkForHarden's default (false) - Lava overrides this, but
-// its override needs BlockEventHelper.Form and the block registry (via liquidCollide), neither
-// ported yet, so Lava's override is a no-op stub too (see lava.go).
+// checkForHarden is a port of Liquid::checkForHarden's default (false) - Lava overrides this (see
+// lava.go).
 func (l *Liquid) checkForHarden() bool { return false }
+
+// liquidCollide is a port of Liquid::liquidCollide.
+func (l *Liquid) liquidCollide(cause Behavior, result Behavior) bool {
+	if Form(l.self, result, cause) {
+		if world, err := l.position.GetWorld(); err == nil {
+			pitch := 2.6 + (utils.GetRandomFloat()-utils.GetRandomFloat())*0.8
+			world.AddSound(l.position.AsVector3().Add(0.5, 0.5, 0.5), sound.FizzSound{Pitch: pitch})
+		}
+	}
+	return true
+}
+
+// canFlowInto is a port of Liquid::canFlowInto.
+func (l *Liquid) canFlowInto(blk Behavior) bool {
+	world, err := l.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	pos := blk.GetPosition()
+	if !world.IsInWorld(pos.FloorX(), pos.FloorY(), pos.FloorZ()) {
+		return false
+	}
+	if !blk.CanBeFlowedInto() {
+		return false
+	}
+	if lb, ok := blk.(liquidBaser); ok && lb.liquidBase().IsSource() {
+		return false
+	}
+	return true
+}
 
 // OnNearbyBlockChange is a port of Liquid::onNearbyBlockChange.
 func (l *Liquid) OnNearbyBlockChange() {

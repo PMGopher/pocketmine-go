@@ -137,3 +137,8 @@ type RecordSound struct {
 
 // RecordStopSound is a port of pocketmine\world\sound\RecordStopSound.
 type RecordStopSound struct{}
+
+// FizzSound is a port of pocketmine\world\sound\FizzSound.
+type FizzSound struct {
+	Pitch float64
+}

@@ -31,6 +31,8 @@ var (
 	vanillaCrimsonNylium   Behavior
 	vanillaWarpedNylium    Behavior
 	vanillaAmethystCluster Behavior
+	vanillaCobblestone     Behavior
+	vanillaBasalt          Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -215,4 +217,26 @@ func VanillaAmethystCluster() Behavior {
 		vanillaAmethystCluster = NewAmethystCluster(mustVanillaBlockIdentifier(AMETHYST_CLUSTER), "Amethyst Cluster", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.5, vanillaToolTierWood, nil), nil, nil))
 	}
 	return vanillaAmethystCluster.Clone()
+}
+
+// VanillaCobblestone is a port of VanillaBlocks::COBBLESTONE() - see VanillaBlocksInputs.php's
+// register("cobblestone", ...): BreakInfo::pickaxe(2.0, ToolTier::WOOD, 30.0).
+func VanillaCobblestone() Behavior {
+	if vanillaCobblestone == nil {
+		blastResistance := 30.0
+		cobble := &Opaque{Block: NewBlock(mustVanillaBlockIdentifier(COBBLESTONE), "Cobblestone", NewBlockTypeInfo(BlockBreakInfoPickaxe(2.0, vanillaToolTierWood, &blastResistance), nil, nil))}
+		cobble.Init(cobble)
+		vanillaCobblestone = cobble
+	}
+	return vanillaCobblestone.Clone()
+}
+
+// VanillaBasalt is a port of VanillaBlocks::BASALT() - see VanillaBlocksInputs.php's
+// register("basalt", ...): BreakInfo::pickaxe(1.25, ToolTier::WOOD, 21.0).
+func VanillaBasalt() Behavior {
+	if vanillaBasalt == nil {
+		blastResistance := 21.0
+		vanillaBasalt = NewSimplePillar(mustVanillaBlockIdentifier(BASALT), "Basalt", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.25, vanillaToolTierWood, &blastResistance), nil, nil))
+	}
+	return vanillaBasalt.Clone()
 }
