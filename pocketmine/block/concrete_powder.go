@@ -43,11 +43,25 @@ func (c *ConcretePowder) getAdjacentWater() (*Water, bool) {
 	return nil, false
 }
 
-// OnNearbyBlockChange should turn into VanillaBlocks.CONCRETE() (via BlockEventHelper.Form) when
-// touching water, or start falling (FallableComponent's unported onNearbyBlockChange gap)
-// otherwise — needs the unported block registry and BlockEventHelper, so this is a no-op for now.
-func (c *ConcretePowder) OnNearbyBlockChange() {}
+// OnNearbyBlockChange is a port of ConcretePowder::onNearbyBlockChange, minus the "else start
+// falling" branch (FallableTrait::onNearbyBlockChange needs the unported FallingBlock entity type
+// - see FallableComponent's doc comment), so nothing happens when there's no adjacent water yet.
+func (c *ConcretePowder) OnNearbyBlockChange() {
+	if water, ok := c.getAdjacentWater(); ok {
+		Form(c.self, c.concreteOfMyColor(), water)
+	}
+}
 
-// TickFalling should return VanillaBlocks.CONCRETE().SetColor(...) when touching water — needs the
-// unported block registry, so this always keeps falling unchanged for now.
-func (c *ConcretePowder) TickFalling() (Behavior, bool) { return nil, false }
+// TickFalling is a port of ConcretePowder::tickFalling.
+func (c *ConcretePowder) TickFalling() (Behavior, bool) {
+	if _, ok := c.getAdjacentWater(); !ok {
+		return nil, false
+	}
+	return c.concreteOfMyColor(), true
+}
+
+func (c *ConcretePowder) concreteOfMyColor() Behavior {
+	concrete := VanillaConcrete().(*Concrete)
+	concrete.SetColor(c.Color)
+	return concrete
+}

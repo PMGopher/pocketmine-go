@@ -36,3 +36,29 @@ func Melt(oldState Behavior, newState Behavior) bool {
 	}
 	return true
 }
+
+// BlockFormEvent is a port of pocketmine\event\block\BlockFormEvent.
+type BlockFormEvent struct {
+	BlockChangeEvent
+
+	CausingBlock Behavior
+}
+
+func (e *BlockFormEvent) GetCausingBlock() Behavior { return e.CausingBlock }
+
+// Form is a port of pocketmine\block\utils\BlockEventHelper::form.
+func Form(oldState Behavior, newState Behavior, causingBlock Behavior) bool {
+	ev := &BlockFormEvent{BlockChangeEvent: BlockChangeEvent{Block: oldState, NewState: newState}, CausingBlock: causingBlock}
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
+	}
+	world, err := oldState.GetPosition().GetWorld()
+	if err != nil {
+		return false
+	}
+	if err := world.SetBlock(oldState.GetPosition(), ev.NewState); err != nil {
+		return false
+	}
+	return true
+}

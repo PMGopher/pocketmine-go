@@ -21,6 +21,7 @@ var (
 	vanillaObsidian   Behavior
 	vanillaSoulSoil   Behavior
 	vanillaCake       Behavior
+	vanillaConcrete   Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -110,4 +111,15 @@ func VanillaCake() Behavior {
 		vanillaCake = NewCake(mustVanillaBlockIdentifier(CAKE), "Cake", NewBlockTypeInfo(NewBlockBreakInfo(0.5, ToolTypeNone, 0, nil, nil), nil, nil))
 	}
 	return vanillaCake.Clone()
+}
+
+// VanillaConcrete is a port of VanillaBlocks::CONCRETE() - see VanillaBlocksInputs.php's
+// register("concrete", ...): BreakInfo::pickaxe(1.8, ToolTier::WOOD). Defaults to White, same as
+// the real singleton - callers needing a specific color call SetColor on the result, same pattern
+// as VanillaCake()/CakeWithCandle.GetResidue.
+func VanillaConcrete() Behavior {
+	if vanillaConcrete == nil {
+		vanillaConcrete = NewConcrete(mustVanillaBlockIdentifier(CONCRETE), "Concrete", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.8, vanillaToolTierWood, nil), nil, nil))
+	}
+	return vanillaConcrete.Clone()
 }
