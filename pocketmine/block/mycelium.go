@@ -53,7 +53,11 @@ func (m *Mycelium) trySpreadOnto(world World, x, y, z int) {
 	}
 }
 
-// GetDropsForCompatibleTool should return [VanillaBlocks.DIRT().AsItem()] — needs the unported
-// block registry and real Item construction (see Block.GetDropsForCompatibleTool's doc comment),
-// so this returns nil for now.
-func (m *Mycelium) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Mycelium::getDropsForCompatibleTool.
+func (m *Mycelium) GetDropsForCompatibleTool(item Item) []Item {
+	dropped := asItemOrNil(VanillaDirt())
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}

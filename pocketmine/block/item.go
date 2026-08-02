@@ -34,6 +34,24 @@ type Item interface {
 // somewhere in the running program; AsItem() handles that case explicitly.
 var NewItemBlockFunc func(blk Behavior) Item
 
+// asItemOrNil calls AsItem() on any Behavior - every concrete block type gets it via promotion
+// from *Block, but AsItem isn't part of the Behavior interface itself (see Block.AsItem's doc
+// comment), so a plain Behavior-typed value needs this small type assertion to reach it. Returns
+// nil (rather than a slice containing a nil Item) if the assertion or AsItem() itself fails, so
+// callers building a []Item drop list can skip appending on a nil result instead of ending up with
+// a slice that "has a drop" but the drop is nil.
+func asItemOrNil(blk Behavior) Item {
+	asItemer, ok := blk.(interface{ AsItem() (Item, error) })
+	if !ok {
+		return nil
+	}
+	got, err := asItemer.AsItem()
+	if err != nil {
+		return nil
+	}
+	return got
+}
+
 // ToolTier is the minimal surface needed from an item tool tier (wood/stone/iron/diamond/netherite).
 type ToolTier interface {
 	GetHarvestLevel() int

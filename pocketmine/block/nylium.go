@@ -65,7 +65,11 @@ func (n *Nylium) tryConvertNetherrackAt(world World, x, y, z int) {
 // World.GetBlock(Position)/IsInWorld, none ported yet. Block's default OnInteract (return false)
 // already matches this gap, so there's nothing to override here.
 
-// GetDropsForCompatibleTool should return [VanillaBlocks.NETHERRACK().AsItem()] — needs the
-// unported block registry and real Item construction (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (n *Nylium) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Nylium::getDropsForCompatibleTool.
+func (n *Nylium) GetDropsForCompatibleTool(item Item) []Item {
+	dropped := asItemOrNil(VanillaNetherrack())
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}

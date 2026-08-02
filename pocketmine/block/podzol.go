@@ -19,7 +19,11 @@ func (p *Podzol) Clone() Behavior {
 
 func (p *Podzol) IsAffectedBySilkTouch() bool { return true }
 
-// GetDropsForCompatibleTool should return VanillaBlocks.DIRT().AsItem() — needs the unported
-// block registry (VanillaBlocks) and real Item construction (see
-// Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-func (p *Podzol) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Podzol::getDropsForCompatibleTool.
+func (p *Podzol) GetDropsForCompatibleTool(item Item) []Item {
+	dropped := asItemOrNil(VanillaDirt())
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}

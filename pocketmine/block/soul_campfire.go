@@ -29,8 +29,13 @@ func (s *SoulCampfire) GetLightLevel() int {
 	return 0
 }
 
-// GetDropsForCompatibleTool should return [VanillaBlocks.SOUL_SOIL().AsItem()] - needs the
-// unported block registry (see Block.GetDropsForCompatibleTool's doc comment), so it's left as
-// Block's default for now.
+// GetDropsForCompatibleTool is a port of SoulCampfire::getDropsForCompatibleTool.
+func (s *SoulCampfire) GetDropsForCompatibleTool(item Item) []Item {
+	dropped := asItemOrNil(VanillaSoulSoil())
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}
 
 func (s *SoulCampfire) GetEntityCollisionDamage() int { return 2 }

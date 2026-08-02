@@ -71,7 +71,11 @@ func (g *Grass) trySpreadOnto(world World, x, y, z int) {
 // TallGrass world-gen object. Block's default OnInteract (return false) already matches this gap,
 // so there's nothing to override here.
 
-// GetDropsForCompatibleTool should return [VanillaBlocks.DIRT().AsItem()] — needs the unported
-// block registry and real Item construction (see Block.GetDropsForCompatibleTool's doc comment),
-// so this returns nil for now.
-func (g *Grass) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Grass::getDropsForCompatibleTool.
+func (g *Grass) GetDropsForCompatibleTool(item Item) []Item {
+	dropped := asItemOrNil(VanillaDirt())
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}

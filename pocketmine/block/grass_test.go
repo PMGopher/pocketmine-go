@@ -148,3 +148,18 @@ func TestGrassTrySpreadOntoSkipsWhenBlockAboveIsOpaque(t *testing.T) {
 		t.Errorf("expected no spread under an opaque block, got SetBlock(%T)", w.lastSetBlock)
 	}
 }
+
+func TestGrassGetDropsForCompatibleToolReturnsDirt(t *testing.T) {
+	withFakeItemBlockFactory(t)
+	w := &fakeWorld{}
+	g := newTestGrass(w)
+
+	drops := g.GetDropsForCompatibleTool(fakeItem{})
+	if len(drops) != 1 {
+		t.Fatalf("expected 1 drop, got %d", len(drops))
+	}
+	wrapped, ok := drops[0].(*fakeItemBlock)
+	if !ok || wrapped.wrapped.GetTypeId() != DIRT {
+		t.Errorf("expected a Dirt drop, got %#v", drops[0])
+	}
+}

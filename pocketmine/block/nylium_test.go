@@ -81,3 +81,18 @@ func TestNyliumTryConvertNetherrackAtSkipsWhenAboveIsOpaque(t *testing.T) {
 		t.Errorf("expected no conversion under an opaque block, got SetBlock(%T)", w.lastSetBlock)
 	}
 }
+
+func TestNyliumGetDropsForCompatibleToolReturnsNetherrack(t *testing.T) {
+	withFakeItemBlockFactory(t)
+	w := &fakeWorld{}
+	n := newTestNylium(w)
+
+	drops := n.GetDropsForCompatibleTool(fakeItem{})
+	if len(drops) != 1 {
+		t.Fatalf("expected 1 drop, got %d", len(drops))
+	}
+	wrapped, ok := drops[0].(*fakeItemBlock)
+	if !ok || wrapped.wrapped.GetTypeId() != NETHERRACK {
+		t.Errorf("expected a Netherrack drop, got %#v", drops[0])
+	}
+}

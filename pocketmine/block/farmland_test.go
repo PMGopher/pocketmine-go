@@ -91,3 +91,30 @@ func TestFarmlandOnEntityLandIgnoresNonLivingEntities(t *testing.T) {
 		t.Errorf("expected no trampling for a non-Living entity, got SetBlock(%T)", w.lastSetBlock)
 	}
 }
+
+func TestFarmlandGetDropsForCompatibleToolReturnsDirt(t *testing.T) {
+	withFakeItemBlockFactory(t)
+	w := &fakeWorld{}
+	f := newTestFarmland(w)
+
+	drops := f.GetDropsForCompatibleTool(fakeItem{})
+	if len(drops) != 1 {
+		t.Fatalf("expected 1 drop, got %d", len(drops))
+	}
+	wrapped, ok := drops[0].(*fakeItemBlock)
+	if !ok || wrapped.wrapped.GetTypeId() != DIRT {
+		t.Errorf("expected a Dirt drop, got %#v", drops[0])
+	}
+}
+
+func TestFarmlandGetPickedItemReturnsDirt(t *testing.T) {
+	withFakeItemBlockFactory(t)
+	w := &fakeWorld{}
+	f := newTestFarmland(w)
+
+	picked := f.GetPickedItem(false)
+	wrapped, ok := picked.(*fakeItemBlock)
+	if !ok || wrapped.wrapped.GetTypeId() != DIRT {
+		t.Errorf("expected a Dirt item, got %#v", picked)
+	}
+}

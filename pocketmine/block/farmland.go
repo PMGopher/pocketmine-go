@@ -174,9 +174,14 @@ func (f *Farmland) canHydrate() bool {
 	return false
 }
 
-// GetDropsForCompatibleTool/GetPickedItem should return VanillaBlocks.DIRT().AsItem() — needs the
-// unported block registry and real Item construction (see Block.GetDropsForCompatibleTool's doc
-// comment), so these return nil for now.
-func (f *Farmland) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Farmland::getDropsForCompatibleTool.
+func (f *Farmland) GetDropsForCompatibleTool(item Item) []Item {
+	dropped := asItemOrNil(VanillaDirt())
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}
 
-func (f *Farmland) GetPickedItem(addUserData bool) Item { return nil }
+// GetPickedItem is a port of Farmland::getPickedItem.
+func (f *Farmland) GetPickedItem(addUserData bool) Item { return asItemOrNil(VanillaDirt()) }
