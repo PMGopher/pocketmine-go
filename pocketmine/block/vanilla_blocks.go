@@ -42,6 +42,7 @@ var (
 	vanillaBamboo            Behavior
 	vanillaChorusPlant       Behavior
 	vanillaDoublePitcherCrop Behavior
+	vanillaBigDripleafStem   Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -334,4 +335,14 @@ func VanillaDoublePitcherCrop() Behavior {
 		vanillaDoublePitcherCrop = NewDoublePitcherCrop(mustVanillaBlockIdentifier(DOUBLE_PITCHER_CROP), "Double Pitcher Crop", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
 	}
 	return vanillaDoublePitcherCrop.Clone()
+}
+
+// VanillaBigDripleafStem is a port of VanillaBlocks::BIG_DRIPLEAF_STEM() - see
+// VanillaBlocksInputs.php's register("big_dripleaf_stem", ...): new BreakInfo(0.1) (no tool type,
+// no tier).
+func VanillaBigDripleafStem() Behavior {
+	if vanillaBigDripleafStem == nil {
+		vanillaBigDripleafStem = NewBigDripleafStem(mustVanillaBlockIdentifier(BIG_DRIPLEAF_STEM), "Big Dripleaf Stem", NewBlockTypeInfo(NewBlockBreakInfo(0.1, ToolTypeNone, 0, nil, nil), nil, nil))
+	}
+	return vanillaBigDripleafStem.Clone()
 }

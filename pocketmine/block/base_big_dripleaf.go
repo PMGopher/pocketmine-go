@@ -13,6 +13,7 @@ import (
 // stemShaper.
 type dripleafShaper interface {
 	IsHead() bool
+	GetFacing() math.Facing
 }
 
 // BaseBigDripleaf is a port of pocketmine\block\BaseBigDripleaf. Like Crops/Stem, this isn't
@@ -57,10 +58,7 @@ func isBaseBigDripleaf(blk Behavior) bool {
 	return ok
 }
 
-// Place is a port of BaseBigDripleaf::place. The PHP original also converts the block below (if
-// it's another BaseBigDripleaf) into a BIG_DRIPLEAF_STEM via VanillaBlocks - that part needs the
-// unported block registry, so it's skipped here (documented gap, same category as everywhere else
-// VanillaBlocks is needed).
+// Place is a port of BaseBigDripleaf::place.
 func (b *BaseBigDripleaf) Place(tx BlockTransaction, item Item, blockReplace Behavior, blockClicked Behavior, face math.Facing, clickVector math.Vector3, player Player) bool {
 	below := blockReplace.(blockGeometry).GetSide(math.Down, 1)
 	if !bigDripleafCanBeSupportedBy(below, true) {
@@ -69,9 +67,12 @@ func (b *BaseBigDripleaf) Place(tx BlockTransaction, item Item, blockReplace Beh
 	if player != nil {
 		b.Facing = math.Opposite(player.GetHorizontalFacing())
 	}
-	// If `below` is itself a BaseBigDripleaf, the PHP original also converts it into a
-	// BIG_DRIPLEAF_STEM with this facing via VanillaBlocks - skipped, see this method's doc
-	// comment.
+	if belowDripleaf, ok := below.(dripleafShaper); ok {
+		b.Facing = belowDripleaf.GetFacing()
+		stem := VanillaBigDripleafStem().(*BigDripleafStem)
+		stem.SetFacing(b.Facing)
+		tx.AddBlock(below.GetPosition(), stem)
+	}
 	return b.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
