@@ -1,6 +1,8 @@
 package block
 
 import (
+	"math/rand"
+
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
 )
@@ -38,16 +40,33 @@ func (c *Crops) OnNearbyBlockChange() {
 	}
 }
 
-// OnInteract should fertilize the crop (advancing its age by a random 2-5, via
-// BlockEventHelper.Grow) — needs a Fertilizer item marker and BlockEventHelper, neither ported
-// yet, so this is a no-op for now.
+// OnInteract is a port of Crops::onInteract. `$item instanceof Fertilizer` is checked via item
+// type ID (bone meal is the only Fertilizer-marked item in the PHP original) rather than a
+// dedicated marker interface - same structural-marker convention as Durable/Axe/Shovel elsewhere
+// in this port.
 func (c *Crops) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	return false
+	if item.GetTypeId() != itemTypeIDsBoneMeal {
+		return false
+	}
+	newAge := c.Age + 2 + rand.Intn(4) // mt_rand(2, 5)
+	if newAge > c.MaxAge {
+		newAge = c.MaxAge
+	}
+	clone := c.self.Clone()
+	clone.(Ageable).SetAge(newAge)
+	if Grow(c.self, clone, player) {
+		item.Pop()
+	}
+	return true
 }
 
 func (c *Crops) TicksRandomly() bool { return c.Age < CropsMaxAge }
 
-// OnRandomTick should grow via CropGrowthHelper.CanGrow (light level + nearby-farmland-hydration
-// multiplier) and BlockEventHelper.Grow — neither ported yet (CropGrowthHelper needs
-// World.GetPotentialLightAt, not in the ported World interface either), so this is a no-op for now.
-func (c *Crops) OnRandomTick() {}
+// OnRandomTick is a port of Crops::onRandomTick.
+func (c *Crops) OnRandomTick() {
+	if c.Age < CropsMaxAge && CropGrowthCanGrow(c.self) {
+		clone := c.self.Clone()
+		clone.(Ageable).SetAge(c.Age + 1)
+		Grow(c.self, clone, nil)
+	}
+}

@@ -3,10 +3,11 @@ package block
 import "pocketmine-go/pocketmine/event"
 
 // BlockChangeEvent is a port of pocketmine\event\block\BaseBlockChangeEvent (itself extending
-// BlockEvent). Only Melt (below) needs a concrete subclass of this shape right now, so this
-// stands in directly for BlockMeltEvent rather than porting a whole hierarchy of near-identical
-// *ChangeEvent types (Form/Die/Spread/Fade/Grow) that nothing calls yet - same "port what's
-// actually needed" reasoning as tile.FurnaceType living directly in the tile package.
+// BlockEvent) - it also stands in directly for BlockMeltEvent (Melt below), since that PHP class
+// adds nothing to the base shape. BlockFormEvent/BlockGrowEvent (below) are real, separate
+// subclasses since they each add one field; Die/Spread/Fade aren't ported since nothing calls them
+// yet - same "port what's actually needed" reasoning as tile.FurnaceType living directly in the
+// tile package.
 type BlockChangeEvent struct {
 	event.CancellableTrait
 
@@ -23,6 +24,32 @@ func (e *BlockChangeEvent) GetNewState() Behavior { return e.NewState }
 // performance optimization this port doesn't need to replicate.
 func Melt(oldState Behavior, newState Behavior) bool {
 	ev := &BlockChangeEvent{Block: oldState, NewState: newState}
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
+	}
+	world, err := oldState.GetPosition().GetWorld()
+	if err != nil {
+		return false
+	}
+	if err := world.SetBlock(oldState.GetPosition(), ev.NewState); err != nil {
+		return false
+	}
+	return true
+}
+
+// BlockGrowEvent is a port of pocketmine\event\block\BlockGrowEvent.
+type BlockGrowEvent struct {
+	BlockChangeEvent
+
+	Player Player // nil when the block grows by itself
+}
+
+func (e *BlockGrowEvent) GetPlayer() Player { return e.Player }
+
+// Grow is a port of pocketmine\block\utils\BlockEventHelper::grow.
+func Grow(oldState Behavior, newState Behavior, causingPlayer Player) bool {
+	ev := &BlockGrowEvent{BlockChangeEvent: BlockChangeEvent{Block: oldState, NewState: newState}, Player: causingPlayer}
 	event.Call(ev)
 	if ev.IsCancelled() {
 		return false

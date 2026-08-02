@@ -68,6 +68,7 @@ func (w *fakeWorld) GetSunAnglePercentage() float64                   { return 0
 func (w *fakeWorld) GetNearbyEntities(bb math.AxisAlignedBB) []Entity { return nil }
 func (w *fakeWorld) GetHighestAdjacentFullLightAt(x, y, z int) int    { return 15 }
 func (w *fakeWorld) GetHighestAdjacentBlockLightAt(x, y, z int) int   { return 15 }
+func (w *fakeWorld) GetPotentialLightAt(x, y, z int) int              { return 15 }
 
 func TestButtonStateRoundTrips(t *testing.T) {
 	w := &fakeWorld{}
