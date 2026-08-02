@@ -64,10 +64,7 @@ func (s *SmallDripleaf) OnNearbyBlockChange() {
 	}
 }
 
-// Place is a port of SmallDripleaf::place. The PHP original also places the top half
-// (VanillaBlocks.SMALL_DRIPLEAF() with Top=true) via the block transaction - that part needs the
-// unported block registry, so it's skipped here (documented gap, same category as everywhere else
-// VanillaBlocks is needed).
+// Place is a port of SmallDripleaf::place.
 func (s *SmallDripleaf) Place(tx BlockTransaction, item Item, blockReplace Behavior, blockClicked Behavior, face math.Facing, clickVector math.Vector3, player Player) bool {
 	geo := blockReplace.(blockGeometry)
 	above := geo.GetSide(math.Up, 1)
@@ -77,6 +74,12 @@ func (s *SmallDripleaf) Place(tx BlockTransaction, item Item, blockReplace Behav
 	if player != nil {
 		s.Facing = math.Opposite(player.GetHorizontalFacing())
 	}
+
+	topHalf := VanillaSmallDripleaf().(*SmallDripleaf)
+	topHalf.SetFacing(s.Facing)
+	topHalf.SetTop(true)
+	tx.AddBlock(above.GetPosition(), topHalf)
+
 	return s.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
