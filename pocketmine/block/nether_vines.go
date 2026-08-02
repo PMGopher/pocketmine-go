@@ -4,6 +4,7 @@ import (
 	"math/rand"
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/event"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -82,10 +83,45 @@ func (n *NetherVines) Place(tx BlockTransaction, item Item, blockReplace Behavio
 
 func (n *NetherVines) TicksRandomly() bool { return n.Age < NetherVinesMaxAge }
 
-// grow is a port of NetherVines::grow. It needs a fresh BlockTransaction over the world,
-// World.IsInWorld/GetBlock(Position), and StructureGrowEvent, none ported yet, so this is a no-op
-// stub returning false for now - see Sugarcane.grow's doc comment for the same category of gap.
-func (n *NetherVines) grow(growthAmount int) bool { return false }
+// grow is a port of NetherVines::grow. Only ever called with a nil player currently
+// (OnRandomTick, below) - same reasoning as Bamboo.grow not taking a player parameter yet.
+func (n *NetherVines) grow(growthAmount int) bool {
+	top := n.seekToTip()
+	age := top.Age
+	world, err := top.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	changedBlocks := 0
+
+	tx := NewBlockTransaction(world)
+	for i := 1; i <= growthAmount; i++ {
+		growthPos := top.position.GetSide(top.GrowthFace, i)
+		if !world.IsInWorld(growthPos.FloorX(), growthPos.FloorY(), growthPos.FloorZ()) ||
+			!world.GetBlockAt(growthPos.FloorX(), growthPos.FloorY(), growthPos.FloorZ()).CanBeReplaced() {
+			break
+		}
+		age++
+		if age > NetherVinesMaxAge {
+			age = NetherVinesMaxAge
+		}
+		grown := top.self.Clone().(*NetherVines)
+		grown.Age = age
+		tx.AddBlock(growthPos, grown)
+		changedBlocks++
+	}
+
+	if changedBlocks > 0 {
+		ev := &StructureGrowEvent{Block: top.self, Transaction: tx, Player: nil}
+		event.Call(ev)
+		if ev.IsCancelled() {
+			return false
+		}
+		return tx.Apply()
+	}
+
+	return false
+}
 
 func (n *NetherVines) OnRandomTick() {
 	if n.Age < NetherVinesMaxAge && rand.Intn(10) == 0 {

@@ -82,9 +82,10 @@ func (s *Sapling) OnRandomTick() {
 	}
 }
 
-// grow is a port of Sapling::grow. It needs a Random-seeded TreeFactory (world-gen, not ported)
-// and StructureGrowEvent (event package, not ported), so this is a no-op stub returning false for
-// now - see Sugarcane.grow's doc comment for the same category of gap.
+// grow is a port of Sapling::grow. StructureGrowEvent/BlockTransactionImpl now exist (see
+// bamboo.go), but the real blocker here is TreeFactory - a whole Random-seeded tree-shape
+// generator (different branching/leaf-placement algorithms per SaplingType) that's out of scope
+// for this port's current world-gen-free stage, so this stays a no-op stub returning false.
 func (s *Sapling) grow() bool { return false }
 
 func (s *Sapling) GetFuelTime() int { return 100 }
