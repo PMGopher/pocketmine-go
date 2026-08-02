@@ -24,10 +24,20 @@ func (c *Cobweb) OnEntityInside(entity Entity) bool {
 	return true
 }
 
-// GetDropsForCompatibleTool should return [c.AsItem()] for shears and [item.VanillaItems.String()]
-// otherwise — both need real Item construction from the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-func (c *Cobweb) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Cobweb::getDropsForCompatibleTool. The non-shears branch
+// (VanillaItems.STRING(), a pure item with no corresponding block) can't be built from here -
+// there's no NewItemBlockFunc-style factory for standalone items, only for ItemBlock - so that
+// branch stays a documented gap; only the shears branch (the block's own AsItem form) is real.
+func (c *Cobweb) GetDropsForCompatibleTool(item Item) []Item {
+	if item.GetBlockToolType()&ToolTypeShears == 0 {
+		return nil
+	}
+	dropped := asItemOrNil(c.self)
+	if dropped == nil {
+		return nil
+	}
+	return []Item{dropped}
+}
 
 func (c *Cobweb) IsAffectedBySilkTouch() bool { return true }
 
