@@ -10,7 +10,7 @@ import (
 
 func newTestWorld() *World {
 	tr := convert.NewBlockTranslator()
-	gen := generator.NewFlat(generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()))
+	gen := generator.NewFlat(0, generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()), nil)
 	return New(gen, tr, []block.Behavior{
 		block.VanillaAir(),
 		block.VanillaBedrock(),
@@ -119,6 +119,29 @@ func TestUseBreakOnReplacesBlockWithAir(t *testing.T) {
 	}
 	if got := w.GetBlockAt(5, 0, 5); got.GetTypeId() != block.AIR {
 		t.Errorf("GetBlockAt after UseBreakOn = %d, want AIR (%d)", got.GetTypeId(), block.AIR)
+	}
+}
+
+// TestPopulatingAChunkDoesNotCascadeToTheWholeWorld guards against a regression where populating
+// chunk (0,0) - which can write a handful of blocks across its border into a neighbour - used to
+// recursively populate that neighbour too, whose own population could reach its own neighbour, and
+// so on: an unbounded chain reaction that eagerly generated and populated the entire world on a
+// single GetOrLoadChunk call. See World.ensurePopulated's doc comment for the fix (generating a
+// neighbour and populating a neighbour are kept as two distinct steps).
+func TestPopulatingAChunkDoesNotCascadeToTheWholeWorld(t *testing.T) {
+	tr := convert.NewBlockTranslator()
+	gen := generator.NewFlat(0, generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()), generator.VanillaFlatDecorationPopulators())
+	w := New(gen, tr, []block.Behavior{
+		block.VanillaAir(), block.VanillaBedrock(), block.VanillaStone(), block.VanillaDirt(), block.VanillaGrass(),
+		block.VanillaGravel(), block.VanillaCoalOre(), block.VanillaIronOre(), block.VanillaRedstoneOre(),
+		block.VanillaLapisLazuliOre(), block.VanillaGoldOre(), block.VanillaDiamondOre(),
+	})
+
+	w.GetOrLoadChunk(0, 0)
+
+	// Only (0,0) and its 8 immediate neighbours may have been generated - nothing further out.
+	if got := len(w.chunks); got > 9 {
+		t.Fatalf("len(w.chunks) = %d after loading a single chunk, want <= 9 (population cascaded further than the immediate neighbourhood)", got)
 	}
 }
 

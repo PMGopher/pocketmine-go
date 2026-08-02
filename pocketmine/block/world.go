@@ -43,6 +43,10 @@ type World interface {
 
 type Chunk interface {
 	SetBlockStateID(x, y, z int, stateID int)
+	// GetHighestBlockAt is needed by populator.TallGrass's port of
+	// TallGrass::getHighestWorkableBlock - x/z are chunk-local (0-15), matching
+	// format.Chunk.GetHighestBlockAt.
+	GetHighestBlockAt(x, z int) (int, bool)
 }
 
 type Entity interface {

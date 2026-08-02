@@ -47,6 +47,14 @@ var (
 	vanillaBigDripleafHead   Behavior
 	vanillaStone             Behavior
 	vanillaBedrock           Behavior
+	vanillaTallGrass         Behavior
+	vanillaGravel            Behavior
+	vanillaCoalOre           Behavior
+	vanillaDiamondOre        Behavior
+	vanillaGoldOre           Behavior
+	vanillaIronOre           Behavior
+	vanillaLapisLazuliOre    Behavior
+	vanillaRedstoneOre       Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -59,6 +67,8 @@ func (h vanillaHarvestLevel) GetHarvestLevel() int { return int(h) }
 
 const (
 	vanillaToolTierWood    vanillaHarvestLevel = 1
+	vanillaToolTierStone   vanillaHarvestLevel = 3
+	vanillaToolTierIron    vanillaHarvestLevel = 4
 	vanillaToolTierDiamond vanillaHarvestLevel = 5
 )
 
@@ -388,4 +398,83 @@ func VanillaBedrock() Behavior {
 		vanillaBedrock = NewBedrock(mustVanillaBlockIdentifier(BEDROCK), "Bedrock", NewBlockTypeInfo(BlockBreakInfoIndestructible(18000000.0), nil, nil))
 	}
 	return vanillaBedrock.Clone()
+}
+
+// VanillaTallGrass is a port of VanillaBlocks::TALL_GRASS() - see VanillaBlocksInputs.php's
+// register("tall_grass", ...): BreakInfo::instant(ToolType::SHEARS, 1). No DoublePlantVariant
+// (nil) since VanillaDoubleTallGrass isn't ported yet.
+func VanillaTallGrass() Behavior {
+	if vanillaTallGrass == nil {
+		vanillaTallGrass = NewTallGrass(mustVanillaBlockIdentifier(TALL_GRASS), "Tall Grass", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeShears, 1), nil, nil), nil)
+	}
+	return vanillaTallGrass.Clone()
+}
+
+// VanillaGravel is a port of VanillaBlocks::GRAVEL() - see VanillaBlocksInputs.php's
+// register("gravel", ...): BreakInfo::shovel(0.6).
+func VanillaGravel() Behavior {
+	if vanillaGravel == nil {
+		vanillaGravel = NewGravel(mustVanillaBlockIdentifier(GRAVEL), "Gravel", NewBlockTypeInfo(BlockBreakInfoShovel(0.6, vanillaToolTierWood, nil), nil, nil))
+	}
+	return vanillaGravel.Clone()
+}
+
+// vanillaStoneOreBreakInfo mirrors VanillaBlocksInputs::registerOres's local
+// $stoneOreBreakInfo = fn(ToolTier $toolTier) => new Info(BreakInfo::pickaxe(3.0, $toolTier)).
+func vanillaStoneOreBreakInfo(toolTier ToolTier) *BlockBreakInfo {
+	return BlockBreakInfoPickaxe(3.0, toolTier, nil)
+}
+
+// VanillaCoalOre is a port of VanillaBlocks::COAL_ORE() - see VanillaBlocksInputs.php's
+// register("coal_ore", ...): $stoneOreBreakInfo(ToolTier::WOOD).
+func VanillaCoalOre() Behavior {
+	if vanillaCoalOre == nil {
+		vanillaCoalOre = NewCoalOre(mustVanillaBlockIdentifier(COAL_ORE), "Coal Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierWood), nil, nil))
+	}
+	return vanillaCoalOre.Clone()
+}
+
+// VanillaDiamondOre is a port of VanillaBlocks::DIAMOND_ORE() - see VanillaBlocksInputs.php's
+// register("diamond_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+func VanillaDiamondOre() Behavior {
+	if vanillaDiamondOre == nil {
+		vanillaDiamondOre = NewDiamondOre(mustVanillaBlockIdentifier(DIAMOND_ORE), "Diamond Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
+	}
+	return vanillaDiamondOre.Clone()
+}
+
+// VanillaGoldOre is a port of VanillaBlocks::GOLD_ORE() - see VanillaBlocksInputs.php's
+// register("gold_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+func VanillaGoldOre() Behavior {
+	if vanillaGoldOre == nil {
+		vanillaGoldOre = NewGoldOre(mustVanillaBlockIdentifier(GOLD_ORE), "Gold Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
+	}
+	return vanillaGoldOre.Clone()
+}
+
+// VanillaIronOre is a port of VanillaBlocks::IRON_ORE() - see VanillaBlocksInputs.php's
+// register("iron_ore", ...): $stoneOreBreakInfo(ToolTier::STONE).
+func VanillaIronOre() Behavior {
+	if vanillaIronOre == nil {
+		vanillaIronOre = NewIronOre(mustVanillaBlockIdentifier(IRON_ORE), "Iron Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierStone), nil, nil))
+	}
+	return vanillaIronOre.Clone()
+}
+
+// VanillaLapisLazuliOre is a port of VanillaBlocks::LAPIS_LAZULI_ORE() - see
+// VanillaBlocksInputs.php's register("lapis_lazuli_ore", ...): $stoneOreBreakInfo(ToolTier::STONE).
+func VanillaLapisLazuliOre() Behavior {
+	if vanillaLapisLazuliOre == nil {
+		vanillaLapisLazuliOre = NewLapisOre(mustVanillaBlockIdentifier(LAPIS_LAZULI_ORE), "Lapis Lazuli Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierStone), nil, nil))
+	}
+	return vanillaLapisLazuliOre.Clone()
+}
+
+// VanillaRedstoneOre is a port of VanillaBlocks::REDSTONE_ORE() - see VanillaBlocksInputs.php's
+// register("redstone_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+func VanillaRedstoneOre() Behavior {
+	if vanillaRedstoneOre == nil {
+		vanillaRedstoneOre = NewRedstoneOre(mustVanillaBlockIdentifier(REDSTONE_ORE), "Redstone Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
+	}
+	return vanillaRedstoneOre.Clone()
 }

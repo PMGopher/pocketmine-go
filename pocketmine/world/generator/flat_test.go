@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/utils"
+	"pocketmine-go/pocketmine/world/generator/populator"
 )
 
 func newTestEmptyStateID() int32 {
@@ -15,7 +17,7 @@ func TestNewFlatBuildsLayersInOrder(t *testing.T) {
 		{Block: block.VanillaBedrock(), Height: 1},
 		{Block: block.VanillaStone(), Height: 2},
 	}
-	f := NewFlat(layers, 1, newTestEmptyStateID())
+	f := NewFlat(0, layers, 1, newTestEmptyStateID(), nil)
 	chunk := f.GenerateChunk(0, 0)
 
 	bedrockID := int32(block.VanillaBedrock().GetStateId())
@@ -37,7 +39,7 @@ func TestNewFlatBuildsLayersInOrder(t *testing.T) {
 }
 
 func TestNewFlatFillsEveryColumnInEverySubChunk(t *testing.T) {
-	f := NewFlat(VanillaFlatLayers(), VanillaFlatBiomeID, newTestEmptyStateID())
+	f := NewFlat(0, VanillaFlatLayers(), VanillaFlatBiomeID, newTestEmptyStateID(), nil)
 	chunk := f.GenerateChunk(0, 0)
 
 	bedrockID := int32(block.VanillaBedrock().GetStateId())
@@ -49,7 +51,7 @@ func TestNewFlatFillsEveryColumnInEverySubChunk(t *testing.T) {
 }
 
 func TestGenerateChunkReturnsIndependentClones(t *testing.T) {
-	f := NewFlat(VanillaFlatLayers(), VanillaFlatBiomeID, newTestEmptyStateID())
+	f := NewFlat(0, VanillaFlatLayers(), VanillaFlatBiomeID, newTestEmptyStateID(), nil)
 
 	a := f.GenerateChunk(0, 0)
 	b := f.GenerateChunk(1, 1)
@@ -57,6 +59,41 @@ func TestGenerateChunkReturnsIndependentClones(t *testing.T) {
 	a.SetBlockStateID(0, 0, 0, 999)
 	if got := b.GetBlockStateID(0, 0, 0); got == 999 {
 		t.Error("expected chunks from separate GenerateChunk calls to be independent")
+	}
+}
+
+// recordingPopulator is a test double capturing the arguments it was called with, to verify
+// Flat.PopulateChunk's dispatch (coordinates, and the Random it seeds internally) without needing
+// a real populator's placement logic.
+type recordingPopulator struct {
+	calls     int
+	lastWorld block.World
+	lastX     int
+	lastZ     int
+	lastSeed  int
+}
+
+func (p *recordingPopulator) Populate(world block.World, chunkX, chunkZ int, random *utils.Random) {
+	p.calls++
+	p.lastWorld, p.lastX, p.lastZ = world, chunkX, chunkZ
+	p.lastSeed = random.GetSeed()
+}
+
+func TestPopulateChunkReseedsRandomDeterministicallyAndCallsEveryPopulator(t *testing.T) {
+	rec := &recordingPopulator{}
+	f := NewFlat(123, VanillaFlatLayers(), VanillaFlatBiomeID, newTestEmptyStateID(), []populator.Populator{rec})
+
+	f.PopulateChunk(nil, 2, 3)
+
+	if rec.calls != 1 {
+		t.Fatalf("calls = %d, want 1", rec.calls)
+	}
+	if rec.lastX != 2 || rec.lastZ != 3 {
+		t.Errorf("got chunk (%d,%d), want (2,3)", rec.lastX, rec.lastZ)
+	}
+	wantSeed := 0xdeadbeef ^ (2 << 8) ^ 3 ^ 123
+	if rec.lastSeed != wantSeed {
+		t.Errorf("random seed = %d, want %d (matching Flat::populateChunk's reseed formula)", rec.lastSeed, wantSeed)
 	}
 }
 

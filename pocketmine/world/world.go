@@ -31,6 +31,10 @@ type World struct {
 
 	chunks map[[2]int]*format.Chunk
 
+	// populated tracks which chunks have already run PopulateChunk - see ensurePopulated's doc
+	// comment for why this is needed on top of chunks' own presence check.
+	populated map[[2]int]bool
+
 	// stateTemplates lets GetBlockAt reconstruct a block.Behavior from the bare internal state ID
 	// a Chunk stores (Chunk deliberately never keeps live Behavior instances around - see
 	// format.Chunk's doc comment on why). Every block type the World needs to be able to read back
@@ -48,6 +52,7 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 		generator:      gen,
 		translator:     translator,
 		chunks:         map[[2]int]*format.Chunk{},
+		populated:      map[[2]int]bool{},
 		stateTemplates: map[int32]block.Behavior{},
 	}
 	for _, blk := range knownBlocks {
@@ -69,10 +74,24 @@ func (w *World) registerTemplate(blk block.Behavior) {
 
 func chunkKey(chunkX, chunkZ int) [2]int { return [2]int{chunkX, chunkZ} }
 
-// GetOrLoadChunk returns the chunk at the given chunk coordinates, generating it via the
-// configured Generator on first access - this port has no on-disk world storage (no WorldProvider
-// equivalent), so "load" always means "generate".
+// GetOrLoadChunk returns the chunk at the given chunk coordinates, generating and populating (see
+// Generator.PopulateChunk) it via the configured Generator on first access - this port has no
+// on-disk world storage (no WorldProvider equivalent), so "load" always means "generate". This is
+// the entry point external callers (main.go, tests) should use to get a chunk ready to look at or
+// send to a client; code that runs *during* population itself (GetBlockAt/SetBlock/
+// GetOrLoadChunkAtPosition, used by populators reading/writing across chunk borders) deliberately
+// goes through generateChunkOnly instead - see ensurePopulated's doc comment for why.
 func (w *World) GetOrLoadChunk(chunkX, chunkZ int) *format.Chunk {
+	c := w.generateChunkOnly(chunkX, chunkZ)
+	w.ensurePopulated(chunkX, chunkZ)
+	return c
+}
+
+// generateChunkOnly returns the chunk at the given coordinates, generating (and caching) it via
+// the configured Generator on first access, but never running population - see ensurePopulated's
+// doc comment for why callers reached from inside a populate pass must use this instead of
+// GetOrLoadChunk.
+func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
 	key := chunkKey(chunkX, chunkZ)
 	if c, ok := w.chunks[key]; ok {
 		return c
@@ -80,6 +99,36 @@ func (w *World) GetOrLoadChunk(chunkX, chunkZ int) *format.Chunk {
 	c := w.generator.GenerateChunk(chunkX, chunkZ)
 	w.chunks[key] = c
 	return c
+}
+
+// ensurePopulated runs this chunk's Populators exactly once (see the populated map), first making
+// sure its 8 immediate neighbours are generated - not populated - via generateChunkOnly, so a
+// populator can safely read/write a handful of blocks across a chunk border (matching Ore's blast
+// radius) without that write recursively triggering the neighbour's own population.
+//
+// Real PocketMine-MP achieves the same guarantee differently: it defers a chunk's PopulationTask
+// until World::orderChunkPopulation sees all 8 neighbours already generated, running generation and
+// population as separate asynchronous passes over a whole neighbourhood. This port has no
+// worker-thread/task-queue system to defer onto, so it does both synchronously and immediately
+// on first access instead - but still keeps "generate a neighbour" and "populate a neighbour"
+// as two distinct steps, which is the part that actually matters: collapsing them into one (as an
+// earlier version of this method did) means populating chunk (0,0) can write into chunk (1,0),
+// whose own populate call can reach into (2,0), and so on - an unbounded chain reaction that
+// eagerly populates the entire world. Only ever generating (never populating) neighbours here is
+// what stops that chain.
+func (w *World) ensurePopulated(chunkX, chunkZ int) {
+	key := chunkKey(chunkX, chunkZ)
+	if w.populated[key] {
+		return
+	}
+	w.populated[key] = true
+
+	for dx := -1; dx <= 1; dx++ {
+		for dz := -1; dz <= 1; dz++ {
+			w.generateChunkOnly(chunkX+dx, chunkZ+dz)
+		}
+	}
+	w.generator.PopulateChunk(w, chunkX, chunkZ)
 }
 
 // Translator returns the BlockTranslator this World's chunks were populated through - the network
@@ -92,7 +141,7 @@ func (w *World) Translator() *convert.BlockTranslator { return w.translator }
 // stateTemplates' doc comment) rather than panicking; this should never happen for a state this
 // World itself ever wrote, only for data corruption.
 func (w *World) GetBlockAt(x, y, z int) block.Behavior {
-	chunk := w.GetOrLoadChunk(x>>4, z>>4)
+	chunk := w.generateChunkOnly(x>>4, z>>4)
 	stateID := chunk.GetBlockStateID(x&0xf, y, z&0xf)
 	tpl, ok := w.stateTemplates[stateID]
 	if !ok {
@@ -115,7 +164,7 @@ type positionable interface {
 func (w *World) SetBlock(pos block.Position, blk block.Behavior) error {
 	x, y, z := pos.FloorX(), pos.FloorY(), pos.FloorZ()
 	w.registerTemplate(blk)
-	chunk := w.GetOrLoadChunk(x>>4, z>>4)
+	chunk := w.generateChunkOnly(x>>4, z>>4)
 	chunk.SetBlockStateID(x&0xf, y, z&0xf, int32(blk.GetStateId()))
 	return nil
 }
@@ -135,9 +184,16 @@ func (a chunkAdapter) SetBlockStateID(x, y, z int, stateID int) {
 	a.chunk.SetBlockStateID(x, y, z, int32(stateID))
 }
 
-// GetOrLoadChunkAtPosition is a port of World::getOrLoadChunkAtPosition.
+func (a chunkAdapter) GetHighestBlockAt(x, z int) (int, bool) {
+	return a.chunk.GetHighestBlockAt(x, z)
+}
+
+// GetOrLoadChunkAtPosition is a port of World::getOrLoadChunkAtPosition. Uses generateChunkOnly,
+// not GetOrLoadChunk - see ensurePopulated's doc comment on why code reachable from inside a
+// populate pass (this is how populator.TallGrass looks up a chunk's heightmap) must not trigger
+// population itself.
 func (w *World) GetOrLoadChunkAtPosition(pos block.Position) (block.Chunk, bool) {
-	return chunkAdapter{w.GetOrLoadChunk(pos.FloorX()>>4, pos.FloorZ()>>4)}, true
+	return chunkAdapter{w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)}, true
 }
 
 // AddSound is a port of World::addSound. This port has no player-session/packet-broadcast system

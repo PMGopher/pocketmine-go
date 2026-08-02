@@ -53,13 +53,20 @@ func main() {
 	log.SetGlobal(logger)
 
 	translator := convert.NewBlockTranslator()
-	flatGen := generator.NewFlat(generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()))
+	flatGen := generator.NewFlat(0, generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()), generator.VanillaFlatDecorationPopulators())
 	w := world.New(flatGen, translator, []block.Behavior{
 		block.VanillaAir(),
 		block.VanillaBedrock(),
 		block.VanillaStone(),
 		block.VanillaDirt(),
 		block.VanillaGrass(),
+		block.VanillaGravel(),
+		block.VanillaCoalOre(),
+		block.VanillaIronOre(),
+		block.VanillaRedstoneOre(),
+		block.VanillaLapisLazuliOre(),
+		block.VanillaGoldOre(),
+		block.VanillaDiamondOre(),
 	})
 
 	cfg := minecraft.ListenConfig{
