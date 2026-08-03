@@ -149,9 +149,10 @@ func main() {
 
 	spawn := computeSpawn(w)
 	logger.Info(fmt.Sprintf("world seed %d, spawn at %d,%d,%d", resolvedSeed, spawn.X, spawn.Y, spawn.Z))
+	spawnVec := pmmath.NewVector3(float64(spawn.X), float64(spawn.Y), float64(spawn.Z))
+	w.SetSpawnLocation(spawnVec)
 
 	if !levelDatExists {
-		spawnVec := pmmath.NewVector3(float64(spawn.X), float64(spawn.Y), float64(spawn.Z))
 		generated, err := worldio.GenerateWorldData(*worldDir, pocketmine.Name, resolvedSeed, worldio.GeneratorInfinite, "normal", "", spawnVec)
 		if err != nil {
 			logger.Warning(fmt.Sprintf("failed to write %q: %v", levelDatPath, err))
