@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/network/mcpe/serializer"
 	"pocketmine-go/pocketmine/world"
+	worldio "pocketmine-go/pocketmine/world/format/io"
 	"pocketmine-go/pocketmine/world/generator"
 )
 
@@ -57,8 +59,31 @@ func main() {
 	logger := log.NewSimpleLogger()
 	log.SetGlobal(logger)
 
+	// level.dat (see pocketmine/world/format/io) is what makes -seed only matter "the first time a
+	// world is created" (this flag's own help text, above): once a world already has one, its
+	// stored seed always wins - a restart with a different -seed value must never silently
+	// regenerate different terrain under an existing save.
+	levelDatPath := filepath.Join(*worldDir, "level.dat")
+	_, levelDatErr := os.Stat(levelDatPath)
+	levelDatExists := levelDatErr == nil
+
+	resolvedSeed := int64(*seed)
+	var wd *worldio.WorldData
+	if levelDatExists {
+		loaded, err := worldio.LoadWorldData(*worldDir)
+		if err != nil {
+			logger.Critical(fmt.Sprintf("failed to load %q: %v", levelDatPath, err))
+			os.Exit(1)
+		}
+		wd = loaded
+		resolvedSeed = wd.GetSeed()
+		if int64(*seed) != 0 && int64(*seed) != resolvedSeed {
+			logger.Notice(fmt.Sprintf("ignoring -seed=%d: world %q was already created with seed %d", *seed, *worldDir, resolvedSeed))
+		}
+	}
+
 	translator := convert.NewBlockTranslator()
-	gen := generator.NewNormal(*seed)
+	gen := generator.NewNormal(int(resolvedSeed))
 	w := world.New(gen, translator, []block.Behavior{
 		block.VanillaAir(),
 		block.VanillaBedrock(),
@@ -95,6 +120,12 @@ func main() {
 		if err := w.Close(); err != nil {
 			logger.Warning(fmt.Sprintf("failed to save world: %v", err))
 		}
+		if wd != nil {
+			wd.SetTime(w.GetTime())
+			if err := wd.Save(*worldDir); err != nil {
+				logger.Warning(fmt.Sprintf("failed to save %q: %v", levelDatPath, err))
+			}
+		}
 	}()
 
 	cfg := minecraft.ListenConfig{
@@ -117,7 +148,17 @@ func main() {
 	logger.Info(fmt.Sprintf("%s %s is listening on %s", pocketmine.Name, pocketmine.Version().GetFullVersion(true), addr))
 
 	spawn := computeSpawn(w)
-	logger.Info(fmt.Sprintf("world seed %d, spawn at %d,%d,%d", *seed, spawn.X, spawn.Y, spawn.Z))
+	logger.Info(fmt.Sprintf("world seed %d, spawn at %d,%d,%d", resolvedSeed, spawn.X, spawn.Y, spawn.Z))
+
+	if !levelDatExists {
+		spawnVec := pmmath.NewVector3(float64(spawn.X), float64(spawn.Y), float64(spawn.Z))
+		generated, err := worldio.GenerateWorldData(*worldDir, pocketmine.Name, resolvedSeed, worldio.GeneratorInfinite, "normal", "", spawnVec)
+		if err != nil {
+			logger.Warning(fmt.Sprintf("failed to write %q: %v", levelDatPath, err))
+		} else {
+			wd = generated
+		}
+	}
 
 	// This port sends every player the same fixed spawnChunkRadius area (see sendSpawnChunks' own
 	// doc comment on the lack of real per-player view-distance streaming) rather than loading
@@ -130,7 +171,7 @@ func main() {
 	go runTickLoop(w)
 
 	reg := newRegistry(logger)
-	go acceptLoop(listener, w, reg, int64(*seed), spawn, logger)
+	go acceptLoop(listener, w, reg, resolvedSeed, spawn, logger)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
