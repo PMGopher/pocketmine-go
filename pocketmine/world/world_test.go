@@ -19,9 +19,12 @@ type fakeEntity struct {
 	closed bool
 	bb     math.AxisAlignedBB
 	pos    math.Vector3
+	alive  bool
 }
 
-func newFakeEntity(id int, bb math.AxisAlignedBB) *fakeEntity { return &fakeEntity{id: id, bb: bb} }
+func newFakeEntity(id int, bb math.AxisAlignedBB) *fakeEntity {
+	return &fakeEntity{id: id, bb: bb, alive: true}
+}
 
 func (f *fakeEntity) ResetFallDistance()                   {}
 func (f *fakeEntity) GetPosition() math.Vector3            { return f.pos }
@@ -38,6 +41,7 @@ func (f *fakeEntity) CanBeMovedByCurrents() bool           { return true }
 func (f *fakeEntity) Attack(source entity.DamageSource)    {}
 func (f *fakeEntity) GetID() int                           { return f.id }
 func (f *fakeEntity) IsClosed() bool                       { return f.closed }
+func (f *fakeEntity) IsAlive() bool                        { return f.alive }
 
 func newTestWorld() *World {
 	tr := convert.NewBlockTranslator()

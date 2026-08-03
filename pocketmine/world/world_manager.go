@@ -167,6 +167,7 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 		return nil, fmt.Errorf("world manager: opening %q's world data: %w", name, err)
 	}
 	w.SetTime(wd.GetTime())
+	w.SetSpawnLocation(wd.GetSpawn())
 
 	m.nextID++
 	w.id = m.nextID
@@ -212,6 +213,7 @@ func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, optio
 	if err := wd.Save(path); err != nil {
 		return nil, fmt.Errorf("world manager: writing %q's level.dat: %w", name, err)
 	}
+	w.SetSpawnLocation(options.SpawnPosition)
 
 	m.nextID++
 	w.id = m.nextID

@@ -15,6 +15,7 @@ import (
 	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
+	"pocketmine-go/pocketmine/world/biome"
 	"pocketmine-go/pocketmine/world/format"
 	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 	"pocketmine-go/pocketmine/world/generator"
@@ -50,6 +51,18 @@ type World struct {
 	id          int
 	folderName  string
 	displayName string
+
+	// spawnLocation mirrors the world spawn position real PHP stores in its WorldProvider's
+	// WorldData (see GetSpawnLocation/SetSpawnLocation) - held directly on World here instead,
+	// since this port's World doesn't require an on-disk provider to exist (OpenProvider is
+	// optional - see its own doc comment) the way real PHP's World::getSpawnLocation always does.
+	spawnLocation math.Vector3
+
+	// biomeRegistry backs GetBiome - a fixed ID->Biome lookup table, not generator-specific data
+	// (unlike e.g. Normal's own *biome.Registry, which additionally drives pickBiome's noise-based
+	// selection) - matches real PHP's BiomeRegistry::getInstance() being a single shared singleton
+	// regardless of which world/generator is asking.
+	biomeRegistry *biome.Registry
 
 	chunks map[[2]int]*format.Chunk
 
@@ -203,6 +216,7 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 		chunkTickRadius:        4,
 		unloadQueue:            map[[2]int]int64{},
 		chunkListeners:         map[[2]int]map[ChunkListener]bool{},
+		biomeRegistry:          biome.NewRegistry(),
 		rng:                    rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	w.subChunkExplorer = utils.NewSubChunkExplorer(w)
@@ -779,9 +793,8 @@ func (w *World) isFullCube(x, y, z int) bool {
 // safe (2-block-high air pocket resting on a solid full cube) position near spawn's own height,
 // falling back to wherever the search ends up if nothing better is found. Doesn't accept spawn's
 // own nil-Vector3 default (real PHP's `?Vector3 $spawn = null` falling back to
-// `$this->getSpawnLocation()`) - this port has no stored "world spawn location" field yet (see
-// GetSafeSpawn's own callers, which always have a concrete candidate point in hand already), so
-// callers pass one explicitly instead.
+// `$this->getSpawnLocation()`) - callers wanting that exact default should just pass
+// w.GetSpawnLocation() themselves.
 func (w *World) GetSafeSpawn(spawn math.Vector3) math.Vector3 {
 	v := spawn.Floor()
 	x, z := int(v.X), int(v.Z)
@@ -817,4 +830,104 @@ func (w *World) GetSafeSpawn(spawn math.Vector3) math.Vector3 {
 	}
 
 	return math.NewVector3(spawn.X, float64(y), spawn.Z)
+}
+
+// GetSpawnLocation is a port of World::getSpawnLocation - simplified to a bare Vector3, not a
+// Position (block.Position always needs a World reference to construct, which callers already
+// have here - see e.g. UseBreakOn's identical reasoning for using math.Vector3 directly).
+func (w *World) GetSpawnLocation() math.Vector3 { return w.spawnLocation }
+
+// SetSpawnLocation is a port of World::setSpawnLocation, minus the cancellable SpawnChangeEvent
+// and syncing the new spawn point to connected players' network sessions - no event bus or
+// Player/session type exists in this package yet (matches this port's other documented
+// AddSound-style gaps).
+func (w *World) SetSpawnLocation(pos math.Vector3) { w.spawnLocation = pos }
+
+// IsSpawnChunk is a port of World::isSpawnChunk.
+func (w *World) IsSpawnChunk(chunkX, chunkZ int) bool {
+	spawnChunkX, spawnChunkZ := int(w.spawnLocation.X)>>4, int(w.spawnLocation.Z)>>4
+	dx, dz := chunkX-spawnChunkX, chunkZ-spawnChunkZ
+	if dx < 0 {
+		dx = -dx
+	}
+	if dz < 0 {
+		dz = -dz
+	}
+	return dx <= 1 && dz <= 1
+}
+
+// GetBiomeID is a port of World::getBiomeId. This port's chunks are always generatable on demand
+// (see GetBlockAt's identical reasoning), so unlike real PHP this never falls back to a bare
+// BiomeIds::OCEAN guess for ungenerated terrain - it just generates it, same as everywhere else in
+// this port.
+func (w *World) GetBiomeID(x, y, z int) int32 {
+	chunk := w.generateChunkOnly(x>>4, z>>4)
+	return chunk.GetBiomeID(x&0xf, y, z&0xf)
+}
+
+// GetBiome is a port of World::getBiome.
+func (w *World) GetBiome(x, y, z int) *biome.Biome {
+	return w.biomeRegistry.GetBiome(int(w.GetBiomeID(x, y, z)))
+}
+
+// SetBiomeID is a port of World::setBiomeId.
+func (w *World) SetBiomeID(x, y, z int, biomeID int32) {
+	chunk := w.generateChunkOnly(x>>4, z>>4)
+	chunk.SetBiomeID(x&0xf, y, z&0xf, biomeID)
+}
+
+// IsChunkLoaded is a port of World::isChunkLoaded.
+func (w *World) IsChunkLoaded(chunkX, chunkZ int) bool {
+	_, ok := w.chunks[chunkKey(chunkX, chunkZ)]
+	return ok
+}
+
+// IsChunkGenerated is a port of World::isChunkGenerated. Real PHP's own version actually generates
+// the chunk as a side effect of checking (it calls loadChunk, which creates the chunk if it isn't
+// loaded already) - this port's chunks are always generatable on demand regardless of this check's
+// answer, so doing the same here would make this method trivially always return true. Matching
+// IsChunkLoaded instead keeps this a real, side-effect-free query.
+func (w *World) IsChunkGenerated(chunkX, chunkZ int) bool { return w.IsChunkLoaded(chunkX, chunkZ) }
+
+// IsChunkPopulated is a port of World::isChunkPopulated.
+func (w *World) IsChunkPopulated(chunkX, chunkZ int) bool {
+	chunk, ok := w.chunks[chunkKey(chunkX, chunkZ)]
+	return ok && chunk.IsPopulated()
+}
+
+// GetLoadedChunks is a port of World::getLoadedChunks.
+func (w *World) GetLoadedChunks() map[[2]int]*format.Chunk { return w.chunks }
+
+// nearestEntityAliveChecker is the optional surface an entity can implement to participate in
+// GetNearestEntity's alive-only filtering - block.Entity itself doesn't require IsAlive (no
+// concrete entity type needs it there yet outside *entity.Entity, which already has it - matches
+// this port's established optional-capability pattern, e.g. tick.go's nearbyBlockChangeNotifiable).
+type nearestEntityAliveChecker interface {
+	IsAlive() bool
+}
+
+// GetNearestEntity is a port of World::getNearestEntity. filter replaces the real
+// `string $entityType` class-filter parameter (Go has no runtime "instanceof $variableClassName"
+// the way PHP does) - pass nil to match any entity, matching the real method's own
+// `$entityType = Entity::class` default. Also doesn't check isFlaggedForDespawn - no concrete
+// entity type has despawn flagging ported yet either.
+func (w *World) GetNearestEntity(pos math.Vector3, maxDistance float64, includeDead bool, filter func(block.Entity) bool) block.Entity {
+	var current block.Entity
+	currentDistSq := maxDistance * maxDistance
+
+	for _, e := range w.entities {
+		if filter != nil && !filter(e) {
+			continue
+		}
+		if !includeDead {
+			if ac, ok := e.(nearestEntityAliveChecker); ok && !ac.IsAlive() {
+				continue
+			}
+		}
+		if distSq := e.GetPosition().DistanceSquared(pos); distSq < currentDistSq {
+			currentDistSq = distSq
+			current = e
+		}
+	}
+	return current
 }
