@@ -32,11 +32,13 @@ import (
 )
 
 // entityShaper is the self-dispatch interface letting Entity's own methods reach a concrete
-// subtype's overrides — same shape as blockShaper/tileShaper elsewhere in this port. IsFireProof
-// and OnDeath are the only overridable hooks this slice's ported methods call internally.
+// subtype's overrides — same shape as blockShaper/tileShaper elsewhere in this port. IsFireProof,
+// onDeath, and onHitGround are the only overridable hooks this slice's ported methods call
+// internally.
 type entityShaper interface {
 	IsFireProof() bool
 	onDeath()
+	onHitGround() *float64
 }
 
 // Entity is a port of pocketmine\entity\Entity (see package doc comment for scope).
@@ -120,6 +122,31 @@ func (e *Entity) GetFallDistance() float64 { return e.fallDistance }
 func (e *Entity) SetFallDistance(fallDistance float64) { e.fallDistance = fallDistance }
 
 func (e *Entity) ResetFallDistance() { e.fallDistance = 0 }
+
+// onHitGround is a port of Entity::onHitGround - the base no-op override (only Living overrides
+// this, to apply fall damage).
+func (e *Entity) onHitGround() *float64 { return nil }
+
+// UpdateFallState is a port of Entity::updateFallState. distanceThisTick is the raw Y delta of this
+// movement step (newY - oldY, negative while falling) - real PHP computes this from its own
+// physics simulation (Entity::move); this port has no server-side physics (position comes from the
+// client's own PlayerAuthInput reports instead - see cmd/pocketmine-go's own doc comments on why),
+// so the caller supplies it directly. Returns the new vertical velocity onHitGround reports (nil
+// for every concrete type in this port so far - see Living.onHitGround's own doc comment on the
+// bouncy-block hook this doesn't implement).
+func (e *Entity) UpdateFallState(distanceThisTick float64, onGround bool) *float64 {
+	if distanceThisTick < e.fallDistance {
+		e.fallDistance -= distanceThisTick
+	} else {
+		e.fallDistance = 0
+	}
+	if onGround && e.fallDistance > 0 {
+		newVerticalVelocity := e.self.onHitGround()
+		e.ResetFallDistance()
+		return newVerticalVelocity
+	}
+	return nil
+}
 
 // CanBeMovedByCurrents is a port of Entity::canBeMovedByCurrents.
 func (e *Entity) CanBeMovedByCurrents() bool { return true }

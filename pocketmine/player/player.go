@@ -32,12 +32,18 @@ const mainInventorySize = 36
 // (see NewHuman's own doc comment on why it lives here instead of on entity.Human), GameMode,
 // flight/auto-jump/block-collision/sneak-pressed flags, real per-player chunk streaming (view
 // distance, ChunkSelector-driven load ordering, UsedChunkStatus tracking, world.ChunkListener -
-// see chunk_streaming.go), and real survival block-breaking (AttackBlock/ContinueBreakBlock/
-// StopBreakBlock/BreakBlock/UpdateBreakingBlock driving a genuine SurvivalBlockBreakHandler - see
-// block_interaction.go) - everything block.Player/block.Living/block.Entity's local interfaces
-// need to treat a *Player as a genuine entity registered in a World. cmd/pocketmine-go's own
-// "session" struct (previously an explicitly-documented stand-in for exactly this) now wraps one
-// of these instead of reimplementing player-shaped state itself.
+// see chunk_streaming.go), real survival block-breaking (AttackBlock/ContinueBreakBlock/
+// StopBreakBlock/BreakBlock/UpdateBreakingBlock driving a genuine SurvivalBlockBreakHandler that
+// broadcasts real BLOCK_START_BREAK/BLOCK_BREAK_SPEED/BLOCK_STOP_BREAK network packets and real
+// punch sound/particle - see block_interaction.go/survival_block_break_handler.go), a real
+// viewer/broadcast-to-nearby-players network layer (SendPacket/SetPacketSender, plus
+// World.AddSound/AddParticle/BroadcastPacketToViewers actually delivering packets - see
+// network.go), real PvP (AttackEntity: damage, knockback, hit sound, arm-swing/hurt animations -
+// see combat.go), and real fall damage (TrackFallState - see fall_damage.go) - everything
+// block.Player/block.Living/block.Entity's local interfaces need to treat a *Player as a genuine
+// entity registered in a World. cmd/pocketmine-go's own "session" struct (previously an
+// explicitly-documented stand-in for exactly this) now wraps one of these instead of
+// reimplementing player-shaped state itself.
 //
 // Not ported (each needs a real subsystem this port doesn't have anywhere else yet either, so
 // each is a documented gap, not a guess - see the individual methods' own doc comments for exact
@@ -45,8 +51,9 @@ const mainInventorySize = 36
 // creative), forms, sleeping/respawn, PlayerInfo/PlayerDataProvider aren't wired into
 // NewPlayer/persistence automatically yet (both real types exist and are usable, just not
 // connected to a save/load pipeline), permissions/CommandSender, chat (ChatFormatter exists and is
-// usable, just not wired to a broadcast pipeline), item use/consumption, entity attack/interact,
-// hunger/experience, and the cancellable events real PHP fires throughout (no event bus wired to
+// usable, just not wired to a broadcast pipeline), item use/consumption, real server-side movement
+// physics/collision (position is trusted from the client's own PlayerAuthInput reports - see
+// cmd/pocketmine-go's own doc comments), hunger/experience, and the cancellable events real PHP fires throughout (no event bus wired to
 // World/Player - matches every other "no event bus yet" gap elsewhere in this port).
 type Player struct {
 	entity.Human
@@ -100,6 +107,16 @@ type Player struct {
 	usedChunks    map[[2]int]UsedChunkStatus
 	loadQueue     map[[2]int]bool
 	tickingChunks map[[2]int]bool
+
+	// packetSender backs SendPacket/SetPacketSender (see network.go) - real PHP reaches this
+	// player's NetworkSession directly; this port has no NetworkSession type, so the caller that
+	// owns the actual connection (cmd/pocketmine-go) supplies this closure once instead.
+	packetSender PacketSender
+
+	// lastY backs UpdateFallState's own per-call Y-delta computation (see fall_damage.go) -
+	// initialized to the spawn position's Y in NewPlayer so the very first UpdateFallState call
+	// doesn't see a bogus delta from a zero-value default.
+	lastY float64
 }
 
 // NewPlayer is a port of a slice of Player::__construct/PlayerInfo - see Player's own doc comment
@@ -130,7 +147,17 @@ func NewPlayer(id int, username, uuid, xuid string, w *world.World, position mat
 		usedChunks:            map[[2]int]UsedChunkStatus{},
 		loadQueue:             map[[2]int]bool{},
 		tickingChunks:         map[[2]int]bool{},
+		lastY:                 position.Y,
 	}
+	// Re-anchor Entity's internal self-dispatch pointer (see entityShaper in the entity package) to
+	// the real *Player: entity.NewHuman already called Init on the *entity.Human it returned, but
+	// embedding *that* value into Player above copies the whole Human/Living/Entity struct - self
+	// still points at the original, now-detached Human, not at this Player. Player doesn't override
+	// any entityShaper hook itself (IsFireProof/onDeath/onHitGround all still resolve to Entity's/
+	// Living's own promoted implementations), so re-pointing self at p is exactly equivalent to what
+	// PHP's single real object identity already gives it for free - it only matters here because
+	// Go's embed-by-value copy would otherwise silently split the object in two.
+	p.Init(p)
 	return p
 }
 

@@ -3,6 +3,8 @@ package player
 import (
 	stdmath "math"
 
+	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/particle"
@@ -12,17 +14,29 @@ import (
 // DefaultFxIntervalTicks mirrors SurvivalBlockBreakHandler::DEFAULT_FX_INTERVAL_TICKS.
 const DefaultFxIntervalTicks = 5
 
+// blockStartBreak/blockStopBreak/blockBreakSpeed mirror pocketmine\network\mcpe\protocol\types\
+// LevelEvent::BLOCK_START_BREAK/BLOCK_STOP_BREAK/BLOCK_BREAK_SPEED - not otherwise exposed by
+// gophertunnel's own (differently-named but numerically identical) LevelEventStartBlockCracking/
+// StopBlockCracking/UpdateBlockCracking constants, kept as their real PHP names here for clarity
+// at the call sites below.
+const (
+	blockStartBreak = packet.LevelEventStartBlockCracking
+	blockStopBreak  = packet.LevelEventStopBlockCracking
+	blockBreakSpeed = packet.LevelEventUpdateBlockCracking
+)
+
 // SurvivalBlockBreakHandler is a port of a slice of pocketmine\player\SurvivalBlockBreakHandler:
 // the real break-time/break-progress state machine driving a held-down break action, tracked
-// per-tick via Update.
+// per-tick via Update. The BLOCK_START_BREAK/BLOCK_BREAK_SPEED/BLOCK_STOP_BREAK network broadcasts
+// that drive the client's break-progress crack overlay are real (see World.BroadcastPacketToViewers),
+// as is the punch particle/sound broadcast on every fx tick (World.AddParticle/AddSound).
 //
 // Not ported (each needs a real subsystem this port doesn't have yet, so each modifier below is
 // simply never applied - documented, not guessed):
 //   - Haste/Mining Fatigue effect modifiers on break speed: no EffectManager exists.
 //   - Aqua Affinity underwater break-speed penalty removal: no ArmorInventory/enchantments exist.
-//   - BLOCK_START_BREAK/BLOCK_BREAK_SPEED/BLOCK_STOP_BREAK network broadcasts to viewers, and the
-//     ArmSwingAnimation broadcast in Update: no viewer/broadcast-to-nearby-players plumbing exists
-//     in World yet (matches World.AddSound/AddParticle's own already-documented gap).
+//   - The ArmSwingAnimation broadcast in Update: no entity-animation packet plumbing exists yet
+//     (a separate, smaller gap from the broadcast infrastructure itself, which now exists).
 //   - The PHP destructor's BLOCK_STOP_BREAK broadcast: Go has no deterministic destructors: call
 //     Close() explicitly when done with a handler instead (matching this port's tile.Close()-style
 //     convention elsewhere).
@@ -53,6 +67,9 @@ func NewSurvivalBlockBreakHandler(p *Player, blockPos math.Vector3, blk block.Be
 		fxTickInterval:    DefaultFxIntervalTicks,
 	}
 	h.breakSpeed = h.calculateBreakProgressPerTick(heldItem)
+	if h.breakSpeed > 0 {
+		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(blockStartBreak, int32(65535*h.breakSpeed), h.blockPos))
+	}
 	return h
 }
 
@@ -93,6 +110,7 @@ func (h *SurvivalBlockBreakHandler) Update(heldItem block.Item) bool {
 	newBreakSpeed := h.calculateBreakProgressPerTick(heldItem)
 	if stdmath.Abs(newBreakSpeed-h.breakSpeed) > 0.0001 {
 		h.breakSpeed = newBreakSpeed
+		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(blockBreakSpeed, int32(65535*h.breakSpeed), h.blockPos))
 	}
 
 	h.breakProgress += h.breakSpeed
@@ -125,6 +143,13 @@ func (h *SurvivalBlockBreakHandler) GetBreakSpeed() float64 { return h.breakSpee
 // GetBreakProgress is a port of SurvivalBlockBreakHandler::getBreakProgress.
 func (h *SurvivalBlockBreakHandler) GetBreakProgress() float64 { return h.breakProgress }
 
-// Close is a Go-idiomatic stand-in for SurvivalBlockBreakHandler::__destruct - see the type's own
-// doc comment on why the real BLOCK_STOP_BREAK broadcast isn't performed here.
-func (h *SurvivalBlockBreakHandler) Close() {}
+// Close is a Go-idiomatic stand-in for SurvivalBlockBreakHandler::__destruct (Go has no
+// deterministic destructors) - broadcasts the real BLOCK_STOP_BREAK event that stops the client's
+// break-progress crack overlay, guarded by the same isInLoadedTerrain check real PHP's destructor
+// makes (a terrain-unloaded block has no viewers left to broadcast to anyway, but real PHP's check
+// specifically guards against firing during shutdown/unload sequences).
+func (h *SurvivalBlockBreakHandler) Close() {
+	if h.player.GetWorld().IsChunkLoaded(h.blockPos.FloorX()>>4, h.blockPos.FloorZ()>>4) {
+		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(blockStopBreak, 0, h.blockPos))
+	}
+}

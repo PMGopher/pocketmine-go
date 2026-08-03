@@ -221,6 +221,45 @@ func (e *EntityDamageByBlockEvent) Call() { event.Call(e) }
 
 func (e *EntityDamageByBlockEvent) GetDamager() DamagerBlock { return e.damager }
 
+// EntityDamageByEntityEvent is a port of pocketmine\event\entity\EntityDamageByEntityEvent.
+type EntityDamageByEntityEvent struct {
+	EntityDamageEvent
+
+	damager                EntityLike
+	knockBack              float64
+	verticalKnockBackLimit float64
+}
+
+// NewEntityDamageByEntityEvent is a port of EntityDamageByEntityEvent::__construct, defaulting
+// knockBack/verticalKnockBackLimit to Living::DEFAULT_KNOCKBACK_FORCE/DEFAULT_KNOCKBACK_VERTICAL_LIMIT
+// (both 0.4) exactly like the real constructor's own default parameter values.
+func NewEntityDamageByEntityEvent(damager EntityLike, entity EntityLike, cause int, damage float64, modifiers map[int]float64) *EntityDamageByEntityEvent {
+	return &EntityDamageByEntityEvent{
+		EntityDamageEvent:      *NewEntityDamageEvent(entity, cause, damage, modifiers),
+		damager:                damager,
+		knockBack:              DefaultKnockbackForce,
+		verticalKnockBackLimit: DefaultKnockbackVerticalLimit,
+	}
+}
+
+// Call dispatches this event to listeners registered for *EntityDamageByEntityEvent specifically -
+// see DamageSource's doc comment for why this can't just be promoted from EntityDamageEvent.
+func (e *EntityDamageByEntityEvent) Call() { event.Call(e) }
+
+func (e *EntityDamageByEntityEvent) GetDamager() EntityLike { return e.damager }
+
+func (e *EntityDamageByEntityEvent) GetKnockBack() float64 { return e.knockBack }
+
+func (e *EntityDamageByEntityEvent) SetKnockBack(knockBack float64) { e.knockBack = knockBack }
+
+func (e *EntityDamageByEntityEvent) GetVerticalKnockBackLimit() float64 {
+	return e.verticalKnockBackLimit
+}
+
+func (e *EntityDamageByEntityEvent) SetVerticalKnockBackLimit(limit float64) {
+	e.verticalKnockBackLimit = limit
+}
+
 // EntityCombustEvent is a port of pocketmine\event\entity\EntityCombustEvent.
 type EntityCombustEvent struct {
 	EntityEvent

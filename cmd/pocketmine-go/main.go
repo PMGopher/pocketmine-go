@@ -370,13 +370,42 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 			// every other connected player so they see this player move.
 			sess.SetPositionAndRotation(input.Position, input.Pitch, input.Yaw, input.HeadYaw)
 			reg.BroadcastMove(sess)
+			// InputFlagVerticalCollision is the client's own report of touching something
+			// vertically (ground or ceiling) this tick - the real on-ground signal this port has,
+			// since (like position/rotation above) there's no server-side physics to derive it from
+			// independently. Drives real fall-damage tracking (see Player.TrackFallState's own doc
+			// comment).
+			sess.player.TrackFallState(float64(input.Position[1]), input.InputData.Load(packet.InputFlagVerticalCollision))
 			if _, err := streamChunksToPlayer(conn, sess.player); err != nil {
 				logger.Warning(fmt.Sprintf("%s: failed to stream terrain: %v", name, err))
 				return
 			}
 			sess.player.UpdateBreakingBlock(bareHandItem{})
 			handleBlockActions(conn, sess.player, input.BlockActions, logger, name)
+		case *packet.InventoryTransaction:
+			handleInventoryTransaction(sess, reg, input, logger, name)
 		}
+	}
+}
+
+// handleInventoryTransaction is a port of the entity-attack half of PlayerAuthInput/
+// InventoryTransaction handling onto Player's own real AttackEntity - real PvP (damage, knockback,
+// hit sound, arm-swing/hurt animations). Only UseItemOnEntityTransactionData with
+// UseItemOnEntityActionAttack is handled - Interact (right-click) isn't wired to anything yet (no
+// entity-interact use case exists in this port - villager trading, boat/mount riding, etc.).
+func handleInventoryTransaction(sess *session, reg *registry, pk *packet.InventoryTransaction, logger log.Logger, name string) {
+	data, ok := pk.TransactionData.(*protocol.UseItemOnEntityTransactionData)
+	if !ok || data.ActionType != protocol.UseItemOnEntityActionAttack {
+		return
+	}
+
+	target, ok := reg.Get(data.TargetEntityRuntimeID)
+	if !ok {
+		return
+	}
+
+	if sess.player.AttackEntity(target.player, bareHandItem{}) {
+		logger.Info(fmt.Sprintf("%s attacked %s", name, target.name))
 	}
 }
 

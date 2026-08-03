@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	goleveldb "github.com/syndtr/goleveldb/leveldb"
 
 	"pocketmine-go/pocketmine/block"
@@ -561,14 +562,56 @@ func (w *World) GetOrLoadChunkAtPosition(pos block.Position) (block.Chunk, bool)
 	return chunkAdapter{w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)}, true
 }
 
-// AddSound is a port of World::addSound. This port has no player-session/packet-broadcast system
-// yet to actually deliver a sound packet to anyone, so this is a documented no-op rather than a
-// guess at how broadcasting should work.
-func (w *World) AddSound(pos math.Vector3, s sound.Sound) {}
+// viewer is the local surface AddSound/AddParticle/BroadcastPacketToViewers need to actually
+// deliver a packet to a connected player - declared locally (matching this port's established
+// forward-compatible-local-interface convention) rather than importing pocketmine/player.Player
+// directly, which would create an import cycle (player already imports this package). Every
+// ChunkListener registered in this port is in practice a *player.Player (see
+// Player.RequestChunks), so filtering GetChunkListeners down to ones satisfying viewer is
+// equivalent to real PHP's own separate playerChunkListeners side-table without needing one.
+type viewer interface {
+	SendPacket(pk packet.Packet)
+}
 
-// AddParticle is a port of World::addParticle - see AddSound's own doc comment for why this is a
-// documented no-op rather than a guess at broadcasting.
-func (w *World) AddParticle(pos math.Vector3, p particle.Particle) {}
+// getViewersForPosition is a port of World::getViewersForPosition (via getChunkPlayers) - see
+// viewer's own doc comment on why this filters GetChunkListeners instead of maintaining a separate
+// playerChunkListeners table.
+func (w *World) getViewersForPosition(pos math.Vector3) []viewer {
+	listeners := w.GetChunkListeners(pos.FloorX()>>4, pos.FloorZ()>>4)
+	viewers := make([]viewer, 0, len(listeners))
+	for _, l := range listeners {
+		if v, ok := l.(viewer); ok {
+			viewers = append(viewers, v)
+		}
+	}
+	return viewers
+}
+
+// BroadcastPacketToViewers is a port of World::broadcastPacketToViewers (minus the packet-buffering
+// optimisation real PHP does via packetBuffersByChunk/flushed at the end of the tick - this port
+// sends immediately, a purely internal timing difference invisible to the client).
+func (w *World) BroadcastPacketToViewers(pos math.Vector3, pk packet.Packet) {
+	for _, v := range w.getViewersForPosition(pos) {
+		v.SendPacket(pk)
+	}
+}
+
+// AddSound is a port of World::addSound (the $players parameter and the cancellable
+// WorldSoundEvent aren't ported - no event bus exists in this port yet, matching its other
+// documented event-bus gaps).
+func (w *World) AddSound(pos math.Vector3, s sound.Sound) {
+	for _, pk := range s.Encode(pos, w.translator) {
+		w.BroadcastPacketToViewers(pos, pk)
+	}
+}
+
+// AddParticle is a port of World::addParticle - see AddSound's own doc comment on the same
+// documented event-bus gap.
+func (w *World) AddParticle(pos math.Vector3, p particle.Particle) {
+	for _, pk := range p.Encode(pos, w.translator) {
+		w.BroadcastPacketToViewers(pos, pk)
+	}
+}
 
 // scheduledBlockUpdate is one entry in World's scheduled-block-update queue (see
 // ScheduleDelayedBlockUpdate/updateScheduledBlocks in tick.go).

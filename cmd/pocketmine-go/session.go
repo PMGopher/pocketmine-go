@@ -67,6 +67,7 @@ func newSession(conn *minecraft.Conn, w *world.World, spawn mgl32.Vec3) (*sessio
 	runtimeID := nextEntityRuntimeID.Add(1) - 1
 	spawnVec := pmmath.NewVector3(float64(spawn[0]), float64(spawn[1]), float64(spawn[2]))
 	plr := player.NewPlayer(int(runtimeID), id.DisplayName, playerUUID.String(), id.XUID, w, spawnVec, player.GameModeSurvival)
+	plr.SetPacketSender(func(pk packet.Packet) { _ = conn.WritePacket(pk) })
 
 	return &session{
 		conn:            conn,
@@ -219,6 +220,16 @@ func (r *registry) Count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.sessions)
+}
+
+// Get looks up the session for a given EntityRuntimeID - used to resolve the
+// UseItemOnEntityTransactionData.TargetEntityRuntimeID an attacking client reports back to the
+// real player.Player it refers to (see handleInventoryTransaction in main.go).
+func (r *registry) Get(entityRuntimeID uint64) (*session, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[entityRuntimeID]
+	return s, ok
 }
 
 // Join is a port of the network-visible half of World::addPlayer: shows every already-connected

@@ -5,6 +5,7 @@ import (
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/world/particle"
 )
 
 // maxReachDistanceCreative/Survival mirror Player::MAX_REACH_DISTANCE_CREATIVE/SURVIVAL.
@@ -106,7 +107,10 @@ func (p *Player) StopBreakBlock(pos math.Vector3) {
 	}
 }
 
-// BreakBlock is a port of a slice of Player::breakBlock.
+// BreakBlock is a port of a slice of Player::breakBlock. The BlockBreakParticle broadcast on
+// success is real - it's the "sound + particles" LevelEvent (PARTICLE_DESTROY) real Bedrock clients
+// use to play the break sound themselves client-side from the broken block's type, matching real
+// PHP's own World::useBreakOn (it never broadcasts a separate break sound explicitly either).
 //
 // Not ported: removeCurrentWindow (no inventory-window system exists), the ArmSwingAnimation
 // broadcast (see AttackBlock's own doc comment), and returnItemsFromAction/HungerManager::exhaust
@@ -122,8 +126,15 @@ func (p *Player) BreakBlock(pos math.Vector3) bool {
 		return false
 	}
 
+	target := p.world.GetBlockAt(pos.FloorX(), pos.FloorY(), pos.FloorZ())
+
 	p.StopBreakBlock(pos)
-	return p.world.UseBreakOn(pos)
+	if !p.world.UseBreakOn(pos) {
+		return false
+	}
+
+	p.world.AddParticle(pos.Add(0.5, 0.5, 0.5), particle.BlockBreakParticle{BlockStateID: target.GetStateId()})
+	return true
 }
 
 // UpdateBreakingBlock is a port of the relevant slice of Player::onUpdate's own
