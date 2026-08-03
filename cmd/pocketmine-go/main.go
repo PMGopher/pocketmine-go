@@ -32,6 +32,7 @@ import (
 	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/log"
+	pmmath "pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/network/mcpe/serializer"
 	"pocketmine-go/pocketmine/world"
@@ -225,7 +226,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 			logger.Info(fmt.Sprintf("%s disconnected", name))
 			return
 		}
-		switch pk.(type) {
+		switch input := pk.(type) {
 		case *packet.Text:
 			// Chat isn't broadcast to anyone yet - just proves packets round-trip both ways.
 		case *packet.PlayerAuthInput:
@@ -238,6 +239,39 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 			// as-is - the same "no correction unless there's a pending teleport" approach real
 			// Bedrock servers use for ordinary movement (see e.g. Dragonfly's
 			// PlayerAuthInputHandler), just without a server-side Player to update yet.
+			handleBlockActions(conn, w, input.BlockActions, logger, name)
+		}
+	}
+}
+
+// handleBlockActions is a simplified port of the block-breaking half of PlayerAuthInput handling
+// (the placing half isn't wired up yet - that goes through ItemStackRequest, a separate,
+// inventory-shaped undertaking). Real PocketMine-MP tracks a whole break-time state machine per
+// player (BlockBreakInfo's hardness/tool-efficiency/haste calculations, timed across
+// StartBreak/ContinueDestroyBlock/AbortBreak), which needs a real Player/inventory/held-item system
+// this port doesn't have yet - so for now, any of the "the client believes this block is now
+// broken" actions (PredictDestroyBlock, the survival hold-to-break completion; StopBreak, sent for
+// creative's instant break) just breaks the block immediately server-side, honestly simplified
+// rather than guessed at.
+func handleBlockActions(conn *minecraft.Conn, w *world.World, actions []protocol.PlayerBlockAction, logger log.Logger, name string) {
+	for _, action := range actions {
+		if action.Action != protocol.PlayerActionPredictDestroyBlock && action.Action != protocol.PlayerActionStopBreak {
+			continue
+		}
+
+		pos := action.BlockPos
+		vec := pmmath.NewVector3(float64(pos[0]), float64(pos[1]), float64(pos[2]))
+		if !w.UseBreakOn(vec) {
+			continue
+		}
+
+		airNetworkID := uint32(w.Translator().InternalIDToNetworkID(block.VanillaAir()))
+		if err := conn.WritePacket(&packet.UpdateBlock{
+			Position:          pos,
+			NewBlockRuntimeID: airNetworkID,
+			Flags:             packet.BlockUpdateNetwork,
+		}); err != nil {
+			logger.Warning(fmt.Sprintf("%s: failed to confirm block break at %v: %v", name, pos, err))
 		}
 	}
 }
