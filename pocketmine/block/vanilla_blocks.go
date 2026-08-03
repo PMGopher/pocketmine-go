@@ -1,6 +1,10 @@
 package block
 
-import "fmt"
+import (
+	"fmt"
+
+	blockutils "pocketmine-go/pocketmine/block/utils"
+)
 
 // VanillaBlocks is a port of a small slice of pocketmine\block\VanillaBlocks (itself generated
 // from VanillaBlocksInputs.php, ~1100 source lines / ~5700 generated lines - porting it in full is
@@ -59,6 +63,12 @@ var (
 	vanillaSandstone         Behavior
 	vanillaSnowLayer         Behavior
 	vanillaEmeraldOre        Behavior
+	vanillaOakLog            Behavior
+	vanillaOakLeaves         Behavior
+	vanillaSpruceLog         Behavior
+	vanillaSpruceLeaves      Behavior
+	vanillaBirchLog          Behavior
+	vanillaBirchLeaves       Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -519,4 +529,66 @@ func VanillaSnowLayer() Behavior {
 		vanillaSnowLayer = NewSnowLayer(mustVanillaBlockIdentifier(SNOW_LAYER), "Snow Layer", NewBlockTypeInfo(BlockBreakInfoShovel(0.1, vanillaToolTierWood, nil), nil, nil))
 	}
 	return vanillaSnowLayer.Clone()
+}
+
+// vanillaLogBreakInfo mirrors VanillaBlocksInputs::registerWoodenBlocks's local
+// $logBreakInfo = new Info(BreakInfo::axe(2.0)) - no tool tier requirement.
+func vanillaLogBreakInfo() *BlockBreakInfo { return BlockBreakInfoAxe(2.0, nil, nil) }
+
+// vanillaLeavesBreakInfo mirrors registerWoodenBlocks's local $leavesBreakInfo (BreakInfo::hoe(0.2)
+// hardness with a shears-is-instant override in real PHP's anonymous BreakInfo subclass) - the
+// shears-instant special case lives in Leaves' own GetBreakTime-equivalent behaviour, not in this
+// registration, so this is just the base hardness/tool type.
+func vanillaLeavesBreakInfo() *BlockBreakInfo {
+	return NewBlockBreakInfo(0.2, ToolTypeHoe, 0, nil, nil)
+}
+
+// VanillaOakLog is a port of VanillaBlocks::OAK_LOG() - see VanillaBlocksInputs.php's
+// registerWoodenBlocks loop (WoodType::OAK, standard log suffix).
+func VanillaOakLog() Behavior {
+	if vanillaOakLog == nil {
+		vanillaOakLog = NewWood(mustVanillaBlockIdentifier(OAK_LOG), "Oak Log", NewBlockTypeInfo(vanillaLogBreakInfo(), nil, nil), blockutils.WoodTypeOak)
+	}
+	return vanillaOakLog.Clone()
+}
+
+// VanillaOakLeaves is a port of VanillaBlocks::OAK_LEAVES() - see VanillaBlocksInputs.php's
+// LeavesType::cases() loop.
+func VanillaOakLeaves() Behavior {
+	if vanillaOakLeaves == nil {
+		vanillaOakLeaves = NewLeaves(mustVanillaBlockIdentifier(OAK_LEAVES), "Oak Leaves", NewBlockTypeInfo(vanillaLeavesBreakInfo(), nil, nil), blockutils.LeavesTypeOak)
+	}
+	return vanillaOakLeaves.Clone()
+}
+
+// VanillaSpruceLog is a port of VanillaBlocks::SPRUCE_LOG().
+func VanillaSpruceLog() Behavior {
+	if vanillaSpruceLog == nil {
+		vanillaSpruceLog = NewWood(mustVanillaBlockIdentifier(SPRUCE_LOG), "Spruce Log", NewBlockTypeInfo(vanillaLogBreakInfo(), nil, nil), blockutils.WoodTypeSpruce)
+	}
+	return vanillaSpruceLog.Clone()
+}
+
+// VanillaSpruceLeaves is a port of VanillaBlocks::SPRUCE_LEAVES().
+func VanillaSpruceLeaves() Behavior {
+	if vanillaSpruceLeaves == nil {
+		vanillaSpruceLeaves = NewLeaves(mustVanillaBlockIdentifier(SPRUCE_LEAVES), "Spruce Leaves", NewBlockTypeInfo(vanillaLeavesBreakInfo(), nil, nil), blockutils.LeavesTypeSpruce)
+	}
+	return vanillaSpruceLeaves.Clone()
+}
+
+// VanillaBirchLog is a port of VanillaBlocks::BIRCH_LOG().
+func VanillaBirchLog() Behavior {
+	if vanillaBirchLog == nil {
+		vanillaBirchLog = NewWood(mustVanillaBlockIdentifier(BIRCH_LOG), "Birch Log", NewBlockTypeInfo(vanillaLogBreakInfo(), nil, nil), blockutils.WoodTypeBirch)
+	}
+	return vanillaBirchLog.Clone()
+}
+
+// VanillaBirchLeaves is a port of VanillaBlocks::BIRCH_LEAVES().
+func VanillaBirchLeaves() Behavior {
+	if vanillaBirchLeaves == nil {
+		vanillaBirchLeaves = NewLeaves(mustVanillaBlockIdentifier(BIRCH_LEAVES), "Birch Leaves", NewBlockTypeInfo(vanillaLeavesBreakInfo(), nil, nil), blockutils.LeavesTypeBirch)
+	}
+	return vanillaBirchLeaves.Clone()
 }

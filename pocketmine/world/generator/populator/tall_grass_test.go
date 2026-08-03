@@ -21,6 +21,8 @@ func newTestWorld() *world.World {
 		block.VanillaDirt(),
 		block.VanillaGrass(),
 		block.VanillaTallGrass(),
+		block.VanillaOakLog(),
+		block.VanillaOakLeaves(),
 	})
 }
 

@@ -137,6 +137,41 @@ func init() {
 		}
 		return bedrock.BlockStateData{Name: name, States: map[string]any{"liquid_depth": int32(depth)}}, nil
 	})
+
+	// mapLog for the 3 wood species Tree/TreeFactory can place (Oak/Spruce/Birch) -
+	// mapModel(Model::create(Blocks::OAK_LOG())->properties([pillar_axis])), same shape for each.
+	for typeID, name := range map[int]string{
+		block.OAK_LOG:    "minecraft:oak_log",
+		block.SPRUCE_LOG: "minecraft:spruce_log",
+		block.BIRCH_LOG:  "minecraft:birch_log",
+	} {
+		name := name
+		RegisterBlockStateSerializer(typeID, func(blk block.Behavior) (bedrock.BlockStateData, error) {
+			wood := blk.(*block.Wood)
+			return bedrock.BlockStateData{Name: name, States: map[string]any{"pillar_axis": wood.GetAxis().String()}}, nil
+		})
+	}
+
+	// mapModel(Model::create(Blocks::OAK_LEAVES())->properties([persistent_bit, update_bit])) -
+	// persistent_bit is "won't decay" (NoDecay), update_bit is "a decay check is pending"
+	// (CheckDecay), same shape for each of the 3 species Tree/TreeFactory can place.
+	for typeID, name := range map[int]string{
+		block.OAK_LEAVES:    "minecraft:oak_leaves",
+		block.SPRUCE_LEAVES: "minecraft:spruce_leaves",
+		block.BIRCH_LEAVES:  "minecraft:birch_leaves",
+	} {
+		name := name
+		RegisterBlockStateSerializer(typeID, func(blk block.Behavior) (bedrock.BlockStateData, error) {
+			leaves := blk.(*block.Leaves)
+			return bedrock.BlockStateData{
+				Name: name,
+				States: map[string]any{
+					"persistent_bit": boolToByte(leaves.NoDecay),
+					"update_bit":     boolToByte(leaves.CheckDecay),
+				},
+			}, nil
+		})
+	}
 }
 
 // boolToByte matches BoolProperty's real Bedrock NBT encoding (a TAG_Byte, 0 or 1) - see

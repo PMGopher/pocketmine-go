@@ -27,6 +27,12 @@ func tallGrass(baseAmount int) populator.Populator {
 	return tg
 }
 
+func trees(t object.TreeType, baseAmount int) populator.Populator {
+	tr := populator.NewTree(t)
+	tr.BaseAmount = baseAmount
+	return tr
+}
+
 // NewOceanBiome is a port of OceanBiome.
 func NewOceanBiome() *Biome {
 	b := &Biome{name: "Ocean", groundCover: []block.Behavior{block.VanillaGravel(), block.VanillaGravel(), block.VanillaGravel(), block.VanillaGravel(), block.VanillaGravel()}}
@@ -55,12 +61,10 @@ func NewDesertBiome() *Biome {
 	return b
 }
 
-// NewMountainsBiome is a port of MountainsBiome (extends GrassyBiome). Tree decoration isn't
-// ported yet (see populator.Tree's absence - the object.Tree hierarchy is a separate, larger
-// undertaking), so only the TallGrass and Ore (emerald) populators real MountainsBiome adds are
-// wired here; the Tree populator is a documented, explicit gap for a future increment.
+// NewMountainsBiome is a port of MountainsBiome (extends GrassyBiome).
 func NewMountainsBiome() *Biome {
 	b := &Biome{name: "Mountains", groundCover: grassyGroundCover()}
+	b.AddPopulator(trees(object.TreeTypeOak, 1))
 	b.AddPopulator(tallGrass(1))
 
 	ore := &populator.Ore{}
@@ -83,17 +87,19 @@ func NewSmallMountainsBiome() *Biome {
 }
 
 // NewForestBiome is a port of ForestBiome (extends GrassyBiome). birch selects the Birch Forest
-// variant (BiomeRegistry registers both a plain ForestBiome and a birch one at different IDs);
-// the Tree populator itself isn't wired for the same reason as NewMountainsBiome's.
+// variant (BiomeRegistry registers both a plain ForestBiome and a birch one at different IDs).
 func NewForestBiome(birch bool) *Biome {
 	name := "Oak Forest"
 	temperature, rainfall := 0.7, 0.8
+	treeType := object.TreeTypeOak
 	if birch {
 		name = "Birch Forest"
 		temperature, rainfall = 0.6, 0.5
+		treeType = object.TreeTypeBirch
 	}
 
 	b := &Biome{name: name, groundCover: grassyGroundCover()}
+	b.AddPopulator(trees(treeType, 5))
 	b.AddPopulator(tallGrass(3))
 	b.SetElevation(63, 81)
 	b.temperature, b.rainfall = temperature, rainfall
@@ -103,6 +109,7 @@ func NewForestBiome(birch bool) *Biome {
 // NewTaigaBiome is a port of TaigaBiome (extends SnowyBiome).
 func NewTaigaBiome() *Biome {
 	b := &Biome{name: "Taiga", groundCover: snowyGroundCover()}
+	b.AddPopulator(trees(object.TreeTypeSpruce, 10))
 	b.AddPopulator(tallGrass(1))
 	b.SetElevation(63, 81)
 	b.temperature, b.rainfall = 0.05, 0.8
