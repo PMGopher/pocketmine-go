@@ -19,6 +19,7 @@ import (
 	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 	"pocketmine-go/pocketmine/world/generator"
 	"pocketmine-go/pocketmine/world/light"
+	"pocketmine-go/pocketmine/world/particle"
 	"pocketmine-go/pocketmine/world/sound"
 	"pocketmine-go/pocketmine/world/utils"
 )
@@ -526,6 +527,10 @@ func (w *World) GetOrLoadChunkAtPosition(pos block.Position) (block.Chunk, bool)
 // yet to actually deliver a sound packet to anyone, so this is a documented no-op rather than a
 // guess at how broadcasting should work.
 func (w *World) AddSound(pos math.Vector3, s sound.Sound) {}
+
+// AddParticle is a port of World::addParticle - see AddSound's own doc comment for why this is a
+// documented no-op rather than a guess at broadcasting.
+func (w *World) AddParticle(pos math.Vector3, p particle.Particle) {}
 
 // scheduledBlockUpdate is one entry in World's scheduled-block-update queue (see
 // ScheduleDelayedBlockUpdate/updateScheduledBlocks in tick.go).

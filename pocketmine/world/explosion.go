@@ -9,6 +9,7 @@ import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/world/particle"
 	"pocketmine-go/pocketmine/world/sound"
 	"pocketmine-go/pocketmine/world/utils"
 )
@@ -33,7 +34,6 @@ const explosionRays = 16
 //   - Dropping destroyed blocks' items into the world: World has no ItemEntity/dropItem yet, so
 //     drops are computed (GetDrops/GetDropsForCompatibleTool would be called) but not spawned -
 //     currently skipped outright rather than computed and silently discarded.
-//   - The explosion particle (HugeExplodeSeedParticle): no particle package/AddParticle exists yet.
 type Explosion struct {
 	world      *World
 	Source     math.Vector3
@@ -204,9 +204,9 @@ type motionSettable interface {
 }
 
 // ExplodeB is a port of Explosion::explodeB: applies the explosion's effects on the world -
-// destroying blocks (if ExplodeA found any), harming and knocking back entities, and playing a
-// sound. See Explosion's own doc comment for what isn't ported yet (event cancellation, item
-// drops, and the explosion particle).
+// destroying blocks (if ExplodeA found any), harming and knocking back entities, and adding a
+// particle and sound. See Explosion's own doc comment for what isn't ported yet (event
+// cancellation and item drops).
 func (e *Explosion) ExplodeB() bool {
 	sourcePos := math.NewVector3(stdmath.Floor(e.Source.X), stdmath.Floor(e.Source.Y), stdmath.Floor(e.Source.Z))
 	e.Yield = stdmath.Min(100, (1/e.Radius)*100)
@@ -280,6 +280,7 @@ func (e *Explosion) ExplodeB() bool {
 		_ = e.world.SetBlock(pos, targetBlock)
 	}
 
+	e.world.AddParticle(sourcePos, particle.HugeExplodeSeedParticle{})
 	e.world.AddSound(sourcePos, sound.ExplodeSound{})
 
 	return true
