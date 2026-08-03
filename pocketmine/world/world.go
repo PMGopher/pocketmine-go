@@ -79,6 +79,11 @@ type World struct {
 	skyLightUpdate    *light.SkyLightUpdate
 	blockLightUpdate  *light.BlockLightUpdate
 	skyLightReduction int // see GetSkyLightReduction's doc comment
+
+	// entities is this World's entity registry (see AddEntity/RemoveEntity/GetNearbyEntities) -
+	// keyed by registeredEntity.GetID(), a flat map rather than PHP's per-chunk index (see
+	// GetNearbyEntities' own doc comment on why that's a performance detail, not a correctness one).
+	entities map[int]registeredEntity
 }
 
 // New constructs a World using gen to generate chunks on demand. knownBlocks must include at
@@ -96,6 +101,7 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 		lightFilters:           map[int32]int{},
 		lightEmitters:          map[int32]int{},
 		directSkyLightBlockers: map[int32]bool{},
+		entities:               map[int]registeredEntity{},
 	}
 	w.subChunkExplorer = utils.NewSubChunkExplorer(w)
 	w.skyLightUpdate = light.NewSkyLightUpdate(w.subChunkExplorer, w.lightFilters, w.directSkyLightBlockers)
@@ -496,9 +502,64 @@ func (w *World) GetSkyLightReduction() int { return w.skyLightReduction }
 // cycle yet, so this reports a fixed midday value (0.5) rather than a guess.
 func (w *World) GetSunAnglePercentage() float64 { return 0.5 }
 
-// GetNearbyEntities is a port of World::getNearbyEntities. This port has no entity-in-world
-// tracking yet, so this always reports no entities nearby.
-func (w *World) GetNearbyEntities(bb math.AxisAlignedBB) []block.Entity { return nil }
+// registeredEntity is the minimal surface World's entity registry needs beyond block.Entity
+// itself (a unique ID, and whether it's already been closed) - declared locally, matching this
+// port's established forward-compatible-local-interface convention, so a future concrete Entity
+// type (pocketmine/entity only has the Entity/Living markers so far - no concrete spawnable type
+// exists yet to actually register) satisfies it structurally with no import needed here.
+type registeredEntity interface {
+	block.Entity
+	GetID() int
+	IsClosed() bool
+}
+
+// intersectEpsilon matches AxisAlignedBB::intersectsWith's real PHP default parameter
+// ($epsilon = 0.00001).
+const intersectEpsilon = 0.00001
+
+// AddEntity is a port of World::addEntity. Panics for a closed entity or one already registered
+// under a different instance for the same ID, matching the PHP original's InvalidArgumentException
+// (both are programmer errors at the call site).
+func (w *World) AddEntity(e registeredEntity) {
+	if e.IsClosed() {
+		panic("world: attempted to add a closed entity to the world")
+	}
+	if existing, ok := w.entities[e.GetID()]; ok && existing != e {
+		panic("world: attempted to create another entity with the same ID")
+	}
+	w.entities[e.GetID()] = e
+}
+
+// RemoveEntity is a port of World::removeEntity.
+func (w *World) RemoveEntity(e registeredEntity) {
+	delete(w.entities, e.GetID())
+}
+
+// GetEntity is a port of World::getEntity.
+func (w *World) GetEntity(id int) (registeredEntity, bool) {
+	e, ok := w.entities[id]
+	return e, ok
+}
+
+// GetEntities is a port of World::getEntities.
+func (w *World) GetEntities() map[int]registeredEntity { return w.entities }
+
+// GetNearbyEntities is a port of World::getNearbyEntities (minus its $entity exclusion parameter,
+// which block.World's interface doesn't need - nothing in the block package calls this with an
+// entity to exclude). Unlike the PHP original, this doesn't pre-filter by nearby chunks first (a
+// pure performance optimisation over exactly the same correct result set, not a correctness
+// requirement) - this port has no per-chunk entity index (see registeredEntity's own doc comment
+// on why there's nothing to spawn into one yet anyway), so a flat scan of every registered entity
+// produces an identical result, just O(entity count) instead of O(nearby chunks' entity count).
+func (w *World) GetNearbyEntities(bb math.AxisAlignedBB) []block.Entity {
+	var nearby []block.Entity
+	for _, e := range w.entities {
+		if e.GetBoundingBox().IntersectsWith(bb, intersectEpsilon) {
+			nearby = append(nearby, e)
+		}
+	}
+	return nearby
+}
 
 // int32Min/int32Max mirror pocketmine\utils\Limits::INT32_MIN/INT32_MAX - named locally instead
 // of using Go's stdlib math.MinInt32/MaxInt32 since this file already imports this port's own

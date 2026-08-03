@@ -5,10 +5,39 @@ import (
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world/generator"
 )
+
+// fakeEntity is a minimal registeredEntity for exercising World's entity registry in isolation -
+// pocketmine/entity has no concrete spawnable type yet (just the Entity/Living markers), so tests
+// here can't use a real one.
+type fakeEntity struct {
+	id     int
+	closed bool
+	bb     math.AxisAlignedBB
+	pos    math.Vector3
+}
+
+func newFakeEntity(id int, bb math.AxisAlignedBB) *fakeEntity { return &fakeEntity{id: id, bb: bb} }
+
+func (f *fakeEntity) ResetFallDistance()                   {}
+func (f *fakeEntity) GetPosition() math.Vector3            { return f.pos }
+func (f *fakeEntity) SetOnGround(onGround bool)            {}
+func (f *fakeEntity) GetFallDistance() float64             { return 0 }
+func (f *fakeEntity) SetFallDistance(fallDistance float64) {}
+func (f *fakeEntity) GetBoundingBox() math.AxisAlignedBB   { return f.bb }
+func (f *fakeEntity) GetMotion() math.Vector3              { return math.Vector3{} }
+func (f *fakeEntity) SetOnFire(seconds int)                {}
+func (f *fakeEntity) IsOnFire() bool                       { return false }
+func (f *fakeEntity) Extinguish()                          {}
+func (f *fakeEntity) ExtinguishWithCause(cause int)        {}
+func (f *fakeEntity) CanBeMovedByCurrents() bool           { return true }
+func (f *fakeEntity) Attack(source entity.DamageSource)    {}
+func (f *fakeEntity) GetID() int                           { return f.id }
+func (f *fakeEntity) IsClosed() bool                       { return f.closed }
 
 func newTestWorld() *World {
 	tr := convert.NewBlockTranslator()
@@ -284,6 +313,57 @@ func TestTileAddGetRemoveRoundTrips(t *testing.T) {
 	w.RemoveTile(et)
 	if _, ok := w.GetTile(pos); ok {
 		t.Error("expected GetTile to report not-found after RemoveTile")
+	}
+}
+
+func TestAddGetRemoveEntity(t *testing.T) {
+	w := newTestWorld()
+	bb, err := math.NewAxisAlignedBB(0, 0, 0, 1, 1, 1)
+	if err != nil {
+		t.Fatalf("NewAxisAlignedBB: %v", err)
+	}
+	e := newFakeEntity(1, bb)
+
+	w.AddEntity(e)
+	got, ok := w.GetEntity(1)
+	if !ok || got != e {
+		t.Fatalf("GetEntity(1) = (%v, %v), want (e, true)", got, ok)
+	}
+
+	w.RemoveEntity(e)
+	if _, ok := w.GetEntity(1); ok {
+		t.Error("expected GetEntity to report not-found after RemoveEntity")
+	}
+}
+
+func TestAddEntityPanicsOnClosedEntity(t *testing.T) {
+	w := newTestWorld()
+	bb, _ := math.NewAxisAlignedBB(0, 0, 0, 1, 1, 1)
+	e := newFakeEntity(1, bb)
+	e.closed = true
+
+	defer func() {
+		if recover() == nil {
+			t.Error("expected AddEntity to panic for a closed entity")
+		}
+	}()
+	w.AddEntity(e)
+}
+
+func TestGetNearbyEntitiesFindsOverlappingBoundingBoxesOnly(t *testing.T) {
+	w := newTestWorld()
+	nearBB, _ := math.NewAxisAlignedBB(0, 0, 0, 1, 1, 1)
+	farBB, _ := math.NewAxisAlignedBB(100, 100, 100, 101, 101, 101)
+	near := newFakeEntity(1, nearBB)
+	far := newFakeEntity(2, farBB)
+	w.AddEntity(near)
+	w.AddEntity(far)
+
+	queryBB, _ := math.NewAxisAlignedBB(0.5, 0.5, 0.5, 1.5, 1.5, 1.5)
+	nearby := w.GetNearbyEntities(queryBB)
+
+	if len(nearby) != 1 || nearby[0] != block.Entity(near) {
+		t.Errorf("GetNearbyEntities = %v, want just [near]", nearby)
 	}
 }
 
