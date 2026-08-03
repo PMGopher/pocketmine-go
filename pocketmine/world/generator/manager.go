@@ -1,6 +1,10 @@
 package generator
 
-import "fmt"
+import (
+	"fmt"
+
+	"pocketmine-go/pocketmine/world/generator/hell"
+)
 
 // Factory constructs a Generator from a seed and the raw generatorOptions string level.dat stores
 // alongside it - a port of the relevant slice of GeneratorManager's registration contract
@@ -32,6 +36,12 @@ func init() {
 	// registers both names against the same Normal generator class).
 	RegisterGenerator("normal", normalFactory)
 	RegisterGenerator("default", normalFactory)
+
+	netherFactory := func(seed int64, options string) (Generator, error) { return hell.NewNether(int(seed)), nil }
+	// "hell" is real PocketMine-MP's own long-standing alias for "nether" (GeneratorManager
+	// registers both names against the same Nether generator class).
+	RegisterGenerator("nether", netherFactory)
+	RegisterGenerator("hell", netherFactory)
 }
 
 // UnknownGeneratorError is returned by anything resolving a generator by name (see world.WorldManager)

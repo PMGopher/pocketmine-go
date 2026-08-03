@@ -1,6 +1,10 @@
 package generator
 
-import "testing"
+import (
+	"testing"
+
+	"pocketmine-go/pocketmine/world/generator/hell"
+)
 
 func TestGetFactoryFindsNormalAndItsDefaultAlias(t *testing.T) {
 	for _, name := range []string{"normal", "default"} {
@@ -14,6 +18,22 @@ func TestGetFactoryFindsNormalAndItsDefaultAlias(t *testing.T) {
 		}
 		if _, ok := gen.(*Normal); !ok {
 			t.Errorf("factory(%q) returned a %T, want *Normal", name, gen)
+		}
+	}
+}
+
+func TestGetFactoryFindsNetherAndItsHellAlias(t *testing.T) {
+	for _, name := range []string{"nether", "hell"} {
+		factory, ok := GetFactory(name)
+		if !ok {
+			t.Fatalf("GetFactory(%q) not found", name)
+		}
+		gen, err := factory(42, "")
+		if err != nil {
+			t.Fatalf("factory(%q) returned an error: %v", name, err)
+		}
+		if _, ok := gen.(*hell.Nether); !ok {
+			t.Errorf("factory(%q) returned a %T, want *hell.Nether", name, gen)
 		}
 	}
 }

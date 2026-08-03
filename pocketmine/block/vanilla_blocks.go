@@ -71,6 +71,8 @@ var (
 	vanillaBirchLeaves       Behavior
 	vanillaFire              Behavior
 	vanillaTNT               Behavior
+	vanillaLava              Behavior
+	vanillaNetherQuartzOre   Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -611,4 +613,22 @@ func VanillaTNT() Behavior {
 		vanillaTNT = NewTNT(mustVanillaBlockIdentifier(TNT), "TNT", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
 	}
 	return vanillaTNT.Clone()
+}
+
+// VanillaLava is a port of VanillaBlocks::LAVA() - see VanillaBlocksInputs.php's
+// register("lava", ...): BreakInfo::indestructible(500.0).
+func VanillaLava() Behavior {
+	if vanillaLava == nil {
+		vanillaLava = NewLava(mustVanillaBlockIdentifier(LAVA), "Lava", NewBlockTypeInfo(BlockBreakInfoIndestructible(500.0), nil, nil))
+	}
+	return vanillaLava.Clone()
+}
+
+// VanillaNetherQuartzOre is a port of VanillaBlocks::NETHER_QUARTZ_ORE() - see
+// VanillaBlocksInputs.php's registerOres's $netherrackOreBreakInfo = BreakInfo::pickaxe(3.0, ToolTier::WOOD).
+func VanillaNetherQuartzOre() Behavior {
+	if vanillaNetherQuartzOre == nil {
+		vanillaNetherQuartzOre = NewNetherQuartzOre(mustVanillaBlockIdentifier(NETHER_QUARTZ_ORE), "Nether Quartz Ore", NewBlockTypeInfo(BlockBreakInfoPickaxe(3.0, vanillaToolTierWood, nil), nil, nil))
+	}
+	return vanillaNetherQuartzOre.Clone()
 }
