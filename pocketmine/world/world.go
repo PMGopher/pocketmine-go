@@ -16,7 +16,9 @@ import (
 	"pocketmine-go/pocketmine/world/format"
 	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 	"pocketmine-go/pocketmine/world/generator"
+	"pocketmine-go/pocketmine/world/light"
 	"pocketmine-go/pocketmine/world/sound"
+	"pocketmine-go/pocketmine/world/utils"
 )
 
 var _ block.World = (*World)(nil)
@@ -60,6 +62,23 @@ type World struct {
 	// different from this port's original design (every chunk generated fresh, nothing survives a
 	// restart).
 	provider *goleveldb.DB
+
+	// lightFilters/lightEmitters/directSkyLightBlockers are the light engine's per-block-state
+	// lookup tables (see pocketmine/world/light), built in registerTemplate from every registered
+	// block's real GetLightFilter()/GetLightLevel()/BlocksDirectSkyLight() - the same
+	// "only what's registered" scope every other per-state table in this port already has.
+	// lightFilters is min(15, GetLightFilter()+light.BaseLightFilter), matching
+	// RuntimeBlockStateRegistry.php's own formula (see light package's doc comment on why the
+	// raw GetLightFilter() alone would be wrong - it would make light never attenuate through
+	// air at all).
+	lightFilters           map[int32]int
+	lightEmitters          map[int32]int
+	directSkyLightBlockers map[int32]bool
+
+	subChunkExplorer  *utils.SubChunkExplorer
+	skyLightUpdate    *light.SkyLightUpdate
+	blockLightUpdate  *light.BlockLightUpdate
+	skyLightReduction int // see GetSkyLightReduction's doc comment
 }
 
 // New constructs a World using gen to generate chunks on demand. knownBlocks must include at
@@ -68,17 +87,32 @@ type World struct {
 // for why.
 func New(gen generator.Generator, translator *convert.BlockTranslator, knownBlocks []block.Behavior) *World {
 	w := &World{
-		generator:       gen,
-		translator:      translator,
-		chunks:          map[[2]int]*format.Chunk{},
-		populated:       map[[2]int]bool{},
-		stateTemplates:  map[int32]block.Behavior{},
-		stateByBlockKey: map[string]int32{},
+		generator:              gen,
+		translator:             translator,
+		chunks:                 map[[2]int]*format.Chunk{},
+		populated:              map[[2]int]bool{},
+		stateTemplates:         map[int32]block.Behavior{},
+		stateByBlockKey:        map[string]int32{},
+		lightFilters:           map[int32]int{},
+		lightEmitters:          map[int32]int{},
+		directSkyLightBlockers: map[int32]bool{},
 	}
+	w.subChunkExplorer = utils.NewSubChunkExplorer(w)
+	w.skyLightUpdate = light.NewSkyLightUpdate(w.subChunkExplorer, w.lightFilters, w.directSkyLightBlockers)
+	w.blockLightUpdate = light.NewBlockLightUpdate(w.subChunkExplorer, w.lightFilters, w.lightEmitters)
+
 	for _, blk := range knownBlocks {
 		w.registerTemplate(blk)
 	}
 	return w
+}
+
+// GetChunk is a port of World::getChunk: a non-generating lookup (unlike GetOrLoadChunk/
+// generateChunkOnly, this never creates a chunk that isn't already loaded) - the
+// utils.ChunkSource capability SubChunkExplorer (and so the light engine) needs.
+func (w *World) GetChunk(chunkX, chunkZ int) (*format.Chunk, bool) {
+	c, ok := w.chunks[chunkKey(chunkX, chunkZ)]
+	return c, ok
 }
 
 // registerTemplate records blk as the reconstruction template for its state ID and warms the
@@ -99,6 +133,12 @@ func (w *World) registerTemplate(blk block.Behavior) {
 		if _, exists := w.stateByBlockKey[blockStateKey(data)]; !exists {
 			w.stateByBlockKey[blockStateKey(data)] = stateID
 		}
+	}
+
+	if _, ok := w.lightFilters[stateID]; !ok {
+		w.lightFilters[stateID] = min(15, blk.GetLightFilter()+light.BaseLightFilter)
+		w.lightEmitters[stateID] = blk.GetLightLevel()
+		w.directSkyLightBlockers[stateID] = blk.BlocksDirectSkyLight()
 	}
 }
 
@@ -244,6 +284,19 @@ func (w *World) ensurePopulated(chunkX, chunkZ int) {
 		}
 	}
 	w.generator.PopulateChunk(w, chunkX, chunkZ)
+
+	// Light is recalculated after population (not generation) so it reflects the final terrain -
+	// populators (Tree, Ore, ...) can add/remove blocks with real light filters/emission that
+	// pure generation didn't have yet. Matches real PocketMine-MP's own dependency: a
+	// PopulationTask always runs before a chunk is considered ready for LightPopulationTask.
+	// Neighbours only being *generated* (not populated) here is exactly as safe for light
+	// propagation as it already is for population's own cross-border writes - see this method's
+	// own doc comment above on why that's the invariant that matters, not "fully populated".
+	w.skyLightUpdate.RecalculateChunk(chunkX, chunkZ)
+	w.skyLightUpdate.Execute()
+	w.blockLightUpdate.RecalculateChunk(chunkX, chunkZ)
+	w.blockLightUpdate.Execute()
+	w.chunks[key].SetLightPopulated(true, true)
 }
 
 // Translator returns the BlockTranslator this World's chunks were populated through - the network
@@ -284,11 +337,33 @@ func (w *World) SetBlock(pos block.Position, blk block.Behavior) error {
 	return nil
 }
 
-// GetTile/AddTile are ports of World::getTile/addTile. This port has no Tile-in-World system yet
-// (see format.Chunk's doc comment on the same gap) - GetTile always reports "no tile", AddTile is
-// a no-op.
-func (w *World) GetTile(pos block.Position) (block.Tile, bool) { return nil, false }
-func (w *World) AddTile(tile block.Tile)                       {}
+// GetTile is a port of World::getTile.
+func (w *World) GetTile(pos block.Position) (block.Tile, bool) {
+	return w.GetTileAt(pos.FloorX(), pos.FloorY(), pos.FloorZ())
+}
+
+// GetTileAt is a port of World::getTileAt - also satisfies tile.World's own GetTileAt (needed by
+// e.g. Chest's neighbour-pairing lookup).
+func (w *World) GetTileAt(x, y, z int) (block.Tile, bool) {
+	chunk := w.generateChunkOnly(x>>4, z>>4)
+	return chunk.GetTile(x&0xf, y, z&0xf)
+}
+
+// AddTile is a port of World::addTile.
+func (w *World) AddTile(t block.Tile) {
+	pos := t.GetPosition()
+	chunk := w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)
+	chunk.AddTile(t)
+}
+
+// RemoveTile is a port of World::removeTile - also satisfies tile.World's own RemoveTile (called
+// by TileBase.Close() implementations, matching Tile::close()'s real `$this->lastUsedChunk?->
+// removeTile($this)`-style bookkeeping).
+func (w *World) RemoveTile(t block.Tile) {
+	pos := t.GetPosition()
+	chunk := w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)
+	chunk.RemoveTile(t)
+}
 
 // chunkAdapter satisfies block.Chunk (just SetBlockStateID(x,y,z,stateID int)) over a
 // *format.Chunk (whose own SetBlockStateID takes int32 state IDs, matching PalettedBlockArray's
@@ -325,18 +400,97 @@ func (w *World) AddSound(pos math.Vector3, s sound.Sound) {}
 // World), so this is a documented no-op.
 func (w *World) ScheduleDelayedBlockUpdate(pos math.Vector3, delay int) {}
 
-// GetFullLightAt/GetBlockLightAt/GetRealBlockSkyLightAt/GetHighestAdjacentFullLightAt/
-// GetHighestAdjacentBlockLightAt/GetPotentialLightAt are ports of World's respective light-query
-// methods. This port has no light engine yet (no LightPopulationTask/HeightMap-driven skylight,
-// no BlockLightUpdate) - every position simply reports full light (15) rather than a guessed or
-// zeroed value, so light-gated behaviour (crop growth, mob spawning rules, ...) defaults to
-// "always allowed" until a real light engine exists.
-func (w *World) GetFullLightAt(x, y, z int) int                 { return 15 }
-func (w *World) GetBlockLightAt(x, y, z int) int                { return 15 }
-func (w *World) GetRealBlockSkyLightAt(x, y, z int) int         { return 15 }
-func (w *World) GetHighestAdjacentFullLightAt(x, y, z int) int  { return 15 }
-func (w *World) GetHighestAdjacentBlockLightAt(x, y, z int) int { return 15 }
-func (w *World) GetPotentialLightAt(x, y, z int) int            { return 15 }
+// GetBlockLightAt is a port of World::getBlockLightAt.
+func (w *World) GetBlockLightAt(x, y, z int) int {
+	if !w.IsInWorld(x, y, z) {
+		return 0
+	}
+	chunk, ok := w.GetChunk(x>>4, z>>4)
+	if !ok {
+		return 0
+	}
+	if populated, ok := chunk.IsLightPopulated(); !ok || !populated {
+		return 0 //TODO: this should probably throw instead (light not calculated yet) - see World::getBlockLightAt's own TODO
+	}
+	return chunk.GetBlockLightAt(x&0xf, y, z&0xf)
+}
+
+// getPotentialBlockSkyLightAt is a port of World::getPotentialBlockSkyLightAt.
+func (w *World) getPotentialBlockSkyLightAt(x, y, z int) int {
+	if !w.IsInWorld(x, y, z) {
+		if y >= YMax {
+			return 15
+		}
+		return 0
+	}
+	chunk, ok := w.GetChunk(x>>4, z>>4)
+	if !ok {
+		return 0
+	}
+	if populated, ok := chunk.IsLightPopulated(); !ok || !populated {
+		return 0
+	}
+	return chunk.GetBlockSkyLightAt(x&0xf, y, z&0xf)
+}
+
+// GetRealBlockSkyLightAt is a port of World::getRealBlockSkyLightAt.
+func (w *World) GetRealBlockSkyLightAt(x, y, z int) int {
+	return max(0, w.getPotentialBlockSkyLightAt(x, y, z)-w.skyLightReduction)
+}
+
+// GetPotentialLightAt is a port of World::getPotentialLightAt.
+func (w *World) GetPotentialLightAt(x, y, z int) int {
+	return max(w.getPotentialBlockSkyLightAt(x, y, z), w.GetBlockLightAt(x, y, z))
+}
+
+// GetFullLightAt is a port of World::getFullLightAt.
+func (w *World) GetFullLightAt(x, y, z int) int {
+	skyLight := w.GetRealBlockSkyLightAt(x, y, z)
+	if skyLight < 15 {
+		return max(skyLight, w.GetBlockLightAt(x, y, z))
+	}
+	return skyLight
+}
+
+// getHighestAdjacentLight is a port of World::getHighestAdjacentLight.
+func (w *World) getHighestAdjacentLight(x, y, z int, lightGetter func(x, y, z int) int) int {
+	result := 0
+	for _, side := range math.AllFacing {
+		off := math.FacingOffset[side]
+		x1, y1, z1 := x+off[0], y+off[1], z+off[2]
+
+		if !w.IsInWorld(x1, y1, z1) {
+			continue
+		}
+		chunk, ok := w.GetChunk(x1>>4, z1>>4)
+		if !ok {
+			continue
+		}
+		if populated, ok := chunk.IsLightPopulated(); !ok || !populated {
+			continue
+		}
+		if v := lightGetter(x1, y1, z1); v > result {
+			result = v
+		}
+	}
+	return result
+}
+
+// GetHighestAdjacentFullLightAt is a port of World::getHighestAdjacentFullLightAt.
+func (w *World) GetHighestAdjacentFullLightAt(x, y, z int) int {
+	return w.getHighestAdjacentLight(x, y, z, w.GetFullLightAt)
+}
+
+// GetHighestAdjacentBlockLightAt is a port of World::getHighestAdjacentBlockLight.
+func (w *World) GetHighestAdjacentBlockLightAt(x, y, z int) int {
+	return w.getHighestAdjacentLight(x, y, z, w.GetBlockLightAt)
+}
+
+// GetSkyLightReduction is a port of World::getSkyLightReduction: how much sky light is currently
+// reduced by weather/time of day. This port has no real weather/day-night cycle driving it yet
+// (see GetSunAnglePercentage's own doc comment on the same gap), so it's a fixed 0 (a permanently
+// clear midday sky) rather than a guess - revisited once real time/weather exist.
+func (w *World) GetSkyLightReduction() int { return w.skyLightReduction }
 
 // GetSunAnglePercentage is a port of World::getSunAnglePercentage. This port has no day/night
 // cycle yet, so this reports a fixed midday value (0.5) rather than a guess.
@@ -346,11 +500,22 @@ func (w *World) GetSunAnglePercentage() float64 { return 0.5 }
 // tracking yet, so this always reports no entities nearby.
 func (w *World) GetNearbyEntities(bb math.AxisAlignedBB) []block.Entity { return nil }
 
-// IsInWorld is a port of World::isInWorld, minus the PHP original's +/-30000000 horizontal bound
-// (Bedrock's real world border, which nothing in this port enforces or needs yet - only the
-// vertical bound is actually load-bearing for any current caller, e.g. Sugarcane.grow's upward
-// climb).
-func (w *World) IsInWorld(x, y, z int) bool { return y >= YMin && y < YMax }
+// int32Min/int32Max mirror pocketmine\utils\Limits::INT32_MIN/INT32_MAX - named locally instead
+// of using Go's stdlib math.MinInt32/MaxInt32 since this file already imports this port's own
+// math package under the plain "math" name.
+const (
+	int32Min = -1 << 31
+	int32Max = 1<<31 - 1
+)
+
+// IsInWorld is a port of World::isInWorld: x/z must be within the int32 range (Limits::INT32_MIN/
+// MAX - not a "world border" game feature, just the same defensive coordinate-overflow bound real
+// PocketMine-MP enforces), and y within this World's vertical bounds.
+func (w *World) IsInWorld(x, y, z int) bool {
+	return x >= int32Min && x <= int32Max &&
+		y >= YMin && y < YMax &&
+		z >= int32Min && z <= int32Max
+}
 
 // UseBreakOn is the simplified (no item/player/particles/drops) form of World::useBreakOn that
 // block.World documents as the only form the block package itself needs - replaces the block with

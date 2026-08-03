@@ -1,14 +1,19 @@
 package block
 
-import "fmt"
+import (
+	"fmt"
 
-// Tile is the minimal surface BlockIdentifier needs from a block entity ("tile" in Bedrock
-// terms — a chest, furnace, sign, etc.). Declared as a marker here; the future block/tile
-// package will flesh out its real methods once it's ported, the same forward-compatible-local-
-// interface pattern used for permission.Plugin and command.Server elsewhere in this port.
-type Tile interface {
-	//marker — block/tile will add real methods once it's ported
-}
+	"pocketmine-go/pocketmine/block/tile"
+)
+
+// Tile is a type alias (not just an interface with matching methods) for tile.Tile - the real
+// pocketmine\block\tile\Tile interface, now that pocketmine/block/tile is substantially built out.
+// A plain alias (rather than re-declaring the method set here) means any tile.Tile value - e.g.
+// what format.Chunk's own tile storage holds - is usable as a block.Tile with no wrapping or
+// assertion anywhere. block/tile doesn't import block (it deliberately declares its own minimal
+// local World/Item interfaces instead, exactly so this alias could exist with no cycle risk - see
+// tile's own package doc comment).
+type Tile = tile.Tile
 
 // BlockIdentifier is a port of pocketmine\block\BlockIdentifier.
 //

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world/generator"
 )
@@ -239,6 +241,49 @@ func TestLevelDBRoundTripPreservesGeneratedTerrain(t *testing.T) {
 		if got := w2.GetBlockAt(s.x, s.y, s.z).GetTypeId(); got != s.typeID {
 			t.Errorf("GetBlockAt(%d,%d,%d) after reload = %d, want %d (loaded from disk)", s.x, s.y, s.z, got, s.typeID)
 		}
+	}
+}
+
+// TestLightIsRealAfterGeneration exercises the real light engine now wired into World (see
+// ensurePopulated) against a plain Flat world - open sky above the flat layer stack should be
+// fully lit, and inside the topmost opaque block itself should be dark.
+func TestLightIsRealAfterGeneration(t *testing.T) {
+	w := newTestWorld()
+	w.GetOrLoadChunk(0, 0)
+
+	if got := w.GetRealBlockSkyLightAt(5, 100, 5); got != 15 {
+		t.Errorf("GetRealBlockSkyLightAt(5,100,5) (well above the grass top) = %d, want 15", got)
+	}
+	if got := w.GetRealBlockSkyLightAt(5, 63, 5); got != 0 {
+		t.Errorf("GetRealBlockSkyLightAt(5,63,5) (the grass block itself, opaque) = %d, want 0", got)
+	}
+	if got := w.GetFullLightAt(5, 100, 5); got != 15 {
+		t.Errorf("GetFullLightAt(5,100,5) = %d, want 15", got)
+	}
+	if got := w.GetHighestAdjacentFullLightAt(5, 63, 5); got != 15 {
+		t.Errorf("GetHighestAdjacentFullLightAt(5,63,5) = %d, want 15 (the open-sky block just above is a neighbour)", got)
+	}
+}
+
+// TestTileAddGetRemoveRoundTrips exercises World's real tile storage (see format.Chunk's own
+// AddTile/GetTile/RemoveTile) using a real concrete tile type from pocketmine/block/tile -
+// World now satisfies tile.World (GetTileAt/RemoveTile), which NewEnchantTable needs.
+func TestTileAddGetRemoveRoundTrips(t *testing.T) {
+	w := newTestWorld()
+	w.GetOrLoadChunk(0, 0)
+
+	et := tile.NewEnchantTable(w, math.NewVector3(3, 70, 9))
+	w.AddTile(et)
+
+	pos := block.NewPosition(3, 70, 9, w)
+	got, ok := w.GetTile(pos)
+	if !ok || got != tile.Tile(et) {
+		t.Fatalf("GetTile after AddTile = (%v, %v), want (et, true)", got, ok)
+	}
+
+	w.RemoveTile(et)
+	if _, ok := w.GetTile(pos); ok {
+		t.Error("expected GetTile to report not-found after RemoveTile")
 	}
 }
 
