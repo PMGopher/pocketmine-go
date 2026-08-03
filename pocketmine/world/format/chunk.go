@@ -123,6 +123,19 @@ func (c *Chunk) GetHighestBlockAt(x, z int) (int, bool) {
 	return 0, false
 }
 
+// GetBlockSkyLightAt returns the sky light level (0-15) at the given position - a convenience
+// wrapper matching GetBlockStateID's world-Y-coordinate shape, not a literal PHP method (real
+// PocketMine-MP callers go through SubChunk::getBlockSkyLightArray directly), needed by World's
+// light-query methods once the light engine (pocketmine/world/light) is wired in.
+func (c *Chunk) GetBlockSkyLightAt(x, y, z int) int {
+	return c.GetSubChunk(y>>SubChunkCoordBitSize).GetBlockSkyLightArray().Get(x, y&SubChunkCoordMask, z)
+}
+
+// GetBlockLightAt is GetBlockSkyLightAt's block-light equivalent.
+func (c *Chunk) GetBlockLightAt(x, y, z int) int {
+	return c.GetSubChunk(y>>SubChunkCoordBitSize).GetBlockLightArray().Get(x, y&SubChunkCoordMask, z)
+}
+
 // GetBiomeID is a port of Chunk::getBiomeId.
 func (c *Chunk) GetBiomeID(x, y, z int) int32 {
 	return c.GetSubChunk(y>>SubChunkCoordBitSize).GetBiomeArray().Get(x, y&SubChunkCoordMask, z)
