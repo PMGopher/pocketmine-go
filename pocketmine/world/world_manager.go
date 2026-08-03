@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"pocketmine-go/pocketmine/block"
-	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	worldio "pocketmine-go/pocketmine/world/format/io"
 	"pocketmine-go/pocketmine/world/generator"
@@ -186,10 +185,12 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 // the WorldInitEvent/WorldLoadEvent (see WorldManager's own doc comment).
 //
 // gen must already be fully constructed by the caller (see generator.Factory's own doc comment on
-// why - not every Generator this port has can be built from just a name + options string yet);
-// generatorName/generatorOptions are recorded into level.dat purely so a later LoadWorld (in this
-// process or a future run) can reconstruct an equivalent generator via generator.GetFactory.
-func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, seed int64, generatorName, generatorOptions string) (*World, error) {
+// why - not every Generator this port has can be built from just a name + options string yet).
+// options.SpawnPosition is written into level.dat exactly as given, unadjusted - matching real
+// PHP's own generateWorld/BedrockWorldData::generate, which never runs a safe-spawn search at
+// generation time either (see World.GetSafeSpawn's own doc comment - that search happens lazily,
+// wherever a caller actually needs a safe point to put something, not baked into world creation).
+func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, options *WorldCreationOptions) (*World, error) {
 	if strings.TrimSpace(name) == "" {
 		return nil, fmt.Errorf("world manager: invalid empty world name")
 	}
@@ -203,10 +204,12 @@ func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, seed 
 		return nil, fmt.Errorf("world manager: opening %q's world data: %w", name, err)
 	}
 
-	spawn := w.GetSafeSpawn(math.Vector3Zero())
-
-	wd, err := worldio.GenerateWorldData(path, name, seed, worldio.GeneratorInfinite, generatorName, generatorOptions, spawn)
+	wd, err := worldio.GenerateWorldData(path, name, options.Seed, worldio.GeneratorInfinite, options.GeneratorName, options.GeneratorOptions, options.SpawnPosition)
 	if err != nil {
+		return nil, fmt.Errorf("world manager: writing %q's level.dat: %w", name, err)
+	}
+	wd.SetDifficulty(options.Difficulty)
+	if err := wd.Save(path); err != nil {
 		return nil, fmt.Errorf("world manager: writing %q's level.dat: %w", name, err)
 	}
 

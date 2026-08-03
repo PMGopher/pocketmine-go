@@ -24,7 +24,7 @@ func newTestWorldManager(t *testing.T) *WorldManager {
 func TestGenerateWorldCreatesALoadedWorldWithAnAssignedIDAndFolderName(t *testing.T) {
 	m := newTestWorldManager(t)
 
-	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), 1, "normal", "")
+	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatalf("GenerateWorld: %v", err)
 	}
@@ -49,27 +49,58 @@ func TestGenerateWorldCreatesALoadedWorldWithAnAssignedIDAndFolderName(t *testin
 	}
 }
 
+func TestGenerateWorldWritesTheRawSpawnPositionUnadjustedIntoLevelDat(t *testing.T) {
+	m := newTestWorldManager(t)
+	spawn := math.NewVector3(5, 40, 5) // deep inside solid stone in Normal's own terrain shape
+	options := NewWorldCreationOptions().SetSeed(1).SetSpawnPosition(spawn)
+
+	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// GenerateWorld must never run a safe-spawn search over options.SpawnPosition - see its own
+	// doc comment on why real PHP doesn't either (that search happens lazily elsewhere).
+	if got := m.worldData[w.GetID()].GetSpawn(); got != spawn {
+		t.Errorf("level.dat's stored spawn = %v, want the raw %v unadjusted", got, spawn)
+	}
+}
+
+func TestGenerateWorldAppliesTheRequestedDifficulty(t *testing.T) {
+	m := newTestWorldManager(t)
+	options := NewWorldCreationOptions().SetSeed(1).SetDifficulty(3)
+
+	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := m.worldData[w.GetID()].GetDifficulty(); got != 3 {
+		t.Errorf("level.dat's stored difficulty = %d, want 3", got)
+	}
+}
+
 func TestGenerateWorldRejectsEmptyOrDuplicateNames(t *testing.T) {
 	m := newTestWorldManager(t)
 
-	if _, err := m.GenerateWorld("", generator.NewNormal(1), 1, "normal", ""); err == nil {
+	if _, err := m.GenerateWorld("", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1)); err == nil {
 		t.Error("GenerateWorld(\"\") = nil error, want an error")
 	}
-	if _, err := m.GenerateWorld("  ", generator.NewNormal(1), 1, "normal", ""); err == nil {
+	if _, err := m.GenerateWorld("  ", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1)); err == nil {
 		t.Error("GenerateWorld(\"  \") = nil error, want an error")
 	}
 
-	if _, err := m.GenerateWorld("dup", generator.NewNormal(1), 1, "normal", ""); err != nil {
+	if _, err := m.GenerateWorld("dup", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.GenerateWorld("dup", generator.NewNormal(1), 1, "normal", ""); err == nil {
+	if _, err := m.GenerateWorld("dup", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1)); err == nil {
 		t.Error("GenerateWorld with an already-generated name = nil error, want an error")
 	}
 }
 
 func TestLoadWorldReturnsTheSameInstanceIfAlreadyLoaded(t *testing.T) {
 	m := newTestWorldManager(t)
-	generated, err := m.GenerateWorld("myworld", generator.NewNormal(1), 1, "normal", "")
+	generated, err := m.GenerateWorld("myworld", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +123,7 @@ func TestLoadWorldRejectsAnUngeneratedName(t *testing.T) {
 
 func TestUnloadWorldThenLoadWorldReconstructsAnEquivalentWorldFromDisk(t *testing.T) {
 	m := newTestWorldManager(t)
-	original, err := m.GenerateWorld("myworld", generator.NewNormal(7), 7, "normal", "")
+	original, err := m.GenerateWorld("myworld", generator.NewNormal(7), NewWorldCreationOptions().SetSeed(7))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +161,7 @@ func TestUnloadWorldThenLoadWorldReconstructsAnEquivalentWorldFromDisk(t *testin
 
 func TestSetDefaultWorldOnlyAcceptsALoadedWorldOrNil(t *testing.T) {
 	m := newTestWorldManager(t)
-	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), 1, "normal", "")
+	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +187,7 @@ func TestSetDefaultWorldOnlyAcceptsALoadedWorldOrNil(t *testing.T) {
 
 func TestUnloadWorldRefusesToUnloadTheDefaultWorldWithoutForce(t *testing.T) {
 	m := newTestWorldManager(t)
-	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), 1, "normal", "")
+	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +211,7 @@ func TestUnloadWorldRefusesToUnloadTheDefaultWorldWithoutForce(t *testing.T) {
 
 func TestUnloadWorldRefusesDuringItsOwnTick(t *testing.T) {
 	m := newTestWorldManager(t)
-	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), 1, "normal", "")
+	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +229,7 @@ func TestUnloadWorldRefusesDuringItsOwnTick(t *testing.T) {
 
 func TestTickAdvancesEveryManagedWorldAndAutosavesOnSchedule(t *testing.T) {
 	m := newTestWorldManager(t)
-	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), 1, "normal", "")
+	w, err := m.GenerateWorld("myworld", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,11 +258,11 @@ func TestTickAdvancesEveryManagedWorldAndAutosavesOnSchedule(t *testing.T) {
 
 func TestFindEntityAcrossWorlds(t *testing.T) {
 	m := newTestWorldManager(t)
-	a, err := m.GenerateWorld("a", generator.NewNormal(1), 1, "normal", "")
+	a, err := m.GenerateWorld("a", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := m.GenerateWorld("b", generator.NewNormal(1), 1, "normal", "")
+	b, err := m.GenerateWorld("b", generator.NewNormal(1), NewWorldCreationOptions().SetSeed(1))
 	if err != nil {
 		t.Fatal(err)
 	}
