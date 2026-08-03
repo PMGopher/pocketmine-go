@@ -11,9 +11,9 @@
 // game logic, which is what the rest of this port focuses on - gophertunnel gets a client all the
 // way to spawning in far less time than reimplementing the wire format from scratch would.
 //
-// This is still an early milestone, not a playable server: block interaction (breaking/placing),
-// inventory, and every other gameplay packet beyond spawning, moving around and seeing terrain
-// aren't wired up yet - see handleConn's read loop.
+// This is still an early milestone, not a playable server: block placing, inventory, and most
+// other gameplay packets beyond spawning, moving around, seeing terrain and breaking blocks aren't
+// wired up yet - see handleConn's read loop.
 package main
 
 import (
@@ -37,15 +37,17 @@ import (
 	pmmath "pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/network/mcpe/serializer"
+	"pocketmine-go/pocketmine/player"
 	"pocketmine-go/pocketmine/world"
 	worldio "pocketmine-go/pocketmine/world/format/io"
 	"pocketmine-go/pocketmine/world/generator"
 )
 
-// spawnChunkRadius is how many chunks in every direction around (0,0) get sent to a joining
-// player, matching PocketMine-MP's own "spawn radius" concept (chunks always kept loaded/sent
-// around the world spawn) in spirit, though real per-player view-distance-driven chunk streaming
-// isn't ported - every player currently gets this same fixed area regardless of movement.
+// spawnChunkRadius is both the default view distance (in chunks) given to every connecting player
+// (see streamChunksToPlayer/player.Player.SetViewDistance - real per-player view distance is now
+// genuinely streamed as the player moves, not just sent once) and the radius kept permanently
+// loaded around the world spawn regardless of players (see registerSpawnAreaAsPermanentlyLoaded),
+// matching PocketMine-MP's own separate "spawn radius" concept in spirit.
 const spawnChunkRadius = 4
 
 func main() {
@@ -161,12 +163,11 @@ func main() {
 		}
 	}
 
-	// This port sends every player the same fixed spawnChunkRadius area (see sendSpawnChunks' own
-	// doc comment on the lack of real per-player view-distance streaming) rather than loading
-	// chunks per-player as they move - so, matching that, the spawn area itself is registered as a
-	// single permanently-loaded/ticking region for the server's whole lifetime (akin to real
-	// PocketMine-MP's own "spawn-radius keeps chunks loaded" behaviour), under one shared loader
-	// identity rather than per-connection tokens.
+	// Players now stream chunks around themselves individually as they move (see
+	// streamChunksToPlayer/player.Player.OrderChunks), but the spawn area itself is still kept
+	// permanently loaded/ticking server-side regardless of whether any player is nearby - matching
+	// real PocketMine-MP's own separate "spawn-radius keeps chunks loaded" behaviour, under one
+	// shared loader identity rather than per-connection tokens.
 	registerSpawnAreaAsPermanentlyLoaded(w, spawn)
 
 	go runTickLoop(w)
@@ -225,8 +226,9 @@ func computeSpawn(w *world.World) spawnPoint {
 type spawnAreaLoader struct{}
 
 // registerSpawnAreaAsPermanentlyLoaded generates, registers as loaded (so it's never eligible for
-// World.UnregisterChunkLoader-driven unloading) and registers for random ticking every chunk in
-// the same fixed area sendSpawnChunks sends to every player.
+// World.UnregisterChunkLoader-driven unloading) and registers for random ticking every chunk in a
+// fixed spawnChunkRadius area around spawn - independent of streamChunksToPlayer's own per-player
+// loader registrations for the same chunks.
 func registerSpawnAreaAsPermanentlyLoaded(w *world.World, spawn spawnPoint) {
 	loader := &spawnAreaLoader{}
 	centerX, centerZ := int(spawn.X)>>4, int(spawn.Z)>>4
@@ -334,11 +336,13 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	}
 	logger.Info(fmt.Sprintf("%s spawned, sending terrain...", name))
 
-	if err := sendSpawnChunks(conn, w, spawn); err != nil {
+	sess.player.SetViewDistance(spawnChunkRadius)
+	sent, err := streamChunksToPlayer(conn, sess.player)
+	if err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to send terrain: %v", name, err))
 		return
 	}
-	logger.Info(fmt.Sprintf("%s: terrain sent (%d chunks)", name, (2*spawnChunkRadius+1)*(2*spawnChunkRadius+1)))
+	logger.Info(fmt.Sprintf("%s: terrain sent (%d chunks)", name, sent))
 
 	// Join makes every already-connected player visible to this one and vice versa (PlayerList +
 	// AddPlayer both ways) - see registry's doc comment. Leave (on disconnect, below) reverses it.
@@ -366,68 +370,109 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 			// every other connected player so they see this player move.
 			sess.SetPositionAndRotation(input.Position, input.Pitch, input.Yaw, input.HeadYaw)
 			reg.BroadcastMove(sess)
-			handleBlockActions(conn, w, input.BlockActions, logger, name)
+			if _, err := streamChunksToPlayer(conn, sess.player); err != nil {
+				logger.Warning(fmt.Sprintf("%s: failed to stream terrain: %v", name, err))
+				return
+			}
+			sess.player.UpdateBreakingBlock(bareHandItem{})
+			handleBlockActions(conn, sess.player, input.BlockActions, logger, name)
 		}
 	}
 }
 
-// handleBlockActions is a simplified port of the block-breaking half of PlayerAuthInput handling
-// (the placing half isn't wired up yet - that goes through ItemStackRequest, a separate,
-// inventory-shaped undertaking). Real PocketMine-MP tracks a whole break-time state machine per
-// player (BlockBreakInfo's hardness/tool-efficiency/haste calculations, timed across
-// StartBreak/ContinueDestroyBlock/AbortBreak), which needs a real Player/inventory/held-item system
-// this port doesn't have yet - so for now, any of the "the client believes this block is now
-// broken" actions (PredictDestroyBlock, the survival hold-to-break completion; StopBreak, sent for
-// creative's instant break) just breaks the block immediately server-side, honestly simplified
-// rather than guessed at.
-func handleBlockActions(conn *minecraft.Conn, w *world.World, actions []protocol.PlayerBlockAction, logger log.Logger, name string) {
-	for _, action := range actions {
-		if action.Action != protocol.PlayerActionPredictDestroyBlock && action.Action != protocol.PlayerActionStopBreak {
-			continue
-		}
+// bareHandItem is a stand-in block.Item for "whatever the player is currently holding" - this
+// port's inventory isn't wired to a "selected hotbar slot" concept yet (no ItemStackRequest
+// handling exists - see this file's own package doc comment), so every break/attack action is
+// computed as if the player were holding nothing (efficiency 1.0, no tool type), matching a bare
+// hand exactly. A real held-item lookup replaces this once hotbar selection exists.
+type bareHandItem struct{}
 
+func (bareHandItem) GetTypeId() int                                        { return 0 }
+func (bareHandItem) GetBlockToolType() block.ToolType                      { return block.ToolTypeNone }
+func (bareHandItem) GetBlockToolHarvestLevel() int                         { return 0 }
+func (bareHandItem) GetMiningEfficiency(isCompatibleToolType bool) float64 { return 1 }
+func (bareHandItem) Pop()                                                  {}
+func (bareHandItem) IsNull() bool                                          { return false }
+func (bareHandItem) GetCustomName() string                                 { return "" }
+func (bareHandItem) GetCount() int                                         { return 1 }
+func (bareHandItem) SetCount(count int)                                    {}
+
+// handleBlockActions is a port of the block-breaking half of PlayerAuthInput handling (the
+// placing half isn't wired up yet - that goes through ItemStackRequest, a separate, inventory-
+// shaped undertaking) onto Player's own real AttackBlock/ContinueBreakBlock/StopBreakBlock/
+// BreakBlock - a genuine SurvivalBlockBreakHandler now drives the break-time state machine (see
+// player.SurvivalBlockBreakHandler's own doc comment for what it still doesn't model: haste/mining
+// fatigue/aqua affinity, and the network broadcasts to viewers).
+func handleBlockActions(conn *minecraft.Conn, p *player.Player, actions []protocol.PlayerBlockAction, logger log.Logger, name string) {
+	for _, action := range actions {
 		pos := action.BlockPos
 		vec := pmmath.NewVector3(float64(pos[0]), float64(pos[1]), float64(pos[2]))
-		if !w.UseBreakOn(vec) {
-			continue
-		}
+		face := pmmath.Facing(action.Face)
 
-		airNetworkID := uint32(w.Translator().InternalIDToNetworkID(block.VanillaAir()))
-		if err := conn.WritePacket(&packet.UpdateBlock{
-			Position:          pos,
-			NewBlockRuntimeID: airNetworkID,
-			Flags:             packet.BlockUpdateNetwork,
-		}); err != nil {
-			logger.Warning(fmt.Sprintf("%s: failed to confirm block break at %v: %v", name, pos, err))
+		switch action.Action {
+		case protocol.PlayerActionStartBreak:
+			p.AttackBlock(vec, face, bareHandItem{})
+		case protocol.PlayerActionContinueDestroyBlock:
+			p.ContinueBreakBlock(vec, face)
+		case protocol.PlayerActionAbortBreak:
+			p.StopBreakBlock(vec)
+		case protocol.PlayerActionPredictDestroyBlock, protocol.PlayerActionStopBreak:
+			if !p.BreakBlock(vec) {
+				continue
+			}
+			w := p.GetWorld()
+			airNetworkID := uint32(w.Translator().InternalIDToNetworkID(block.VanillaAir()))
+			if err := conn.WritePacket(&packet.UpdateBlock{
+				Position:          pos,
+				NewBlockRuntimeID: airNetworkID,
+				Flags:             packet.BlockUpdateNetwork,
+			}); err != nil {
+				logger.Warning(fmt.Sprintf("%s: failed to confirm block break at %v: %v", name, pos, err))
+			}
 		}
 	}
 }
 
-// sendSpawnChunks sends every chunk in a fixed square (see spawnChunkRadius) around the world
-// origin, then a NetworkChunkPublisherUpdate telling the client that area is loaded - the same two
-// pieces PocketMine-MP's own chunk-sending path needs, minus real per-player view-distance-driven
-// streaming as chunks come in and out of range (this port sends one fixed area to every player
-// today, regardless of where they go afterwards).
-func sendSpawnChunks(conn *minecraft.Conn, w *world.World, spawn spawnPoint) error {
-	centerX, centerZ := int(spawn.X)>>4, int(spawn.Z)>>4
-	for x := centerX - spawnChunkRadius; x <= centerX+spawnChunkRadius; x++ {
-		for z := centerZ - spawnChunkRadius; z <= centerZ+spawnChunkRadius; z++ {
-			chunk := w.GetOrLoadChunk(x, z)
-			payload := serializer.SerializeFullChunk(chunk, w.Translator())
-			pk := &packet.LevelChunk{
-				Position:      protocol.ChunkPos{int32(x), int32(z)},
-				SubChunkCount: uint32(serializer.GetSubChunkCount(chunk)),
-				RawPayload:    payload,
-			}
-			if err := conn.WritePacket(pk); err != nil {
-				return err
-			}
-		}
+// streamChunksToPlayer is a port of the network-sending half of Player::requestChunks: drives p's
+// own real OrderChunks/RequestChunks (see player.Player's own doc comment on the real per-player
+// view-distance-driven chunk streaming this replaces the old fixed-area broadcast with), sends a
+// LevelChunk packet for every newly-ready chunk, marks each one sent, and syncs the client's view
+// area center point - callers call this both once at spawn and again on every PlayerAuthInput, so
+// chunks stream in as the player moves instead of only ever covering one fixed area. Returns how
+// many chunks were sent this call.
+func streamChunksToPlayer(conn *minecraft.Conn, p *player.Player) (int, error) {
+	p.OrderChunks()
+	ready := p.RequestChunks()
+	if len(ready) == 0 {
+		return 0, nil
 	}
 
-	radiusBlocks := uint32(spawnChunkRadius) << 4
-	return conn.WritePacket(&packet.NetworkChunkPublisherUpdate{
-		Position: protocol.BlockPos{spawn.X, spawn.Y, spawn.Z},
+	w := p.GetWorld()
+	for _, c := range ready {
+		chunk, ok := w.GetChunk(c[0], c[1])
+		if !ok {
+			continue
+		}
+		payload := serializer.SerializeFullChunk(chunk, w.Translator())
+		pk := &packet.LevelChunk{
+			Position:      protocol.ChunkPos{int32(c[0]), int32(c[1])},
+			SubChunkCount: uint32(serializer.GetSubChunkCount(chunk)),
+			RawPayload:    payload,
+		}
+		if err := conn.WritePacket(pk); err != nil {
+			return 0, err
+		}
+		p.MarkChunkSent(c[0], c[1])
+	}
+
+	pos := p.GetPosition()
+	radiusBlocks := uint32(p.GetViewDistance()) << 4
+	if err := conn.WritePacket(&packet.NetworkChunkPublisherUpdate{
+		Position: protocol.BlockPos{int32(pos.X), int32(pos.Y), int32(pos.Z)},
 		Radius:   radiusBlocks,
-	})
+	}); err != nil {
+		return 0, err
+	}
+
+	return len(ready), nil
 }
