@@ -186,6 +186,62 @@ func TestNormalGeneratorPopulatesRealGroundCoverWithoutCascading(t *testing.T) {
 	}
 }
 
+// TestLevelDBRoundTripPreservesGeneratedTerrain saves a Normal-generated world to a real LevelDB
+// database, then opens a *fresh* World (different generator seed, so if loading silently fell
+// back to regenerating instead of reading the saved data, the terrain would come out completely
+// different) against the same directory and confirms every sampled block matches exactly.
+func TestLevelDBRoundTripPreservesGeneratedTerrain(t *testing.T) {
+	dir := t.TempDir()
+
+	knownBlocks := []block.Behavior{
+		block.VanillaAir(), block.VanillaBedrock(), block.VanillaStone(), block.VanillaDirt(), block.VanillaGrass(),
+		block.VanillaGravel(), block.VanillaCoalOre(), block.VanillaIronOre(), block.VanillaRedstoneOre(),
+		block.VanillaLapisLazuliOre(), block.VanillaGoldOre(), block.VanillaDiamondOre(), block.VanillaEmeraldOre(),
+		block.VanillaWater(), block.VanillaSand(), block.VanillaSandstone(), block.VanillaSnowLayer(), block.VanillaTallGrass(),
+		block.VanillaOakLog(), block.VanillaOakLeaves(), block.VanillaSpruceLog(), block.VanillaSpruceLeaves(),
+		block.VanillaBirchLog(), block.VanillaBirchLeaves(),
+	}
+
+	tr := convert.NewBlockTranslator()
+	w := New(generator.NewNormal(2468), tr, knownBlocks)
+	if err := w.OpenProvider(dir); err != nil {
+		t.Fatalf("OpenProvider: %v", err)
+	}
+
+	for x := -1; x <= 1; x++ {
+		for z := -1; z <= 1; z++ {
+			w.GetOrLoadChunk(x, z)
+		}
+	}
+
+	type sample struct{ x, y, z, typeID int }
+	var before []sample
+	for x := -16; x < 16; x += 2 {
+		for z := -16; z < 16; z += 2 {
+			for y := 0; y < 90; y += 5 {
+				before = append(before, sample{x, y, z, w.GetBlockAt(x, y, z).GetTypeId()})
+			}
+		}
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	tr2 := convert.NewBlockTranslator()
+	w2 := New(generator.NewNormal(13579), tr2, knownBlocks) // different seed on purpose
+	if err := w2.OpenProvider(dir); err != nil {
+		t.Fatalf("OpenProvider (reload): %v", err)
+	}
+	defer w2.Close()
+
+	for _, s := range before {
+		if got := w2.GetBlockAt(s.x, s.y, s.z).GetTypeId(); got != s.typeID {
+			t.Errorf("GetBlockAt(%d,%d,%d) after reload = %d, want %d (loaded from disk)", s.x, s.y, s.z, got, s.typeID)
+		}
+	}
+}
+
 func TestGetOrLoadChunkAtPositionSetsBlockStateID(t *testing.T) {
 	w := newTestWorld()
 	pos := block.NewPosition(1, 0, 1, w)

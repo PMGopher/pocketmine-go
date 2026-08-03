@@ -1,11 +1,20 @@
-// Package world is a minimal, in-memory-only port of a slice of pocketmine\world\World.
+// Package world is a port of a slice of pocketmine\world\World, including a real on-disk
+// LevelDB-backed WorldProvider (see OpenProvider/SaveAll) - not in-memory-only any more.
 package world
 
 import (
+	"fmt"
+	"sort"
+	"strings"
+
+	goleveldb "github.com/syndtr/goleveldb/leveldb"
+
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world/format"
+	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 	"pocketmine-go/pocketmine/world/generator"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -41,6 +50,16 @@ type World struct {
 	// must be registered up front (see New's knownBlocks parameter); SetBlock also self-registers
 	// whatever it's given, so anything ever placed through it becomes readable too.
 	stateTemplates map[int32]block.Behavior
+
+	// stateByBlockKey is stateTemplates' reverse direction (persistent name+states -> internal
+	// state ID) - built alongside it in registerTemplate, needed to resolve a block state read
+	// back from a saved world file (see leveldb.StateResolver). Keyed by blockStateKey.
+	stateByBlockKey map[string]int32
+
+	// provider is this World's on-disk backing (see OpenProvider) - nil means pure in-memory, no
+	// different from this port's original design (every chunk generated fresh, nothing survives a
+	// restart).
+	provider *goleveldb.DB
 }
 
 // New constructs a World using gen to generate chunks on demand. knownBlocks must include at
@@ -49,11 +68,12 @@ type World struct {
 // for why.
 func New(gen generator.Generator, translator *convert.BlockTranslator, knownBlocks []block.Behavior) *World {
 	w := &World{
-		generator:      gen,
-		translator:     translator,
-		chunks:         map[[2]int]*format.Chunk{},
-		populated:      map[[2]int]bool{},
-		stateTemplates: map[int32]block.Behavior{},
+		generator:       gen,
+		translator:      translator,
+		chunks:          map[[2]int]*format.Chunk{},
+		populated:       map[[2]int]bool{},
+		stateTemplates:  map[int32]block.Behavior{},
+		stateByBlockKey: map[string]int32{},
 	}
 	for _, blk := range knownBlocks {
 		w.registerTemplate(blk)
@@ -63,13 +83,43 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 
 // registerTemplate records blk as the reconstruction template for its state ID and warms the
 // BlockTranslator's cache for the same ID (see BlockTranslator.NetworkIDForCachedState's doc
-// comment on why chunk serialization needs that cache pre-warmed).
+// comment on why chunk serialization needs that cache pre-warmed). Also records the reverse
+// (persistent name+states -> state ID) mapping a saved world's LoadChunk needs (see
+// stateByBlockKey's doc comment) - blocks with no registered BlockStateSerializer yet simply
+// can't be saved/loaded correctly, the same "not supported over the network yet" gap
+// InternalIDToNetworkID already has, just for disk instead of network.
 func (w *World) registerTemplate(blk block.Behavior) {
 	stateID := int32(blk.GetStateId())
 	if _, ok := w.stateTemplates[stateID]; !ok {
 		w.stateTemplates[stateID] = blk.Clone()
 	}
 	w.translator.InternalIDToNetworkID(blk)
+
+	if data, err := convert.SerializeBlockState(blk); err == nil {
+		if _, exists := w.stateByBlockKey[blockStateKey(data)]; !exists {
+			w.stateByBlockKey[blockStateKey(data)] = stateID
+		}
+	}
+}
+
+// blockStateKey builds a deterministic string key from a bedrock.BlockStateData's name and
+// states, for use as a map key (bedrock.BlockStateData itself isn't comparable - States is a
+// map). State property values are always int32, uint8 or string (see
+// convert/vanilla_block_mappings.go's registrations) - anything else is a programmer error there,
+// not something this needs to handle gracefully.
+func blockStateKey(data bedrock.BlockStateData) string {
+	names := make([]string, 0, len(data.States))
+	for name := range data.States {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var b strings.Builder
+	b.WriteString(data.Name)
+	for _, name := range names {
+		fmt.Fprintf(&b, ";%s=%T:%v", name, data.States[name], data.States[name])
+	}
+	return b.String()
 }
 
 func chunkKey(chunkX, chunkZ int) [2]int { return [2]int{chunkX, chunkZ} }
@@ -87,18 +137,83 @@ func (w *World) GetOrLoadChunk(chunkX, chunkZ int) *format.Chunk {
 	return c
 }
 
-// generateChunkOnly returns the chunk at the given coordinates, generating (and caching) it via
-// the configured Generator on first access, but never running population - see ensurePopulated's
-// doc comment for why callers reached from inside a populate pass must use this instead of
-// GetOrLoadChunk.
+// generateChunkOnly returns the chunk at the given coordinates: from cache if already loaded,
+// else from the on-disk provider if one is open and has this chunk saved (see OpenProvider),
+// else generating (and caching) it via the configured Generator - but never running population,
+// see ensurePopulated's doc comment for why callers reached from inside a populate pass must use
+// this instead of GetOrLoadChunk.
 func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
 	key := chunkKey(chunkX, chunkZ)
 	if c, ok := w.chunks[key]; ok {
 		return c
 	}
+
+	if w.provider != nil {
+		if c, ok, err := worldio.LoadChunk(w.provider, int32(chunkX), int32(chunkZ), int32(block.VanillaAir().GetStateId()), 0, w.resolveBlockState); err == nil && ok {
+			w.chunks[key] = c
+			w.populated[key] = true // a saved chunk was always fully generated+populated before being saved
+			return c
+		}
+	}
+
 	c := w.generator.GenerateChunk(chunkX, chunkZ)
 	w.chunks[key] = c
 	return c
+}
+
+// resolveBlockState adapts stateByBlockKey to leveldb.StateResolver's shape.
+func (w *World) resolveBlockState(data bedrock.BlockStateData) (int32, bool) {
+	stateID, ok := w.stateByBlockKey[blockStateKey(data)]
+	return stateID, ok
+}
+
+// lookupBlockState adapts stateTemplates to leveldb.StateLookup's shape.
+func (w *World) lookupBlockState(stateID int32) (bedrock.BlockStateData, error) {
+	tpl, ok := w.stateTemplates[stateID]
+	if !ok {
+		return bedrock.BlockStateData{}, fmt.Errorf("world: no registered template for internal state %d", stateID)
+	}
+	return convert.SerializeBlockState(tpl)
+}
+
+// OpenProvider opens (creating if necessary) a real Bedrock-compatible LevelDB world database at
+// path, and attaches it to this World as its on-disk backing - a port of the relevant slice of
+// WorldManager::loadWorld/World::__construct's WorldProvider setup. Chunks are loaded from it
+// lazily (see generateChunkOnly) and must be explicitly written back with SaveAll (this port has
+// no per-chunk dirty tracking / autosave scheduler yet, so saving is all-or-nothing and
+// caller-triggered - see main.go's shutdown handler).
+func (w *World) OpenProvider(path string) error {
+	db, err := goleveldb.OpenFile(path, nil)
+	if err != nil {
+		return fmt.Errorf("world: opening LevelDB world at %q: %w", path, err)
+	}
+	w.provider = db
+	return nil
+}
+
+// SaveAll writes every currently-loaded chunk back to the open provider (see OpenProvider) - a
+// no-op if no provider is open.
+func (w *World) SaveAll() error {
+	if w.provider == nil {
+		return nil
+	}
+	for key, chunk := range w.chunks {
+		if err := worldio.SaveChunk(w.provider, int32(key[0]), int32(key[1]), chunk, w.lookupBlockState); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Close saves every loaded chunk (see SaveAll) and closes the on-disk provider, if one is open.
+func (w *World) Close() error {
+	if w.provider == nil {
+		return nil
+	}
+	if err := w.SaveAll(); err != nil {
+		return err
+	}
+	return w.provider.Close()
 }
 
 // ensurePopulated runs this chunk's Populators exactly once (see the populated map), first making

@@ -49,7 +49,8 @@ func main() {
 	port := flag.Int("port", 19132, "UDP port to listen on")
 	motd := flag.String("motd", pocketmine.Name, "message of the day shown in the server list")
 	maxPlayers := flag.Int("max-players", 20, "player count advertised in the server list")
-	seed := flag.Int("seed", 0, "world seed")
+	seed := flag.Int("seed", 0, "world seed (only used the first time a world is created)")
+	worldDir := flag.String("world-dir", "world", "directory to save/load the world's LevelDB data in")
 	flag.Parse()
 
 	logger := log.NewSimpleLogger()
@@ -76,7 +77,24 @@ func main() {
 		block.VanillaSandstone(),
 		block.VanillaSnowLayer(),
 		block.VanillaTallGrass(),
+		block.VanillaOakLog(),
+		block.VanillaOakLeaves(),
+		block.VanillaSpruceLog(),
+		block.VanillaSpruceLeaves(),
+		block.VanillaBirchLog(),
+		block.VanillaBirchLeaves(),
 	})
+
+	if err := w.OpenProvider(*worldDir); err != nil {
+		logger.Critical(fmt.Sprintf("failed to open world at %q: %v", *worldDir, err))
+		os.Exit(1)
+	}
+	defer func() {
+		logger.Info("Saving world...")
+		if err := w.Close(); err != nil {
+			logger.Warning(fmt.Sprintf("failed to save world: %v", err))
+		}
+	}()
 
 	cfg := minecraft.ListenConfig{
 		StatusProvider: minecraft.NewStatusProvider(*motd, pocketmine.Name),

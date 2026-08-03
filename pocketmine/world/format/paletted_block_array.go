@@ -54,6 +54,53 @@ func NewPalettedBlockArray(fillValue int32) *PalettedBlockArray {
 
 func (p *PalettedBlockArray) GetBitsPerBlock() int { return p.bitsPerBlock }
 
+// NewPalettedBlockArrayFromRaw reconstructs a PalettedBlockArray directly from its already-decoded
+// parts (bitsPerBlock, the little-endian word array bytes as written by GetWordArray, and the
+// palette) - used by on-disk (de)serialization (pocketmine/world/format/io/leveldb), which reads
+// back exactly this same on-the-wire shape rather than replaying 4096 individual Set calls.
+// wordBytes may be nil/empty when bitsPerBlock is 0 (uniform array).
+func NewPalettedBlockArrayFromRaw(bitsPerBlock int, wordBytes []byte, palette []int32) (*PalettedBlockArray, error) {
+	valid := false
+	for _, b := range validBitsPerBlock {
+		if b == bitsPerBlock {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return nil, fmt.Errorf("format: invalid bitsPerBlock %d", bitsPerBlock)
+	}
+	if len(palette) == 0 {
+		return nil, fmt.Errorf("format: palette must not be empty")
+	}
+
+	p := &PalettedBlockArray{
+		bitsPerBlock: bitsPerBlock,
+		palette:      append([]int32(nil), palette...),
+		index:        make(map[int32]int, len(palette)),
+	}
+	for i, v := range palette {
+		// Match Set's own behaviour: the first occurrence of a repeated value wins the index.
+		if _, exists := p.index[v]; !exists {
+			p.index[v] = i
+		}
+	}
+
+	if bitsPerBlock == 0 {
+		return p, nil
+	}
+
+	wantWords := wordCountFor(bitsPerBlock)
+	if len(wordBytes) != wantWords*4 {
+		return nil, fmt.Errorf("format: word array is %d bytes, want %d for bitsPerBlock=%d", len(wordBytes), wantWords*4, bitsPerBlock)
+	}
+	p.words = make([]uint32, wantWords)
+	for i := range p.words {
+		p.words[i] = binary.LittleEndian.Uint32(wordBytes[i*4:])
+	}
+	return p, nil
+}
+
 // Clone is a port of PalettedBlockArray's implicit PHP `clone` semantics (native extension objects
 // are copied by value on `clone` too) - a deep copy, since palette/index/words are all reference
 // types in Go.
@@ -145,6 +192,11 @@ func bitsPerBlockFor(paletteSize int) int {
 	}
 	panic(fmt.Sprintf("format: palette of size %d exceeds the maximum bitsPerBlock (16)", paletteSize))
 }
+
+// WordCountForBitsPerBlock is an exported wrapper around wordCountFor, needed by
+// pocketmine/world/format/io/leveldb to know how many word bytes to read back for a given
+// bitsPerBlock header value before it has a PalettedBlockArray to ask.
+func WordCountForBitsPerBlock(bitsPerBlock int) int { return wordCountFor(bitsPerBlock) }
 
 func wordCountFor(bitsPerBlock int) int {
 	blocksPerWord := 32 / bitsPerBlock
