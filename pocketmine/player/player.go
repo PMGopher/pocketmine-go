@@ -2,6 +2,7 @@ package player
 
 import (
 	stdmath "math"
+	"time"
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/entity"
@@ -25,18 +26,28 @@ const (
 // mainInventorySize mirrors PlayerInventory's own real slot count (9 hotbar + 27 main = 36).
 const mainInventorySize = 36
 
-// Player is a port of a slice of pocketmine\player\Player.
+// Player is a port of a large slice of pocketmine\player\Player (2900+ lines in the original).
 //
-// This is a deliberately narrow first slice of a 2900+ line class - real Player also covers chunk
-// streaming (per-player view distance, ChunkSelector, usedChunks/loadQueue), inventory windows
-// beyond the base inventory (cursor/crafting-grid/creative), forms, sleeping, respawn, disk-
-// persisted PlayerInfo, and SurvivalBlockBreakHandler's precise break-time state machine - none of
-// that is attempted here. What this slice does provide is real, not stubbed: identity (username/
-// UUID/XUID), a real main Inventory (see NewHuman's own doc comment on why it lives here instead
-// of on entity.Human), GameMode, and everything block.Player/block.Living/block.Entity's local
-// interfaces need to treat a *Player as a genuine entity registered in a World - the previous
-// stand-in (cmd/pocketmine-go's own "session" struct) can now hold one of these instead of
-// reimplementing player-shaped state itself.
+// Real, not stubbed: identity (username/UUID/XUID/firstPlayed/lastPlayed), a real main Inventory
+// (see NewHuman's own doc comment on why it lives here instead of on entity.Human), GameMode,
+// flight/auto-jump/block-collision/sneak-pressed flags, real per-player chunk streaming (view
+// distance, ChunkSelector-driven load ordering, UsedChunkStatus tracking, world.ChunkListener -
+// see chunk_streaming.go), and real survival block-breaking (AttackBlock/ContinueBreakBlock/
+// StopBreakBlock/BreakBlock/UpdateBreakingBlock driving a genuine SurvivalBlockBreakHandler - see
+// block_interaction.go) - everything block.Player/block.Living/block.Entity's local interfaces
+// need to treat a *Player as a genuine entity registered in a World. cmd/pocketmine-go's own
+// "session" struct (previously an explicitly-documented stand-in for exactly this) now wraps one
+// of these instead of reimplementing player-shaped state itself.
+//
+// Not ported (each needs a real subsystem this port doesn't have anywhere else yet either, so
+// each is a documented gap, not a guess - see the individual methods' own doc comments for exact
+// PHP-behaviour differences): inventory windows beyond the base inventory (cursor/crafting-grid/
+// creative), forms, sleeping/respawn, PlayerInfo/PlayerDataProvider aren't wired into
+// NewPlayer/persistence automatically yet (both real types exist and are usable, just not
+// connected to a save/load pipeline), permissions/CommandSender, chat (ChatFormatter exists and is
+// usable, just not wired to a broadcast pipeline), item use/consumption, entity attack/interact,
+// hunger/experience, and the cancellable events real PHP fires throughout (no event bus wired to
+// World/Player - matches every other "no event bus yet" gap elsewhere in this port).
 type Player struct {
 	entity.Human
 
@@ -61,6 +72,34 @@ type Player struct {
 	flying     bool
 
 	inventory *inventory.SimpleInventory
+
+	// blockBreakHandler mirrors Player::$blockBreakHandler - non-nil exactly while a survival
+	// block-break action is in progress (see block_interaction.go's AttackBlock/StopBreakBlock/
+	// UpdateBreakingBlock).
+	blockBreakHandler *SurvivalBlockBreakHandler
+
+	// firstPlayed/lastPlayed mirror Player::$firstPlayed/$lastPlayed (IPlayer's own
+	// getFirstPlayed/getLastPlayed) - Unix milliseconds, matching real PHP's own
+	// `(int) (microtime(true) * 1000)` unit.
+	firstPlayed, lastPlayed int64
+
+	// allowFlight/hasBlockCollision/autoJump/flightSpeedMultiplier/sneakPressed mirror the
+	// identically-named Player fields.
+	allowFlight           bool
+	hasBlockCollision     bool
+	autoJump              bool
+	flightSpeedMultiplier float64
+	sneakPressed          bool
+
+	locale string
+
+	// viewDistance/usedChunks/loadQueue/tickingChunks back OrderChunks/RequestChunks and the
+	// world.ChunkListener implementation in chunk_streaming.go - see OrderChunks' own doc comment
+	// on the -1 default.
+	viewDistance  int
+	usedChunks    map[[2]int]UsedChunkStatus
+	loadQueue     map[[2]int]bool
+	tickingChunks map[[2]int]bool
 }
 
 // NewPlayer is a port of a slice of Player::__construct/PlayerInfo - see Player's own doc comment
@@ -72,18 +111,75 @@ func NewPlayer(id int, username, uuid, xuid string, w *world.World, position mat
 		position.X+humanBoundingBoxHalfWidth, position.Y+humanBoundingBoxHeight, position.Z+humanBoundingBoxHalfWidth,
 	)
 
+	now := time.Now().UnixMilli()
 	p := &Player{
-		Human:       *entity.NewHuman(position, bb, uuid),
-		id:          id,
-		username:    username,
-		displayName: username,
-		xuid:        xuid,
-		gameMode:    gameMode,
-		world:       w,
-		inventory:   inventory.NewSimpleInventory(mainInventorySize),
+		Human:                 *entity.NewHuman(position, bb, uuid),
+		id:                    id,
+		username:              username,
+		displayName:           username,
+		xuid:                  xuid,
+		gameMode:              gameMode,
+		world:                 w,
+		inventory:             inventory.NewSimpleInventory(mainInventorySize),
+		firstPlayed:           now,
+		lastPlayed:            now,
+		hasBlockCollision:     true,
+		autoJump:              true,
+		flightSpeedMultiplier: DefaultFlightSpeedMultiplier,
+		viewDistance:          -1,
+		usedChunks:            map[[2]int]UsedChunkStatus{},
+		loadQueue:             map[[2]int]bool{},
+		tickingChunks:         map[[2]int]bool{},
 	}
 	return p
 }
+
+// DefaultFlightSpeedMultiplier mirrors Player::DEFAULT_FLIGHT_SPEED_MULTIPLIER.
+const DefaultFlightSpeedMultiplier = 0.05
+
+// GetFirstPlayed/GetLastPlayed/HasPlayedBefore port IPlayer's own methods (see the Player.
+// firstPlayed/lastPlayed fields' doc comment) - a connected Player always "has played before" by
+// the time it exists, matching real PHP's own constructor always setting both to a real value
+// (loaded from NBT, or "now" if this is a first join).
+func (p *Player) GetFirstPlayed() (int64, bool) { return p.firstPlayed, true }
+func (p *Player) GetLastPlayed() (int64, bool)  { return p.lastPlayed, true }
+func (p *Player) HasPlayedBefore() bool         { return true }
+
+// SetFirstPlayed/SetLastPlayed let a caller restore these from previously-saved player data (see
+// PlayerDataProvider) instead of the "now" default NewPlayer otherwise applies.
+func (p *Player) SetFirstPlayed(firstPlayed int64) { p.firstPlayed = firstPlayed }
+func (p *Player) SetLastPlayed(lastPlayed int64)   { p.lastPlayed = lastPlayed }
+
+// GetAllowFlight/SetAllowFlight port Player::getAllowFlight/setAllowFlight - minus the ability-sync
+// side effect (no AbilityMap/network session type exists in this package to sync to).
+func (p *Player) GetAllowFlight() bool      { return p.allowFlight }
+func (p *Player) SetAllowFlight(allow bool) { p.allowFlight = allow }
+
+// HasBlockCollision/SetHasBlockCollision port Player::hasBlockCollision/setHasBlockCollision.
+func (p *Player) HasBlockCollision() bool         { return p.hasBlockCollision }
+func (p *Player) SetHasBlockCollision(value bool) { p.hasBlockCollision = value }
+
+// HasAutoJump/SetAutoJump port Player::hasAutoJump/setAutoJump - minus the ability-sync side
+// effect (see GetAllowFlight's own doc comment for the same reason).
+func (p *Player) HasAutoJump() bool      { return p.autoJump }
+func (p *Player) SetAutoJump(value bool) { p.autoJump = value }
+
+// GetFlightSpeedMultiplier/SetFlightSpeedMultiplier port Player::getFlightSpeedMultiplier/
+// setFlightSpeedMultiplier - minus the ability-sync side effect and the real
+// InvalidArgumentException on a non-finite/negative value (this port trusts callers, matching its
+// own "no shortcuts, but no unreachable-defensive-checks either" convention).
+func (p *Player) GetFlightSpeedMultiplier() float64           { return p.flightSpeedMultiplier }
+func (p *Player) SetFlightSpeedMultiplier(multiplier float64) { p.flightSpeedMultiplier = multiplier }
+
+// IsSneakPressed/SetSneakPressed port Player::isSneakPressed/setSneakPressed.
+func (p *Player) IsSneakPressed() bool         { return p.sneakPressed }
+func (p *Player) SetSneakPressed(pressed bool) { p.sneakPressed = pressed }
+
+// GetLocale/SetLocale port PlayerInfo::getLocale (Player itself just delegates to its PlayerInfo
+// in real PHP - this port stores it directly on Player instead, since PlayerInfo here is a
+// separate, optional value type rather than something Player always carries one of).
+func (p *Player) GetLocale() string       { return p.locale }
+func (p *Player) SetLocale(locale string) { p.locale = locale }
 
 // GetID is a port of Entity::getId - see the Player.id field's own doc comment on why Player
 // defines this itself rather than inheriting it.

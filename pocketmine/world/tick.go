@@ -191,6 +191,12 @@ func (w *World) IsChunkInUse(chunkX, chunkZ int) bool {
 	return ok && len(loaders) > 0
 }
 
+// GetChunkTickRadius is a port of World::getChunkTickRadius.
+func (w *World) GetChunkTickRadius() int { return w.chunkTickRadius }
+
+// SetChunkTickRadius is a port of World::setChunkTickRadius.
+func (w *World) SetChunkTickRadius(radius int) { w.chunkTickRadius = radius }
+
 // RegisterTickingChunk/UnregisterTickingChunk port World::registerTickingChunk/
 // unregisterTickingChunk. Real PocketMine-MP's ChunkTicker is likewise a completely empty marker
 // interface (see ChunkTicker.php) - see RegisterChunkLoader's own doc comment on why `any` and
