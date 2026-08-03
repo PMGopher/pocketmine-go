@@ -58,6 +58,7 @@ type Player struct {
 	spawnPosition math.Vector3
 
 	yaw, pitch float64
+	flying     bool
 
 	inventory *inventory.SimpleInventory
 }
@@ -187,3 +188,10 @@ func (p *Player) GetHorizontalFacing() math.Facing {
 		return math.East
 	}
 }
+
+// IsFlying is a port of Player::isFlying.
+func (p *Player) IsFlying() bool { return p.flying }
+
+// SetFlying is a port of a slice of Player::setFlying - minus real PHP's ability-sync-to-client
+// side effect (no AbilityMap/network session type exists in this package to sync to).
+func (p *Player) SetFlying(flying bool) { p.flying = flying }
