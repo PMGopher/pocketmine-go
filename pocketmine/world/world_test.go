@@ -381,3 +381,25 @@ func TestGetOrLoadChunkAtPositionSetsBlockStateID(t *testing.T) {
 		t.Errorf("GetTypeId() after chunk adapter Set = %d, want STONE (%d)", got.GetTypeId(), block.STONE)
 	}
 }
+
+func TestGetSafeSpawnFindsTheFlatWorldsGroundFromHighUpInTheAir(t *testing.T) {
+	w := newTestWorld()
+	// newTestWorld's Flat layout (see its own doc comment on generator.VanillaFlatLayers): grass
+	// tops out at y=63, air above.
+	got := w.GetSafeSpawn(math.NewVector3(5, 100, 5))
+	want := math.NewVector3(5, 64, 5)
+	if got != want {
+		t.Errorf("GetSafeSpawn(5,100,5) = %v, want %v (standing on top of the grass at y=63)", got, want)
+	}
+}
+
+func TestGetSafeSpawnFindsGroundWhenStartingBuriedInsideSolidStone(t *testing.T) {
+	w := newTestWorld()
+	got := w.GetSafeSpawn(math.NewVector3(5, 30, 5))
+	if got.Y <= 30 {
+		t.Errorf("GetSafeSpawn(5,30,5) (buried in stone) = %v, want a Y above the stone/dirt/grass column (> 30)", got)
+	}
+	if got.X != 5 || got.Z != 5 {
+		t.Errorf("GetSafeSpawn(5,30,5) changed the x/z column to %v,%v, want it to stay 5,5", got.X, got.Z)
+	}
+}

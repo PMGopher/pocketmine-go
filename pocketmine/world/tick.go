@@ -49,6 +49,11 @@ func computeSkyLightReduction(sunAnglePercentage float64) int {
 	return int(percentage * 11)
 }
 
+// IsDoingTick is a port of World::isDoingTick - true only for the duration of a DoTick call,
+// letting callers (WorldManager.UnloadWorld) refuse to unload a world out from under its own
+// currently-running tick.
+func (w *World) IsDoingTick() bool { return w.doingTick }
+
 // GetTime is a port of World::getTime.
 func (w *World) GetTime() int64 { return w.time }
 
@@ -371,6 +376,9 @@ func (w *World) unloadChunks() {
 // concerns with nothing behavioural to get wrong by omitting), and the entity-tick pass (see
 // tickChunk's own doc comment on why - no concrete Entity type exists yet to tick).
 func (w *World) DoTick(currentTick int64) {
+	w.doingTick = true
+	defer func() { w.doingTick = false }()
+
 	w.currentTick = currentTick
 
 	if !w.stopTime {

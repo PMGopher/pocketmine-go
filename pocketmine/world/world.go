@@ -42,6 +42,14 @@ type World struct {
 	generator  generator.Generator
 	translator *convert.BlockTranslator
 
+	// id/folderName/displayName are set by WorldManager (LoadWorld/GenerateWorld) - a bare in-
+	// memory World constructed directly via New (as main.go's own single-world setup still does)
+	// simply never has them populated, matching a world with id 0 and no name being harmless
+	// (nothing in World itself reads them).
+	id          int
+	folderName  string
+	displayName string
+
 	chunks map[[2]int]*format.Chunk
 
 	// populated tracks which chunks have already run PopulateChunk - see ensurePopulated's doc
@@ -152,6 +160,9 @@ type World struct {
 	// stopTime mirrors World::$stopTime - see StopTime/StartTime's own doc comment.
 	stopTime bool
 
+	// doingTick mirrors World::$doingTick - see IsDoingTick's own doc comment.
+	doingTick bool
+
 	rng *rand.Rand
 }
 
@@ -196,6 +207,18 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 	}
 	return w
 }
+
+// GetID is a port of World::getId.
+func (w *World) GetID() int { return w.id }
+
+// GetFolderName is a port of World::getFolderName.
+func (w *World) GetFolderName() string { return w.folderName }
+
+// GetDisplayName is a port of World::getDisplayName.
+func (w *World) GetDisplayName() string { return w.displayName }
+
+// SetDisplayName is a port of World::setDisplayName.
+func (w *World) SetDisplayName(name string) { w.displayName = name }
 
 // GetChunk is a port of World::getChunk: a non-generating lookup (unlike GetOrLoadChunk/
 // generateChunkOnly, this never creates a chunk that isn't already loaded) - the
@@ -709,4 +732,60 @@ func (w *World) IsInWorld(x, y, z int) bool {
 func (w *World) UseBreakOn(pos math.Vector3) bool {
 	_ = w.SetBlock(block.NewPosition(pos.X, pos.Y, pos.Z, w), block.VanillaAir())
 	return true
+}
+
+// fullCubeChecker is the local surface GetSafeSpawn's flatness checks need - IsFullCube is
+// promoted from *block.Block, not part of block.Behavior itself (same "declare the exact promoted
+// method this file needs" convention as positionable above).
+type fullCubeChecker interface {
+	IsFullCube() bool
+}
+
+func (w *World) isFullCube(x, y, z int) bool {
+	fc, ok := w.GetBlockAt(x, y, z).(fullCubeChecker)
+	return ok && fc.IsFullCube()
+}
+
+// GetSafeSpawn is a port of World::getSafeSpawn: searches vertically at spawn's x/z column for a
+// safe (2-block-high air pocket resting on a solid full cube) position near spawn's own height,
+// falling back to wherever the search ends up if nothing better is found. Doesn't accept spawn's
+// own nil-Vector3 default (real PHP's `?Vector3 $spawn = null` falling back to
+// `$this->getSpawnLocation()`) - this port has no stored "world spawn location" field yet (see
+// GetSafeSpawn's own callers, which always have a concrete candidate point in hand already), so
+// callers pass one explicitly instead.
+func (w *World) GetSafeSpawn(spawn math.Vector3) math.Vector3 {
+	v := spawn.Floor()
+	x, z := int(v.X), int(v.Z)
+
+	y := int(v.Y)
+	if YMax-2 < y {
+		y = YMax - 2
+	}
+
+	wasAir := w.GetBlockAt(x, y-1, z).GetTypeId() == block.AIR
+	for ; y > YMin; y-- {
+		if w.isFullCube(x, y, z) {
+			if wasAir {
+				y++
+			}
+			break
+		}
+		wasAir = true
+	}
+
+	for ; y >= YMin && y < YMax; y++ {
+		if !w.isFullCube(x, y+1, z) {
+			if !w.isFullCube(x, y, z) {
+				resultY := float64(y)
+				if y == int(spawn.Y) {
+					resultY = spawn.Y
+				}
+				return math.NewVector3(spawn.X, resultY, spawn.Z)
+			}
+		} else {
+			y++
+		}
+	}
+
+	return math.NewVector3(spawn.X, float64(y), spawn.Z)
 }
