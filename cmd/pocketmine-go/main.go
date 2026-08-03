@@ -12,8 +12,8 @@
 // way to spawning in far less time than reimplementing the wire format from scratch would.
 //
 // This is still an early milestone, not a playable server: block interaction (breaking/placing),
-// inventory, and every other gameplay packet beyond spawning and seeing terrain aren't wired up
-// yet - see handleConn's read loop.
+// inventory, and every other gameplay packet beyond spawning, moving around and seeing terrain
+// aren't wired up yet - see handleConn's read loop.
 package main
 
 import (
@@ -96,10 +96,10 @@ func main() {
 
 	logger.Info(fmt.Sprintf("%s %s is listening on %s", pocketmine.Name, pocketmine.Version().GetFullVersion(true), addr))
 
-	spawnY := computeSpawnY(w)
-	logger.Info(fmt.Sprintf("world seed %d, spawn height %d", *seed, spawnY))
+	spawn := computeSpawn(w)
+	logger.Info(fmt.Sprintf("world seed %d, spawn at %d,%d,%d", *seed, spawn.X, spawn.Y, spawn.Z))
 
-	go acceptLoop(listener, w, int64(*seed), spawnY, logger)
+	go acceptLoop(listener, w, int64(*seed), spawn, logger)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -108,24 +108,50 @@ func main() {
 	logger.Info("Shutting down...")
 }
 
-// computeSpawnY finds the real ground level at the world origin (0,0) - unlike Flat's fixed-height
-// layer stack, Normal's terrain height varies by position, so this can't be a constant.
-func computeSpawnY(w *world.World) int32 {
-	chunk := w.GetOrLoadChunk(0, 0)
-	if h, ok := chunk.GetHighestBlockAt(0, 0); ok {
-		return int32(h) + 1
+// spawnMaxSearchRadius bounds computeSpawn's outward search for dry land - generous enough to
+// escape all but exceptionally large open-ocean regions (see Normal's own doc comment on why a
+// single ocean biome can occasionally span a wide area).
+const spawnMaxSearchRadius = 128
+
+type spawnPoint struct{ X, Y, Z int32 }
+
+// computeSpawn finds a safe spawn point near the world origin: the first column, searching
+// outward in a square spiral, whose surface isn't a liquid (matching the intent, if not the exact
+// algorithm, of World::getSafeSpawn - real PocketMine-MP's search is chunk-order/border-aware in
+// ways this port's single in-memory World doesn't need). Falls back to (0, 64, 0) if nothing
+// suitable turns up within spawnMaxSearchRadius blocks, which should only happen deep inside an
+// unusually large ocean.
+func computeSpawn(w *world.World) spawnPoint {
+	for radius := 0; radius <= spawnMaxSearchRadius; radius++ {
+		for x := -radius; x <= radius; x++ {
+			for z := -radius; z <= radius; z++ {
+				if radius > 0 && x != -radius && x != radius && z != -radius && z != radius {
+					// Only the ring at exactly this radius is new - smaller radii were already
+					// checked on earlier iterations.
+					continue
+				}
+				chunk := w.GetOrLoadChunk(x>>4, z>>4)
+				h, ok := chunk.GetHighestBlockAt(x&0xf, z&0xf)
+				if !ok {
+					continue
+				}
+				if top := w.GetBlockAt(x, h, z); !block.IsLiquid(top) {
+					return spawnPoint{int32(x), int32(h) + 1, int32(z)}
+				}
+			}
+		}
 	}
-	return 64
+	return spawnPoint{0, 64, 0}
 }
 
-func acceptLoop(listener *minecraft.Listener, w *world.World, seed int64, spawnY int32, logger log.Logger) {
+func acceptLoop(listener *minecraft.Listener, w *world.World, seed int64, spawn spawnPoint, logger log.Logger) {
 	for {
 		c, err := listener.Accept()
 		if err != nil {
 			// Accept only errors once the listener has been closed.
 			return
 		}
-		go handleConn(c.(*minecraft.Conn), listener, w, seed, spawnY, logger)
+		go handleConn(c.(*minecraft.Conn), listener, w, seed, spawn, logger)
 	}
 }
 
@@ -140,7 +166,7 @@ func acceptLoop(listener *minecraft.Listener, w *world.World, seed int64, spawnY
 // handful of types wired up so far - see pocketmine/block/vanilla_blocks.go). A client can still
 // complete StartGame/spawn without it, just with incomplete item names/icons until that's filled
 // in.
-func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, seed int64, spawnY int32, logger log.Logger) {
+func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, seed int64, spawn spawnPoint, logger log.Logger) {
 	defer conn.Close()
 	defer listener.Disconnect(conn, "server closed")
 
@@ -154,8 +180,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		EntityUniqueID:  1,
 		EntityRuntimeID: 1,
 		PlayerGameMode:  0, // survival
-		PlayerPosition:  mgl32.Vec3{0.5, float32(spawnY), 0.5},
-		WorldSpawn:      protocol.BlockPos{0, spawnY, 0},
+		PlayerPosition:  mgl32.Vec3{float32(spawn.X) + 0.5, float32(spawn.Y), float32(spawn.Z) + 0.5},
+		WorldSpawn:      protocol.BlockPos{spawn.X, spawn.Y, spawn.Z},
 		WorldGameMode:   0,
 		Time:            6000,
 		GameRules:       []protocol.GameRule{{Name: "showcoordinates", Value: true}},
@@ -164,9 +190,30 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		logger.Warning(fmt.Sprintf("%s failed to start game: %v", name, err))
 		return
 	}
+
+	// Real Bedrock servers always follow StartGame with UpdateAbilities - without it the client has
+	// no ability layer at all for its local player, which (empirically) can leave it refusing to
+	// process movement input. Survival-appropriate defaults (can build/mine/interact/attack, no
+	// flying/noclip/invulnerability) mirror what a fresh survival PocketMine-MP player gets.
+	abilities := uint32(protocol.AbilityBuild | protocol.AbilityMine | protocol.AbilityDoorsAndSwitches |
+		protocol.AbilityOpenContainers | protocol.AbilityAttackPlayers | protocol.AbilityAttackMobs)
+	if err := conn.WritePacket(&packet.UpdateAbilities{AbilityData: protocol.AbilityData{
+		EntityUniqueID:     data.EntityUniqueID,
+		PlayerPermissions:  packet.PermissionLevelMember,
+		CommandPermissions: protocol.CommandPermissionLevelAny,
+		Layers: []protocol.AbilityLayer{{
+			Type:      protocol.AbilityLayerTypeBase,
+			Abilities: protocol.AbilityCount - 1,
+			Values:    abilities,
+			WalkSpeed: protocol.AbilityBaseWalkSpeed,
+		}},
+	}}); err != nil {
+		logger.Warning(fmt.Sprintf("%s: failed to send abilities: %v", name, err))
+		return
+	}
 	logger.Info(fmt.Sprintf("%s spawned, sending terrain...", name))
 
-	if err := sendSpawnChunks(conn, w, spawnY); err != nil {
+	if err := sendSpawnChunks(conn, w, spawn); err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to send terrain: %v", name, err))
 		return
 	}
@@ -180,7 +227,17 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		}
 		switch pk.(type) {
 		case *packet.Text:
-			// Chat isn't wired to anything yet - just proves packets round-trip both ways.
+			// Chat isn't broadcast to anyone yet - just proves packets round-trip both ways.
+		case *packet.PlayerAuthInput:
+			// The client reports its own predicted position/rotation every tick once
+			// server-authoritative movement is active (see PlayerAuthInput's own doc comment - this
+			// is now the only movement path modern Bedrock versions speak, MovePlayer/client-
+			// authoritative movement no longer exists in this protocol version). This port doesn't
+			// track a real per-player entity yet (no collision/physics/gravity, no broadcasting
+			// this position to other players), so for now the client's report is simply trusted
+			// as-is - the same "no correction unless there's a pending teleport" approach real
+			// Bedrock servers use for ordinary movement (see e.g. Dragonfly's
+			// PlayerAuthInputHandler), just without a server-side Player to update yet.
 		}
 	}
 }
@@ -190,9 +247,10 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 // pieces PocketMine-MP's own chunk-sending path needs, minus real per-player view-distance-driven
 // streaming as chunks come in and out of range (this port sends one fixed area to every player
 // today, regardless of where they go afterwards).
-func sendSpawnChunks(conn *minecraft.Conn, w *world.World, spawnY int32) error {
-	for x := -spawnChunkRadius; x <= spawnChunkRadius; x++ {
-		for z := -spawnChunkRadius; z <= spawnChunkRadius; z++ {
+func sendSpawnChunks(conn *minecraft.Conn, w *world.World, spawn spawnPoint) error {
+	centerX, centerZ := int(spawn.X)>>4, int(spawn.Z)>>4
+	for x := centerX - spawnChunkRadius; x <= centerX+spawnChunkRadius; x++ {
+		for z := centerZ - spawnChunkRadius; z <= centerZ+spawnChunkRadius; z++ {
 			chunk := w.GetOrLoadChunk(x, z)
 			payload := serializer.SerializeFullChunk(chunk, w.Translator())
 			pk := &packet.LevelChunk{
@@ -208,7 +266,7 @@ func sendSpawnChunks(conn *minecraft.Conn, w *world.World, spawnY int32) error {
 
 	radiusBlocks := uint32(spawnChunkRadius) << 4
 	return conn.WritePacket(&packet.NetworkChunkPublisherUpdate{
-		Position: protocol.BlockPos{0, spawnY, 0},
+		Position: protocol.BlockPos{spawn.X, spawn.Y, spawn.Z},
 		Radius:   radiusBlocks,
 	})
 }
