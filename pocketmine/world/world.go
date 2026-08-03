@@ -4,8 +4,10 @@ package world
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
+	"time"
 
 	goleveldb "github.com/syndtr/goleveldb/leveldb"
 
@@ -84,7 +86,73 @@ type World struct {
 	// keyed by registeredEntity.GetID(), a flat map rather than PHP's per-chunk index (see
 	// GetNearbyEntities' own doc comment on why that's a performance detail, not a correctness one).
 	entities map[int]registeredEntity
+
+	// --- tick.go: time/weather, scheduled+neighbour block updates, chunk loading/ticking/unload ---
+
+	// time is a port of World::$time (whole ticks elapsed, driving day/night - see
+	// computeSunAnglePercentage). Go's int64 increment wraps on overflow exactly the way real
+	// PHP's actuallyDoTick explicitly simulates (PHP_INT_MAX -> PHP_INT_MIN) - not a coincidence
+	// this needs replicating by hand, just two languages agreeing on twos-complement wraparound.
+	time               int64
+	sunAnglePercentage float64
+
+	// randomTickBlocks is the per-state-ID "does this state tick randomly" lookup tickChunk samples
+	// against - built alongside stateTemplates in registerTemplate (matches
+	// RuntimeBlockStateRegistry building $this->randomTickBlocks the same way, from every
+	// registered state's own ticksRandomly()).
+	randomTickBlocks map[int32]bool
+
+	// scheduledUpdates/scheduledUpdateDelay are ScheduleDelayedBlockUpdate's queue - a plain slice
+	// scanned each tick (see updateScheduledBlocks) rather than PHP's SplPriorityQueue, since this
+	// port has no need for the queue to stay sorted between ticks (a full scan of "is it due yet"
+	// is simpler and just as correct at this port's scale). scheduledUpdateDelay mirrors
+	// scheduledBlockUpdateQueueIndex - the raw requested delay, used for the "don't schedule a
+	// later duplicate" dedup check.
+	scheduledUpdates     []scheduledBlockUpdate
+	scheduledUpdateDelay map[[3]int]int
+
+	// neighbourUpdateQueue/neighbourUpdateQueued are NotifyNeighbourBlockUpdate's queue - same
+	// plain-slice-plus-dedup-set shape as the scheduled update queue above, replacing PHP's
+	// SplQueue+blockHash index with a directly-keyed [3]int (see world/light's own doc comment on
+	// this port's established preference for using Go's native comparable-struct map keys instead
+	// of porting World::blockHash's morton-code packing, which exists only because PHP arrays can't
+	// key on a tuple).
+	neighbourUpdateQueue  [][3]int
+	neighbourUpdateQueued map[[3]int]bool
+
+	// currentTick is set at the start of each DoTick call - ScheduleDelayedBlockUpdate needs it to
+	// compute a due tick (currentTick+delay) even when called from outside DoTick itself (e.g. a
+	// block's OnRandomTick or OnScheduledUpdate scheduling a follow-up update mid-tick).
+	currentTick int64
+
+	// chunkLoaders/tickingChunks are ChunkLoader/ChunkTicker registration - both real PHP types are
+	// empty marker interfaces (zero methods - see ChunkLoader.php/ChunkTicker.php), so Go needs no
+	// interface for them at all: just `any`, tracked by pointer identity (Go maps key pointers by
+	// identity natively) exactly like PHP's own spl_object_id-keyed inner arrays.
+	chunkLoaders  map[[2]int]map[any]bool
+	tickingChunks map[[2]int]map[any]bool
+
+	// chunkTickRadius mirrors World::$chunkTickRadius (pocketmine.yml's chunk-ticking.tick-radius,
+	// default 4) - tickChunks() is a no-op while this is <= 0.
+	chunkTickRadius int
+
+	// unloadQueue records the tick each now-loader-free chunk became eligible for unloading (see
+	// UnregisterChunkLoader) - unloadChunks() only actually unloads a chunk once it's been
+	// loader-free for unloadGraceTicks, matching real PHP's own 30-real-second grace window (see
+	// World::unloadChunks' own `$time > ($now - 30)` check) translated to a tick count at this
+	// port's fixed 20 TPS.
+	unloadQueue map[[2]int]int64
+
+	// stopTime mirrors World::$stopTime - see StopTime/StartTime's own doc comment.
+	stopTime bool
+
+	rng *rand.Rand
 }
+
+// unloadGraceTicks mirrors World::unloadChunks' 30-second grace window at a fixed 20 ticks/second
+// (this port has no variable-TPS concept to measure real elapsed seconds against, unlike PHP's
+// microtime(true) check).
+const unloadGraceTicks = 30 * 20
 
 // New constructs a World using gen to generate chunks on demand. knownBlocks must include at
 // least one Behavior for every distinct block type gen can place (e.g. for a Flat generator,
@@ -102,6 +170,15 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 		lightEmitters:          map[int32]int{},
 		directSkyLightBlockers: map[int32]bool{},
 		entities:               map[int]registeredEntity{},
+		sunAnglePercentage:     0.5,
+		randomTickBlocks:       map[int32]bool{},
+		scheduledUpdateDelay:   map[[3]int]int{},
+		neighbourUpdateQueued:  map[[3]int]bool{},
+		chunkLoaders:           map[[2]int]map[any]bool{},
+		tickingChunks:          map[[2]int]map[any]bool{},
+		chunkTickRadius:        4,
+		unloadQueue:            map[[2]int]int64{},
+		rng:                    rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	w.subChunkExplorer = utils.NewSubChunkExplorer(w)
 	w.skyLightUpdate = light.NewSkyLightUpdate(w.subChunkExplorer, w.lightFilters, w.directSkyLightBlockers)
@@ -145,6 +222,10 @@ func (w *World) registerTemplate(blk block.Behavior) {
 		w.lightFilters[stateID] = min(15, blk.GetLightFilter()+light.BaseLightFilter)
 		w.lightEmitters[stateID] = blk.GetLightLevel()
 		w.directSkyLightBlockers[stateID] = blk.BlocksDirectSkyLight()
+	}
+
+	if blk.TicksRandomly() {
+		w.randomTickBlocks[stateID] = true
 	}
 }
 
@@ -290,6 +371,7 @@ func (w *World) ensurePopulated(chunkX, chunkZ int) {
 		}
 	}
 	w.generator.PopulateChunk(w, chunkX, chunkZ)
+	w.chunks[key].SetPopulated(true)
 
 	// Light is recalculated after population (not generation) so it reflects the final terrain -
 	// populators (Tree, Ore, ...) can add/remove blocks with real light filters/emission that
@@ -333,13 +415,23 @@ type positionable interface {
 	SetPosition(world block.World, x, y, z int)
 }
 
-// SetBlock is a port of World::setBlock. Also registers blk as a state template (see
+// SetBlock is a port of World::setBlockAt with $update always true (block.World has no caller that
+// ever needs the $update=false fast path). Also registers blk as a state template (see
 // registerTemplate) so it can be read back later even if it wasn't in New's knownBlocks list.
 func (w *World) SetBlock(pos block.Position, blk block.Behavior) error {
 	x, y, z := pos.FloorX(), pos.FloorY(), pos.FloorZ()
 	w.registerTemplate(blk)
 	chunk := w.generateChunkOnly(x>>4, z>>4)
 	chunk.SetBlockStateID(x&0xf, y, z&0xf, int32(blk.GetStateId()))
+
+	// Matches updateAllLight's own guard: recalculating light against a chunk whose light hasn't
+	// been calculated at all yet would be meaningless (and RecalculateNode's BFS assumes its
+	// starting light values are already meaningful).
+	if lit, known := chunk.IsLightPopulated(); known && lit {
+		w.skyLightUpdate.RecalculateNode(x, y, z)
+		w.blockLightUpdate.RecalculateNode(x, y, z)
+	}
+	w.internalNotifyNeighbourBlockUpdate(x, y, z)
 	return nil
 }
 
@@ -401,10 +493,30 @@ func (w *World) GetOrLoadChunkAtPosition(pos block.Position) (block.Chunk, bool)
 // guess at how broadcasting should work.
 func (w *World) AddSound(pos math.Vector3, s sound.Sound) {}
 
-// ScheduleDelayedBlockUpdate is a port of World::scheduleDelayedBlockUpdate. This port has no
-// world tick scheduler yet (see pocketmine/scheduler, which exists but isn't wired to a running
-// World), so this is a documented no-op.
-func (w *World) ScheduleDelayedBlockUpdate(pos math.Vector3, delay int) {}
+// scheduledBlockUpdate is one entry in World's scheduled-block-update queue (see
+// ScheduleDelayedBlockUpdate/updateScheduledBlocks in tick.go).
+type scheduledBlockUpdate struct {
+	pos     [3]int
+	dueTick int64
+}
+
+// ScheduleDelayedBlockUpdate is a port of World::scheduleDelayedBlockUpdate: the position's block
+// gets OnScheduledUpdate() called on it once delay ticks have passed (see updateScheduledBlocks,
+// called from DoTick). Matches the PHP original's dedup rule exactly: if a scheduled update for
+// this exact position already exists with an equal-or-shorter delay, this new request is dropped
+// (the existing one will already fire in time).
+func (w *World) ScheduleDelayedBlockUpdate(pos math.Vector3, delay int) {
+	x, y, z := pos.FloorX(), pos.FloorY(), pos.FloorZ()
+	if !w.IsInWorld(x, y, z) {
+		return
+	}
+	key := [3]int{x, y, z}
+	if existingDelay, ok := w.scheduledUpdateDelay[key]; ok && existingDelay <= delay {
+		return
+	}
+	w.scheduledUpdateDelay[key] = delay
+	w.scheduledUpdates = append(w.scheduledUpdates, scheduledBlockUpdate{pos: key, dueTick: w.currentTick + int64(delay)})
+}
 
 // GetBlockLightAt is a port of World::getBlockLightAt.
 func (w *World) GetBlockLightAt(x, y, z int) int {
@@ -492,15 +604,16 @@ func (w *World) GetHighestAdjacentBlockLightAt(x, y, z int) int {
 	return w.getHighestAdjacentLight(x, y, z, w.GetBlockLightAt)
 }
 
-// GetSkyLightReduction is a port of World::getSkyLightReduction: how much sky light is currently
-// reduced by weather/time of day. This port has no real weather/day-night cycle driving it yet
-// (see GetSunAnglePercentage's own doc comment on the same gap), so it's a fixed 0 (a permanently
-// clear midday sky) rather than a guess - revisited once real time/weather exist.
+// GetSkyLightReduction is a port of World::getSkyLightReduction: how many points of sky light are
+// currently subtracted for time of day (weather/rain isn't factored in - matches real PHP's own
+// "TODO: check rain and thunder level" on computeSkyLightReduction). Recomputed once per tick in
+// DoTick, not lazily, matching the real field's own update point.
 func (w *World) GetSkyLightReduction() int { return w.skyLightReduction }
 
-// GetSunAnglePercentage is a port of World::getSunAnglePercentage. This port has no day/night
-// cycle yet, so this reports a fixed midday value (0.5) rather than a guess.
-func (w *World) GetSunAnglePercentage() float64 { return 0.5 }
+// GetSunAnglePercentage is a port of World::getSunAnglePercentage - the percentage of a full circle
+// away from noon the sun currently is (see computeSunAnglePercentage in tick.go for the formula).
+// Recomputed once per tick in DoTick from World.time.
+func (w *World) GetSunAnglePercentage() float64 { return w.sunAnglePercentage }
 
 // registeredEntity is the minimal surface World's entity registry needs beyond block.Entity
 // itself (a unique ID, and whether it's already been closed) - declared locally, matching this

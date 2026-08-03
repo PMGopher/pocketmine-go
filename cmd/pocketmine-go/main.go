@@ -23,6 +23,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/sandertv/gophertunnel/minecraft"
@@ -118,6 +119,16 @@ func main() {
 	spawn := computeSpawn(w)
 	logger.Info(fmt.Sprintf("world seed %d, spawn at %d,%d,%d", *seed, spawn.X, spawn.Y, spawn.Z))
 
+	// This port sends every player the same fixed spawnChunkRadius area (see sendSpawnChunks' own
+	// doc comment on the lack of real per-player view-distance streaming) rather than loading
+	// chunks per-player as they move - so, matching that, the spawn area itself is registered as a
+	// single permanently-loaded/ticking region for the server's whole lifetime (akin to real
+	// PocketMine-MP's own "spawn-radius keeps chunks loaded" behaviour), under one shared loader
+	// identity rather than per-connection tokens.
+	registerSpawnAreaAsPermanentlyLoaded(w, spawn)
+
+	go runTickLoop(w)
+
 	reg := newRegistry(logger)
 	go acceptLoop(listener, w, reg, int64(*seed), spawn, logger)
 
@@ -162,6 +173,47 @@ func computeSpawn(w *world.World) spawnPoint {
 		}
 	}
 	return spawnPoint{0, 64, 0}
+}
+
+// spawnAreaLoader is the shared identity token registered with every chunk in the spawn area (see
+// registerSpawnAreaAsPermanentlyLoaded) - World.RegisterChunkLoader/RegisterTickingChunk only need
+// something comparable for identity (real PocketMine-MP's ChunkLoader/ChunkTicker are themselves
+// empty marker interfaces - see World.RegisterChunkLoader's own doc comment), so an unexported
+// empty struct works exactly as well as a real object would.
+type spawnAreaLoader struct{}
+
+// registerSpawnAreaAsPermanentlyLoaded generates, registers as loaded (so it's never eligible for
+// World.UnregisterChunkLoader-driven unloading) and registers for random ticking every chunk in
+// the same fixed area sendSpawnChunks sends to every player.
+func registerSpawnAreaAsPermanentlyLoaded(w *world.World, spawn spawnPoint) {
+	loader := &spawnAreaLoader{}
+	centerX, centerZ := int(spawn.X)>>4, int(spawn.Z)>>4
+	for x := centerX - spawnChunkRadius; x <= centerX+spawnChunkRadius; x++ {
+		for z := centerZ - spawnChunkRadius; z <= centerZ+spawnChunkRadius; z++ {
+			w.GetOrLoadChunk(x, z)
+			w.RegisterChunkLoader(loader, x, z)
+			w.RegisterTickingChunk(loader, x, z)
+		}
+	}
+}
+
+// ticksPerSecond matches real PocketMine-MP/Minecraft's fixed 20 TPS.
+const ticksPerSecond = 20
+
+// runTickLoop drives World.DoTick once per game tick for as long as the process runs - this port's
+// equivalent of real PocketMine-MP's Server's own tick timer calling World::doTick on every loaded
+// world. It's never explicitly stopped: main's own shutdown path (the signal wait in main()) exits
+// the whole process right after, which is enough to stop this goroutine too - the same "no graceful
+// per-goroutine shutdown needed" reasoning acceptLoop's own goroutine already relies on.
+func runTickLoop(w *world.World) {
+	ticker := time.NewTicker(time.Second / ticksPerSecond)
+	defer ticker.Stop()
+
+	var currentTick int64
+	for range ticker.C {
+		currentTick++
+		w.DoTick(currentTick)
+	}
 }
 
 func acceptLoop(listener *minecraft.Listener, w *world.World, reg *registry, seed int64, spawn spawnPoint, logger log.Logger) {
