@@ -148,3 +148,6 @@ type ChorusFlowerGrowSound struct{}
 
 // ChorusFlowerDieSound is a port of pocketmine\world\sound\ChorusFlowerDieSound.
 type ChorusFlowerDieSound struct{}
+
+// ExplodeSound is a port of pocketmine\world\sound\ExplodeSound.
+type ExplodeSound struct{}

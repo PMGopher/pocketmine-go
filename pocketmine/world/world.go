@@ -77,6 +77,12 @@ type World struct {
 	lightEmitters          map[int32]int
 	directSkyLightBlockers map[int32]bool
 
+	// blastResistance is Explosion's per-state lookup table (see explosion.go), built in
+	// registerTemplate from every registered block's real GetBreakInfo().GetBlastResistance() -
+	// the same "only what's registered" scope every other per-state table in this port already has
+	// (matches RuntimeBlockStateRegistry::$blastResistance).
+	blastResistance map[int32]float64
+
 	subChunkExplorer  *utils.SubChunkExplorer
 	skyLightUpdate    *light.SkyLightUpdate
 	blockLightUpdate  *light.BlockLightUpdate
@@ -169,6 +175,7 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 		lightFilters:           map[int32]int{},
 		lightEmitters:          map[int32]int{},
 		directSkyLightBlockers: map[int32]bool{},
+		blastResistance:        map[int32]float64{},
 		entities:               map[int]registeredEntity{},
 		sunAnglePercentage:     0.5,
 		randomTickBlocks:       map[int32]bool{},
@@ -222,6 +229,10 @@ func (w *World) registerTemplate(blk block.Behavior) {
 		w.lightFilters[stateID] = min(15, blk.GetLightFilter()+light.BaseLightFilter)
 		w.lightEmitters[stateID] = blk.GetLightLevel()
 		w.directSkyLightBlockers[stateID] = blk.BlocksDirectSkyLight()
+	}
+
+	if _, ok := w.blastResistance[stateID]; !ok {
+		w.blastResistance[stateID] = blk.GetBreakInfo().GetBlastResistance()
 	}
 
 	if blk.TicksRandomly() {

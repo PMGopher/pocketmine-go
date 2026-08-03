@@ -69,6 +69,8 @@ var (
 	vanillaSpruceLeaves      Behavior
 	vanillaBirchLog          Behavior
 	vanillaBirchLeaves       Behavior
+	vanillaFire              Behavior
+	vanillaTNT               Behavior
 )
 
 // vanillaHarvestLevel is a minimal block.ToolTier implementation (GetHarvestLevel only) for use
@@ -591,4 +593,22 @@ func VanillaBirchLeaves() Behavior {
 		vanillaBirchLeaves = NewLeaves(mustVanillaBlockIdentifier(BIRCH_LEAVES), "Birch Leaves", NewBlockTypeInfo(vanillaLeavesBreakInfo(), nil, nil), blockutils.LeavesTypeBirch)
 	}
 	return vanillaBirchLeaves.Clone()
+}
+
+// VanillaFire is a port of VanillaBlocks::FIRE() - see VanillaBlocksInputs.php's
+// register("fire", ...): new Info(BreakInfo::instant(), [Tags::FIRE]).
+func VanillaFire() Behavior {
+	if vanillaFire == nil {
+		vanillaFire = NewFire(mustVanillaBlockIdentifier(FIRE), "Fire", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), []string{BlockTypeTagsFire}, nil))
+	}
+	return vanillaFire.Clone()
+}
+
+// VanillaTNT is a port of VanillaBlocks::TNT() - see VanillaBlocksInputs.php's
+// register("tnt", ...): new Info(BreakInfo::instant()).
+func VanillaTNT() Behavior {
+	if vanillaTNT == nil {
+		vanillaTNT = NewTNT(mustVanillaBlockIdentifier(TNT), "TNT", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
+	}
+	return vanillaTNT.Clone()
 }
