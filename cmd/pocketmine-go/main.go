@@ -288,7 +288,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	logger.Info(fmt.Sprintf("%s connecting from %s", name, conn.RemoteAddr()))
 
 	spawnVec := mgl32.Vec3{float32(spawn.X) + 0.5, float32(spawn.Y), float32(spawn.Z) + 0.5}
-	sess, err := newSession(conn, spawnVec)
+	sess, err := newSession(conn, w, spawnVec)
 	if err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to build session: %v", name, err))
 		return

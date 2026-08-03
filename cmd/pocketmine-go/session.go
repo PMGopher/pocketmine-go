@@ -14,6 +14,9 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine/log"
+	pmmath "pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/player"
+	"pocketmine-go/pocketmine/world"
 )
 
 // nextEntityRuntimeID hands out a unique EntityRuntimeID/EntityUniqueID to every connecting
@@ -23,12 +26,16 @@ var nextEntityRuntimeID atomic.Uint64
 
 func init() { nextEntityRuntimeID.Store(1) }
 
-// session is this port's minimal stand-in for pocketmine\player\Player: just enough player state
-// (identity, skin, position/rotation) to make one connected player visible to every other one.
-// A real Player (health, inventory, gamemode transitions, ...) is a separate, much larger
-// undertaking this doesn't attempt yet.
+// session is this port's connection-level wrapper around a real player.Player: the identity/skin/
+// position-rotation state a connected network session needs to speak the Bedrock protocol
+// (AddPlayer/PlayerList/MovePlayer packets all want float32 mgl32.Vec3/degrees, not the float64
+// math.Vector3 player.Player itself uses), plus the *player.Player it keeps in sync so the rest of
+// this port (World.AddEntity, block-breaking, ...) has a real entity to work with instead of this
+// file's own bespoke player-shaped state.
 type session struct {
-	conn            *minecraft.Conn
+	conn   *minecraft.Conn
+	player *player.Player
+
 	name            string
 	uuid            uuid.UUID
 	entityRuntimeID uint64
@@ -41,7 +48,7 @@ type session struct {
 	headYaw    float32
 }
 
-func newSession(conn *minecraft.Conn, spawn mgl32.Vec3) (*session, error) {
+func newSession(conn *minecraft.Conn, w *world.World, spawn mgl32.Vec3) (*session, error) {
 	id := conn.IdentityData()
 
 	playerUUID, err := uuid.Parse(id.Identity)
@@ -58,8 +65,12 @@ func newSession(conn *minecraft.Conn, spawn mgl32.Vec3) (*session, error) {
 	}
 
 	runtimeID := nextEntityRuntimeID.Add(1) - 1
+	spawnVec := pmmath.NewVector3(float64(spawn[0]), float64(spawn[1]), float64(spawn[2]))
+	plr := player.NewPlayer(int(runtimeID), id.DisplayName, playerUUID.String(), id.XUID, w, spawnVec, player.GameModeSurvival)
+
 	return &session{
 		conn:            conn,
+		player:          plr,
 		name:            id.DisplayName,
 		uuid:            playerUUID,
 		entityRuntimeID: runtimeID,
@@ -80,10 +91,16 @@ func (s *session) Rotation() (pitch, yaw, headYaw float32) {
 	return s.pitch, s.yaw, s.headYaw
 }
 
+// SetPositionAndRotation updates both this session's own network-facing (float32) state and the
+// real player.Player registered in the World, keeping the two in sync - the World-side entity is
+// the one anything outside network handling (block-breaking, future broadcast code) ever sees.
 func (s *session) SetPositionAndRotation(pos mgl32.Vec3, pitch, yaw, headYaw float32) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.position, s.pitch, s.yaw, s.headYaw = pos, pitch, yaw, headYaw
+	s.mu.Unlock()
+
+	s.player.SetPosition(pmmath.NewVector3(float64(pos[0]), float64(pos[1]), float64(pos[2])))
+	s.player.SetRotation(float64(yaw), float64(pitch))
 }
 
 // addPlayerPacket is a port of the AddPlayer packet real PocketMine-MP sends to make one player's
@@ -205,8 +222,10 @@ func (r *registry) Count() int {
 }
 
 // Join is a port of the network-visible half of World::addPlayer: shows every already-connected
-// player to the new session, the new session to every already-connected player, and finally
-// registers it so future joins/moves/leaves reach it too.
+// player to the new session, the new session to every already-connected player, registers it so
+// future joins/moves/leaves reach it too, and registers the real player.Player as a genuine World
+// entity (World::addPlayer's own $this->players[...] = $player registration, minus the network
+// side already handled above).
 func (r *registry) Join(s *session) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -216,6 +235,7 @@ func (r *registry) Join(s *session) {
 		r.sendPlayerTo(s, other)
 	}
 	r.sessions[s.entityRuntimeID] = s
+	s.player.GetWorld().AddEntity(s.player)
 }
 
 // sendPlayerTo sends the PlayerList entry + AddPlayer needed for target to see subject.
@@ -228,11 +248,13 @@ func (r *registry) sendPlayerTo(target, subject *session) {
 }
 
 // Leave is a port of the network-visible half of World::removePlayer: tells every other connected
-// player this session is gone.
+// player this session is gone, and unregisters the real player.Player from the World it was
+// registered in (World::removePlayer's own unset($this->players[...])).
 func (r *registry) Leave(s *session) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.sessions, s.entityRuntimeID)
+	s.player.GetWorld().RemoveEntity(s.player)
 
 	for _, other := range r.sessions {
 		_ = other.conn.WritePacket(&packet.RemoveActor{EntityUniqueID: s.entityUniqueID})
