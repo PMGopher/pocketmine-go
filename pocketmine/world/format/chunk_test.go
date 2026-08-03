@@ -1,6 +1,33 @@
 package format
 
-import "testing"
+import (
+	"testing"
+
+	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/nbt"
+)
+
+// fakeTile is a minimal tile.Tile for exercising Chunk's tile storage in isolation - the real
+// concrete tile types (pocketmine/block/tile) don't need to exist for Chunk's own bookkeeping to
+// be tested.
+type fakeTile struct {
+	pos    tile.Position
+	closed bool
+}
+
+func newFakeTile(x, y, z float64) *fakeTile {
+	return &fakeTile{pos: tile.NewPosition(math.NewVector3(x, y, z), nil)}
+}
+
+func (f *fakeTile) ReadSaveData(n *nbt.CompoundTag) error { return nil }
+func (f *fakeTile) WriteSaveData(n *nbt.CompoundTag)      {}
+func (f *fakeTile) SaveID() string                        { return "Fake" }
+func (f *fakeTile) GetPosition() tile.Position            { return f.pos }
+func (f *fakeTile) IsClosed() bool                        { return f.closed }
+func (f *fakeTile) Close()                                { f.closed = true }
+func (f *fakeTile) OnBlockDestroyed()                     {}
+func (f *fakeTile) CopyDataFromItem(item tile.Item)       {}
 
 func TestChunkCloneIsIndependentOfOriginal(t *testing.T) {
 	c := NewChunk(nil, false, 0, 1)
@@ -114,6 +141,78 @@ func TestSubChunkIsEmptyFastAndSetGrowsLayer(t *testing.T) {
 	}
 	if got := s.GetBlockStateID(0, 0, 0); got != 5 {
 		t.Errorf("GetBlockStateID(0,0,0) = %d, want 5", got)
+	}
+}
+
+func TestChunkAddGetRemoveTile(t *testing.T) {
+	c := NewChunk(nil, false, 0, 1)
+	tl := newFakeTile(3, 70, 9)
+
+	c.AddTile(tl)
+	got, ok := c.GetTile(3, 70, 9)
+	if !ok || got != tl {
+		t.Fatalf("GetTile after AddTile = (%v, %v), want (tl, true)", got, ok)
+	}
+
+	c.RemoveTile(tl)
+	if _, ok := c.GetTile(3, 70, 9); ok {
+		t.Error("expected GetTile to report not-found after RemoveTile")
+	}
+}
+
+func TestChunkAddTilePanicsOnClosedTile(t *testing.T) {
+	c := NewChunk(nil, false, 0, 1)
+	tl := newFakeTile(0, 0, 0)
+	tl.Close()
+
+	defer func() {
+		if recover() == nil {
+			t.Error("expected AddTile to panic for a closed tile")
+		}
+	}()
+	c.AddTile(tl)
+}
+
+func TestChunkOnUnloadClosesEveryTile(t *testing.T) {
+	c := NewChunk(nil, false, 0, 1)
+	a, b := newFakeTile(0, 0, 0), newFakeTile(1, 1, 1)
+	c.AddTile(a)
+	c.AddTile(b)
+
+	c.OnUnload()
+
+	if !a.IsClosed() || !b.IsClosed() {
+		t.Error("expected OnUnload to close every tile in the chunk")
+	}
+}
+
+func TestChunkHeightMapDefaultsToTop(t *testing.T) {
+	c := NewChunk(nil, false, 0, 1)
+	want := (MaxSubChunkIndex + 1) * SubChunkEdgeLength
+	if got := c.GetHeightMap(5, 5); got != want {
+		t.Errorf("default heightmap value = %d, want %d", got, want)
+	}
+	c.SetHeightMap(5, 5, 64)
+	if got := c.GetHeightMap(5, 5); got != 64 {
+		t.Errorf("GetHeightMap after Set = %d, want 64", got)
+	}
+}
+
+func TestChunkTerrainDirtyFlags(t *testing.T) {
+	c := NewChunk(nil, false, 0, 1)
+	if !c.IsTerrainDirty() {
+		t.Error("expected a freshly constructed chunk to start dirty (DirtyFlagsAll)")
+	}
+	c.ClearTerrainDirtyFlags()
+	if c.IsTerrainDirty() {
+		t.Error("expected ClearTerrainDirtyFlags to clear dirtiness")
+	}
+	c.SetBlockStateID(0, 0, 0, 1)
+	if !c.GetTerrainDirtyFlag(DirtyFlagBlocks) {
+		t.Error("expected SetBlockStateID to set DirtyFlagBlocks")
+	}
+	if c.GetTerrainDirtyFlag(DirtyFlagBiomes) {
+		t.Error("expected DirtyFlagBiomes to still be clear")
 	}
 }
 
