@@ -334,6 +334,10 @@ func (w *World) unloadChunk(chunkX, chunkZ int, safe bool) bool {
 		}
 	}
 
+	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
+		listener.OnChunkUnloaded(chunkX, chunkZ, chunk)
+	}
+
 	chunk.OnUnload()
 	delete(w.chunks, key)
 	delete(w.populated, key)

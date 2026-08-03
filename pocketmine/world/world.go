@@ -158,6 +158,11 @@ type World struct {
 	// port's fixed 20 TPS.
 	unloadQueue map[[2]int]int64
 
+	// chunkListeners backs RegisterChunkListener/UnregisterChunkListener/GetChunkListeners (see
+	// chunk_listener.go) - real ChunkListener callbacks, not identity-only tracking like
+	// chunkLoaders/tickingChunks above, since this one actually needs to call back into caller code.
+	chunkListeners map[[2]int]map[ChunkListener]bool
+
 	// stopTime mirrors World::$stopTime - see StopTime/StartTime's own doc comment.
 	stopTime bool
 
@@ -197,6 +202,7 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 		tickingChunks:          map[[2]int]map[any]bool{},
 		chunkTickRadius:        4,
 		unloadQueue:            map[[2]int]int64{},
+		chunkListeners:         map[[2]int]map[ChunkListener]bool{},
 		rng:                    rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	w.subChunkExplorer = utils.NewSubChunkExplorer(w)
@@ -314,13 +320,25 @@ func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
 		if c, ok, err := worldio.LoadChunk(w.provider, int32(chunkX), int32(chunkZ), int32(block.VanillaAir().GetStateId()), 0, w.resolveBlockState); err == nil && ok {
 			w.chunks[key] = c
 			w.populated[key] = true // a saved chunk was always fully generated+populated before being saved
+			w.fireOnChunkLoaded(chunkX, chunkZ, c)
 			return c
 		}
 	}
 
 	c := w.generator.GenerateChunk(chunkX, chunkZ)
 	w.chunks[key] = c
+	w.fireOnChunkLoaded(chunkX, chunkZ, c)
 	return c
+}
+
+// fireOnChunkLoaded is a port of the "$oldChunk === null" branch of setChunk's own ChunkListener
+// dispatch (see World::setChunk) - this port's own chunk-creation path (generateChunkOnly) always
+// corresponds to that branch, since nothing here ever replaces an already-loaded chunk wholesale
+// (see ChunkListener.OnChunkChanged's own doc comment on that same gap).
+func (w *World) fireOnChunkLoaded(chunkX, chunkZ int, chunk *format.Chunk) {
+	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
+		listener.OnChunkLoaded(chunkX, chunkZ, chunk)
+	}
 }
 
 // resolveBlockState adapts stateByBlockKey to leveldb.StateResolver's shape.
@@ -407,6 +425,9 @@ func (w *World) ensurePopulated(chunkX, chunkZ int) {
 	}
 	w.generator.PopulateChunk(w, chunkX, chunkZ)
 	w.chunks[key].SetPopulated(true)
+	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
+		listener.OnChunkPopulated(chunkX, chunkZ, w.chunks[key])
+	}
 
 	// Light is recalculated after population (not generation) so it reflects the final terrain -
 	// populators (Tree, Ore, ...) can add/remove blocks with real light filters/emission that
@@ -465,6 +486,9 @@ func (w *World) SetBlock(pos block.Position, blk block.Behavior) error {
 	if lit, known := chunk.IsLightPopulated(); known && lit {
 		w.skyLightUpdate.RecalculateNode(x, y, z)
 		w.blockLightUpdate.RecalculateNode(x, y, z)
+	}
+	for _, listener := range w.GetChunkListeners(x>>4, z>>4) {
+		listener.OnBlockChanged(math.NewVector3(float64(x), float64(y), float64(z)))
 	}
 	w.internalNotifyNeighbourBlockUpdate(x, y, z)
 	return nil
