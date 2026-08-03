@@ -118,7 +118,8 @@ func main() {
 	spawn := computeSpawn(w)
 	logger.Info(fmt.Sprintf("world seed %d, spawn at %d,%d,%d", *seed, spawn.X, spawn.Y, spawn.Z))
 
-	go acceptLoop(listener, w, int64(*seed), spawn, logger)
+	reg := newRegistry(logger)
+	go acceptLoop(listener, w, reg, int64(*seed), spawn, logger)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -163,14 +164,14 @@ func computeSpawn(w *world.World) spawnPoint {
 	return spawnPoint{0, 64, 0}
 }
 
-func acceptLoop(listener *minecraft.Listener, w *world.World, seed int64, spawn spawnPoint, logger log.Logger) {
+func acceptLoop(listener *minecraft.Listener, w *world.World, reg *registry, seed int64, spawn spawnPoint, logger log.Logger) {
 	for {
 		c, err := listener.Accept()
 		if err != nil {
 			// Accept only errors once the listener has been closed.
 			return
 		}
-		go handleConn(c.(*minecraft.Conn), listener, w, seed, spawn, logger)
+		go handleConn(c.(*minecraft.Conn), listener, w, reg, seed, spawn, logger)
 	}
 }
 
@@ -185,21 +186,28 @@ func acceptLoop(listener *minecraft.Listener, w *world.World, seed int64, spawn 
 // handful of types wired up so far - see pocketmine/block/vanilla_blocks.go). A client can still
 // complete StartGame/spawn without it, just with incomplete item names/icons until that's filled
 // in.
-func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, seed int64, spawn spawnPoint, logger log.Logger) {
+func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, reg *registry, seed int64, spawn spawnPoint, logger log.Logger) {
 	defer conn.Close()
 	defer listener.Disconnect(conn, "server closed")
 
 	name := conn.IdentityData().DisplayName
 	logger.Info(fmt.Sprintf("%s connecting from %s", name, conn.RemoteAddr()))
 
+	spawnVec := mgl32.Vec3{float32(spawn.X) + 0.5, float32(spawn.Y), float32(spawn.Z) + 0.5}
+	sess, err := newSession(conn, spawnVec)
+	if err != nil {
+		logger.Warning(fmt.Sprintf("%s: failed to build session: %v", name, err))
+		return
+	}
+
 	data := minecraft.GameData{
 		WorldName:       pocketmine.Name,
 		WorldSeed:       seed,
 		Difficulty:      2, // normal
-		EntityUniqueID:  1,
-		EntityRuntimeID: 1,
+		EntityUniqueID:  sess.entityUniqueID,
+		EntityRuntimeID: sess.entityRuntimeID,
 		PlayerGameMode:  0, // survival
-		PlayerPosition:  mgl32.Vec3{float32(spawn.X) + 0.5, float32(spawn.Y), float32(spawn.Z) + 0.5},
+		PlayerPosition:  spawnVec,
 		WorldSpawn:      protocol.BlockPos{spawn.X, spawn.Y, spawn.Z},
 		WorldGameMode:   0,
 		Time:            6000,
@@ -238,6 +246,12 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	}
 	logger.Info(fmt.Sprintf("%s: terrain sent (%d chunks)", name, (2*spawnChunkRadius+1)*(2*spawnChunkRadius+1)))
 
+	// Join makes every already-connected player visible to this one and vice versa (PlayerList +
+	// AddPlayer both ways) - see registry's doc comment. Leave (on disconnect, below) reverses it.
+	reg.Join(sess)
+	defer reg.Leave(sess)
+	logger.Info(fmt.Sprintf("%s: joined (%d player(s) online)", name, reg.Count()))
+
 	for {
 		pk, err := conn.ReadPacket()
 		if err != nil {
@@ -251,12 +265,13 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 			// The client reports its own predicted position/rotation every tick once
 			// server-authoritative movement is active (see PlayerAuthInput's own doc comment - this
 			// is now the only movement path modern Bedrock versions speak, MovePlayer/client-
-			// authoritative movement no longer exists in this protocol version). This port doesn't
-			// track a real per-player entity yet (no collision/physics/gravity, no broadcasting
-			// this position to other players), so for now the client's report is simply trusted
-			// as-is - the same "no correction unless there's a pending teleport" approach real
-			// Bedrock servers use for ordinary movement (see e.g. Dragonfly's
-			// PlayerAuthInputHandler), just without a server-side Player to update yet.
+			// authoritative movement no longer exists in this protocol version). This port has no
+			// real physics/collision yet, so the client's report is simply trusted as-is - the same
+			// "no correction unless there's a pending teleport" approach real Bedrock servers use
+			// for ordinary movement (see e.g. Dragonfly's PlayerAuthInputHandler) - then relayed to
+			// every other connected player so they see this player move.
+			sess.SetPositionAndRotation(input.Position, input.Pitch, input.Yaw, input.HeadYaw)
+			reg.BroadcastMove(sess)
 			handleBlockActions(conn, w, input.BlockActions, logger, name)
 		}
 	}
