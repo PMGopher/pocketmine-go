@@ -11,9 +11,8 @@
 // game logic, which is what the rest of this port focuses on - gophertunnel gets a client all the
 // way to spawning in far less time than reimplementing the wire format from scratch would.
 //
-// This is still an early milestone, not a playable server: block placing, inventory, and most
-// other gameplay packets beyond spawning, moving around, seeing terrain and breaking blocks aren't
-// wired up yet - see handleConn's read loop.
+// This is still an early milestone, not a playable server: block placing and real inventory
+// interaction (ItemStackRequest handling) aren't wired up yet - see handleConn's read loop.
 package main
 
 import (
@@ -23,6 +22,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,6 +33,7 @@ import (
 
 	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/log"
 	pmmath "pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
@@ -276,12 +277,37 @@ func acceptLoop(listener *minecraft.Listener, w *world.World, reg *registry, see
 // (encryption, resource pack negotiation) internally - StartGame is the first thing this port
 // itself is responsible for.
 //
-// GameData.Items is left empty: gophertunnel is a protocol library, not a game implementation, so
-// it doesn't ship the vanilla item table the way Dragonfly's separate data package does, and this
-// port doesn't have one yet either (its own VanillaBlocks/VanillaItems registries only cover the
-// handful of types wired up so far - see pocketmine/block/vanilla_blocks.go). A client can still
-// complete StartGame/spawn without it, just with incomplete item names/icons until that's filled
-// in.
+// GameData.Items is now real - built from the vendored required_item_list.json (see
+// pocketmine/data/bedrock.ItemTypes, the item-table counterpart of BlockStates) rather than left
+// empty. This is the client's whole vocabulary of known item names/network IDs - without it every
+// item renders as an unknown/blank icon regardless of what this port's own item registry supports.
+// itemTable builds the StartGame/ItemRegistry item table from the real vendored Bedrock item list
+// (see itemTableCache's own doc comment on why this is computed once and reused).
+func itemTable() []protocol.ItemEntry {
+	itemTableOnce.Do(func() {
+		types := bedrock.ItemTypes()
+		itemTableCache = make([]protocol.ItemEntry, len(types))
+		for i, t := range types {
+			itemTableCache[i] = protocol.ItemEntry{
+				Name:           t.Name,
+				RuntimeID:      int16(t.RuntimeID),
+				ComponentBased: t.ComponentBased,
+				Version:        t.Version,
+				Data:           t.Data,
+			}
+		}
+	})
+	return itemTableCache
+}
+
+// itemTableOnce/itemTableCache memoise itemTable() - every connecting player gets the exact same
+// item table (it's a fixed protocol-version-wide vocabulary, not per-player state), so there's no
+// reason to rebuild the ~1900-entry slice (with its component NBT) on every single connection.
+var (
+	itemTableOnce  sync.Once
+	itemTableCache []protocol.ItemEntry
+)
+
 func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, reg *registry, seed int64, spawn spawnPoint, logger log.Logger) {
 	defer conn.Close()
 	defer listener.Disconnect(conn, "server closed")
@@ -308,6 +334,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		WorldGameMode:   0,
 		Time:            6000,
 		GameRules:       []protocol.GameRule{{Name: "showcoordinates", Value: true}},
+		Items:           itemTable(),
 	}
 	if err := conn.StartGame(data); err != nil {
 		logger.Warning(fmt.Sprintf("%s failed to start game: %v", name, err))
