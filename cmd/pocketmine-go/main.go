@@ -308,6 +308,31 @@ var (
 	itemTableCache []protocol.ItemEntry
 )
 
+// survivalAbilities builds a real UpdateAbilities packet with survival-appropriate defaults (can
+// build/mine/interact/attack, no flying/noclip/invulnerability) - mirrors what a fresh survival
+// PocketMine-MP player gets. Sent once right after StartGame, and again any time the client sends
+// RequestAbility (see handleConn's read loop) - the client predicts an ability change locally the
+// moment it sends the request, and without an authoritative reply the prediction never gets
+// corrected. This is exactly what was happening with Flying specifically: swimming to the surface
+// sends the same "double-jump" input gesture Creative mode uses to toggle flight, the client
+// requested AbilityFlying=true, and since nothing ever told it no, it kept flying indefinitely.
+// Re-sending this exact packet (still with Flying/MayFly/NoClip left false) is the correction.
+func survivalAbilities(entityUniqueID int64) *packet.UpdateAbilities {
+	abilities := uint32(protocol.AbilityBuild | protocol.AbilityMine | protocol.AbilityDoorsAndSwitches |
+		protocol.AbilityOpenContainers | protocol.AbilityAttackPlayers | protocol.AbilityAttackMobs)
+	return &packet.UpdateAbilities{AbilityData: protocol.AbilityData{
+		EntityUniqueID:     entityUniqueID,
+		PlayerPermissions:  packet.PermissionLevelMember,
+		CommandPermissions: protocol.CommandPermissionLevelAny,
+		Layers: []protocol.AbilityLayer{{
+			Type:      protocol.AbilityLayerTypeBase,
+			Abilities: protocol.AbilityCount - 1,
+			Values:    abilities,
+			WalkSpeed: protocol.AbilityBaseWalkSpeed,
+		}},
+	}}
+}
+
 func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, reg *registry, seed int64, spawn spawnPoint, logger log.Logger) {
 	defer conn.Close()
 	defer listener.Disconnect(conn, "server closed")
@@ -343,21 +368,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 
 	// Real Bedrock servers always follow StartGame with UpdateAbilities - without it the client has
 	// no ability layer at all for its local player, which (empirically) can leave it refusing to
-	// process movement input. Survival-appropriate defaults (can build/mine/interact/attack, no
-	// flying/noclip/invulnerability) mirror what a fresh survival PocketMine-MP player gets.
-	abilities := uint32(protocol.AbilityBuild | protocol.AbilityMine | protocol.AbilityDoorsAndSwitches |
-		protocol.AbilityOpenContainers | protocol.AbilityAttackPlayers | protocol.AbilityAttackMobs)
-	if err := conn.WritePacket(&packet.UpdateAbilities{AbilityData: protocol.AbilityData{
-		EntityUniqueID:     data.EntityUniqueID,
-		PlayerPermissions:  packet.PermissionLevelMember,
-		CommandPermissions: protocol.CommandPermissionLevelAny,
-		Layers: []protocol.AbilityLayer{{
-			Type:      protocol.AbilityLayerTypeBase,
-			Abilities: protocol.AbilityCount - 1,
-			Values:    abilities,
-			WalkSpeed: protocol.AbilityBaseWalkSpeed,
-		}},
-	}}); err != nil {
+	// process movement input.
+	if err := conn.WritePacket(survivalAbilities(data.EntityUniqueID)); err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to send abilities: %v", name, err))
 		return
 	}
@@ -411,6 +423,15 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 			handleBlockActions(conn, sess.player, input.BlockActions, logger, name)
 		case *packet.InventoryTransaction:
 			handleInventoryTransaction(sess, reg, input, logger, name)
+		case *packet.RequestAbility:
+			// This port doesn't support granting any client-requested ability yet (no flying, no
+			// noclip - see survivalAbilities' own doc comment on why simply not replying isn't an
+			// option: the client predicts the request succeeded until told otherwise). Re-asserting
+			// the same survival ability set denies every request uniformly.
+			if err := conn.WritePacket(survivalAbilities(sess.entityUniqueID)); err != nil {
+				logger.Warning(fmt.Sprintf("%s: failed to re-send abilities: %v", name, err))
+				return
+			}
 		}
 	}
 }
