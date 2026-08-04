@@ -12,7 +12,9 @@
 // way to spawning in far less time than reimplementing the wire format from scratch would.
 //
 // This is still an early milestone, not a playable server: block placing and real inventory
-// interaction (ItemStackRequest handling) aren't wired up yet - see handleConn's read loop.
+// interaction (ItemStackRequest handling - the client now sees its real inventory contents via
+// InventoryContent, but can't yet move/drop/use items) aren't wired up yet - see handleConn's read
+// loop.
 package main
 
 import (
@@ -34,6 +36,7 @@ import (
 	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/data/bedrock"
+	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/log"
 	pmmath "pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
@@ -281,6 +284,64 @@ func acceptLoop(listener *minecraft.Listener, w *world.World, reg *registry, see
 // pocketmine/data/bedrock.ItemTypes, the item-table counterpart of BlockStates) rather than left
 // empty. This is the client's whole vocabulary of known item names/network IDs - without it every
 // item renders as an unknown/blank icon regardless of what this port's own item registry supports.
+// itemTranslator is stateless (a bare lookup table plus the vendored item runtime-ID index - see
+// convert.ItemTranslator's own doc comment), so one shared instance is safe across every session,
+// unlike the per-world convert.BlockTranslator.
+var itemTranslator = convert.NewItemTranslator()
+
+// itemStackForNetwork builds a real protocol.ItemStack from an item.Item, via itemTranslator. Null
+// items and item types itemTranslator has no mapping for both become an empty ItemStack (a network
+// no-item slot) - the same thing an unmapped item resolves to, since there's no way to represent
+// "this slot secretly holds an item the client has never heard of."
+func itemStackForNetwork(it item.Item) protocol.ItemStack {
+	if it == nil || it.IsNull() {
+		return protocol.ItemStack{}
+	}
+	networkID, meta, blockRuntimeID, ok := itemTranslator.ToNetworkID(it)
+	if !ok {
+		return protocol.ItemStack{}
+	}
+	return protocol.ItemStack{
+		ItemType:       protocol.ItemType{NetworkID: networkID, MetadataValue: uint32(meta)},
+		BlockRuntimeID: blockRuntimeID,
+		Count:          uint16(it.GetCount()),
+		HasNetworkID:   true,
+	}
+}
+
+// itemInstanceForNetwork wraps itemStackForNetwork with a real StackNetworkID: 0 for an empty slot
+// (the protocol's own convention for "no item"), 1 otherwise - matching what real PHP sends when
+// server-authoritative inventory transactions are disabled (this port doesn't yet track real
+// per-slot stack IDs across requests - see ItemStackRequest handling's own doc comment, a
+// documented follow-up, not a guess dressed up as a real ID).
+func itemInstanceForNetwork(it item.Item) protocol.ItemInstance {
+	stack := itemStackForNetwork(it)
+	stackNetworkID := int32(0)
+	if it != nil && !it.IsNull() {
+		stackNetworkID = 1
+	}
+	return protocol.ItemInstance{StackNetworkID: stackNetworkID, Stack: stack}
+}
+
+// sendInventoryContent is a port of the player-inventory-sync half of InventoryManager's real
+// per-window InventoryContentPacket broadcast - sent once right after spawn so the client actually
+// knows what's in the player's own inventory (previously nothing was ever sent, so every slot
+// always rendered empty regardless of server-side contents). Only the combined hotbar+inventory
+// window is sent - armor/offhand/creative aren't wired up yet (see this file's own package doc
+// comment on what's still missing).
+func sendInventoryContent(conn *minecraft.Conn, p *player.Player) error {
+	inv := p.GetInventory()
+	content := make([]protocol.ItemInstance, inv.GetSize())
+	for i := range content {
+		content[i] = itemInstanceForNetwork(inv.GetItem(i))
+	}
+	return conn.WritePacket(&packet.InventoryContent{
+		WindowID:  protocol.WindowIDInventory,
+		Content:   content,
+		Container: protocol.FullContainerName{ContainerID: protocol.ContainerCombinedHotBarAndInventory},
+	})
+}
+
 // itemTable builds the StartGame/ItemRegistry item table from the real vendored Bedrock item list
 // (see itemTableCache's own doc comment on why this is computed once and reused).
 func itemTable() []protocol.ItemEntry {
@@ -382,6 +443,11 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		return
 	}
 	logger.Info(fmt.Sprintf("%s: terrain sent (%d chunks)", name, sent))
+
+	if err := sendInventoryContent(conn, sess.player); err != nil {
+		logger.Warning(fmt.Sprintf("%s: failed to send inventory content: %v", name, err))
+		return
+	}
 
 	// Join makes every already-connected player visible to this one and vice versa (PlayerList +
 	// AddPlayer both ways) - see registry's doc comment. Leave (on disconnect, below) reverses it.
