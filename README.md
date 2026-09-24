@@ -12,7 +12,7 @@ player rules) faithful to the original, one PHP class → one Go type. The **net
 the exception: it comes from [gophertunnel](https://github.com/sandertv/gophertunnel) and is not
 ported by hand.
 
-Port target: PocketMine-MP **5.44.4**. Client: Bedrock **1.26.30** (via gophertunnel v1.57.1).
+Port target: PocketMine-MP **5.44.4**. Client: Bedrock **1.26.50** (via gophertunnel v1.62.0). Upstream PocketMine-MP itself only supports 1.26.30 so far.
 
 Contributing or using an AI agent? Read **[AGENTS.md](AGENTS.md)** first. It covers the plan,
 architecture, porting conventions and known issues.

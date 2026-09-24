@@ -30,7 +30,6 @@ func CoreItemStackToNet(it item.Item) protocol.ItemStack {
 		ItemType:       protocol.ItemType{NetworkID: networkID, MetadataValue: uint32(meta)},
 		BlockRuntimeID: blockRuntimeID,
 		Count:          uint16(it.GetCount()),
-		HasNetworkID:   true,
 	}
 	if tag := it.GetNamedTag(); tag.Count() > 0 {
 		stack.NBTData = NbtToMap(tag)
@@ -43,7 +42,7 @@ func CoreItemStackToNet(it item.Item) protocol.ItemStack {
 func ItemStackWrapperLegacy(it item.Item) protocol.ItemInstance {
 	stack := CoreItemStackToNet(it)
 	stackNetworkID := int32(0)
-	if stack.HasNetworkID {
+	if stack.NetworkID != 0 {
 		stackNetworkID = 1
 	}
 	return protocol.ItemInstance{StackNetworkID: stackNetworkID, Stack: stack}

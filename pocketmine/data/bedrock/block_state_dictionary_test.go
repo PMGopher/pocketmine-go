@@ -4,11 +4,11 @@ import "testing"
 
 func TestBlockStatesLoadsTheFullCanonicalList(t *testing.T) {
 	states := BlockStates()
-	// pmmp/BedrockData tag 6.7.0+bedrock-1.26.30 has exactly 16913 entries - a hard-coded
+	// the vendored Bedrock 1.26.50 list has exactly 22091 entries - a hard-coded
 	// expectation is deliberate here: any change means the vendored asset changed, which should be
 	// a conscious, visible event, not something a bug quietly slips past.
-	if len(states) != 16913 {
-		t.Fatalf("len(BlockStates()) = %d, want 16913", len(states))
+	if len(states) != 22091 {
+		t.Fatalf("len(BlockStates()) = %d, want 22091", len(states))
 	}
 }
 
@@ -17,10 +17,10 @@ func TestRuntimeIDForKnownStatelessBlocks(t *testing.T) {
 		name string
 		want int32
 	}{
-		{"minecraft:air", 13094},
-		{"minecraft:stone", 2706},
-		{"minecraft:dirt", 10392},
-		{"minecraft:grass_block", 11608},
+		{"minecraft:air", 17025},
+		{"minecraft:stone", 3317},
+		{"minecraft:dirt", 13456},
+		{"minecraft:grass_block", 14944},
 	}
 	for _, c := range cases {
 		got, ok := RuntimeIDFor(c.name, map[string]any{})
@@ -39,8 +39,8 @@ func TestRuntimeIDForBlockWithProperties(t *testing.T) {
 	if !ok {
 		t.Fatal("RuntimeIDFor(minecraft:bedrock, infiniburn_bit=0) not found")
 	}
-	if got != 13805 {
-		t.Errorf("RuntimeIDFor(minecraft:bedrock, infiniburn_bit=0) = %d, want 13805", got)
+	if got != 17901 {
+		t.Errorf("RuntimeIDFor(minecraft:bedrock, infiniburn_bit=0) = %d, want 17901", got)
 	}
 }
 

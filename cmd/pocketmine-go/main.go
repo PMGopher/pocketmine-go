@@ -324,9 +324,20 @@ func itemTable() []protocol.ItemEntry {
 	return itemTableCache
 }
 
+// dataDrivenBlockTable is StartGame's block list: the vanilla data-driven block definitions the
+// client needs to complete its block palette (see bedrock.DataDrivenBlocks).
+func dataDrivenBlockTable() []protocol.BlockEntry {
+	blocks := bedrock.DataDrivenBlocks()
+	entries := make([]protocol.BlockEntry, len(blocks))
+	for i, b := range blocks {
+		entries[i] = protocol.BlockEntry{Name: b.Name, Properties: b.Components}
+	}
+	return entries
+}
+
 // itemTableOnce/itemTableCache memoise itemTable() - every connecting player gets the exact same
 // item table (it's a fixed protocol-version-wide vocabulary, not per-player state), so there's no
-// reason to rebuild the ~1900-entry slice (with its component NBT) on every single connection.
+// reason to rebuild the ~2000-entry slice (with its component NBT) on every single connection.
 var (
 	itemTableOnce  sync.Once
 	itemTableCache []protocol.ItemEntry
@@ -402,6 +413,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		Time:            6000,
 		GameRules:       []protocol.GameRule{{Name: "showcoordinates", Value: true}},
 		Items:           itemTable(),
+		CustomBlocks:    dataDrivenBlockTable(),
 	}
 	if err := conn.StartGame(data); err != nil {
 		logger.Warning(fmt.Sprintf("%s failed to start game: %v", name, err))
@@ -480,7 +492,9 @@ func handlePacket(conn *minecraft.Conn, w *world.World, sess *session, pk packet
 			logger.Warning(fmt.Sprintf("%s: failed to stream terrain: %v", name, err))
 			return false
 		}
-		handleBlockActions(conn, p, input.BlockActions, logger, name)
+		if actions, ok := input.BlockActions.Value(); ok {
+			handleBlockActions(conn, p, actions, logger, name)
+		}
 	case *packet.InventoryTransaction:
 		handleInventoryTransaction(w, p, input, logger, name)
 	case *packet.RequestAbility:

@@ -22,7 +22,7 @@ const (
 	MetadataPotionColor                         = protocol.EntityDataKeyEffectColor
 	MetadataPotionAmbient                       = protocol.EntityDataKeyEffectAmbience
 	MetadataExperienceValue                     = protocol.EntityDataKeyValue
-	MetadataFireworkItem                        = protocol.EntityDataKeyDisplayTileRuntimeID
+	MetadataFireworkItem                        = protocol.EntityDataKeyDisplayFirework
 	MetadataPotionAuxValue                      = protocol.EntityDataKeyAuxValueData
 	MetadataLeadHolderEID                       = protocol.EntityDataKeyLeashHolder
 	MetadataScale                               = protocol.EntityDataKeyScale

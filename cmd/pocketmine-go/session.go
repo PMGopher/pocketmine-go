@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"image/color"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -76,6 +79,7 @@ func newSession(conn *minecraft.Conn, w *world.World, spawn pmmath.Vector3) (*se
 // a player to render (see AddPlayer's own doc comment in gophertunnel).
 func (s *session) playerListEntry() protocol.PlayerListEntry {
 	return protocol.PlayerListEntry{
+		ActionType:     protocol.PlayerListActionAdd,
 		UUID:           s.uuid,
 		EntityUniqueID: int64(s.player.GetID()),
 		Username:       s.name,
@@ -91,6 +95,76 @@ func (s *session) playerListEntry() protocol.PlayerListEntry {
 // (see block_state_dictionary.go's NBT handling). Animated skins aren't converted (Animations is
 // left empty) - a static skin is enough for a player to be visible at all, which is what this is
 // for; nothing here plays animated skin frames yet regardless.
+// personaPieceTypes maps the login JSON's persona piece type names onto gophertunnel's
+// protocol.PieceType* values (the network encoding since Bedrock 1.26.50).
+var personaPieceTypes = map[string]uint32{
+	"persona_skeleton":       protocol.PieceTypeSkeleton,
+	"persona_body":           protocol.PieceTypeBody,
+	"persona_skin":           protocol.PieceTypeSkin,
+	"persona_bottom":         protocol.PieceTypeBottom,
+	"persona_feet":           protocol.PieceTypeFeet,
+	"persona_dress":          protocol.PieceTypeDress,
+	"persona_top":            protocol.PieceTypeTop,
+	"persona_high_pants":     protocol.PieceTypeHighPants,
+	"persona_hands":          protocol.PieceTypeHands,
+	"persona_outerwear":      protocol.PieceTypeOuterwear,
+	"persona_facial_hair":    protocol.PieceTypeFacialHair,
+	"persona_mouth":          protocol.PieceTypeMouth,
+	"persona_eyes":           protocol.PieceTypeEyes,
+	"persona_hair":           protocol.PieceTypeHair,
+	"persona_hood":           protocol.PieceTypeHood,
+	"persona_back":           protocol.PieceTypeBack,
+	"persona_face_accessory": protocol.PieceTypeFaceAccessory,
+	"persona_head":           protocol.PieceTypeHead,
+	"persona_legs":           protocol.PieceTypeLegs,
+	"persona_left_leg":       protocol.PieceTypeLeftLeg,
+	"persona_right_leg":      protocol.PieceTypeRightLeg,
+	"persona_arms":           protocol.PieceTypeArms,
+	"persona_left_arm":       protocol.PieceTypeLeftArm,
+	"persona_right_arm":      protocol.PieceTypeRightArm,
+	"persona_capes":          protocol.PieceTypeCapes,
+	"persona_classic_skin":   protocol.PieceTypeClassicSkin,
+	"persona_emote":          protocol.PieceTypeEmote,
+}
+
+func personaPieceType(name string) uint32 {
+	if t, ok := personaPieceTypes[name]; ok {
+		return t
+	}
+	return protocol.PieceTypeUnknown
+}
+
+func armSize(name string) uint8 {
+	if name == "slim" {
+		return protocol.ArmSizeSlim
+	}
+	return protocol.ArmSizeWide
+}
+
+func parseUUIDOrNil(s string) uuid.UUID {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
+}
+
+// parseHexColour parses the login JSON's "#RRGGBB" (SkinColor) or "#AARRGGBB" (piece tint) colours.
+// Anything else (e.g. the "#0" padding in tint colour lists) is transparent black.
+func parseHexColour(s string) color.RGBA {
+	v, err := strconv.ParseUint(strings.TrimPrefix(s, "#"), 16, 32)
+	if err != nil {
+		return color.RGBA{}
+	}
+	switch len(strings.TrimPrefix(s, "#")) {
+	case 6:
+		return color.RGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}
+	case 8:
+		return color.RGBA{A: uint8(v >> 24), R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v)}
+	}
+	return color.RGBA{}
+}
+
 func buildSkin(cd login.ClientData) (protocol.Skin, error) {
 	skinData, err := base64.StdEncoding.DecodeString(cd.SkinData)
 	if err != nil {
@@ -113,15 +187,19 @@ func buildSkin(cd login.ClientData) (protocol.Skin, error) {
 	for i, p := range cd.PersonaPieces {
 		pieces[i] = protocol.PersonaPiece{
 			PieceID:   p.PieceID,
-			PieceType: p.PieceType,
-			PackID:    p.PackID,
+			PieceType: personaPieceType(p.PieceType),
+			PackID:    parseUUIDOrNil(p.PackID),
 			Default:   p.Default,
 			ProductID: p.ProductID,
 		}
 	}
 	tints := make([]protocol.PersonaPieceTintColour, len(cd.PieceTintColours))
 	for i, t := range cd.PieceTintColours {
-		tints[i] = protocol.PersonaPieceTintColour{PieceType: t.PieceType, Colours: t.Colours[:]}
+		tint := protocol.PersonaPieceTintColour{PieceType: t.PieceType}
+		for j, c := range t.Colours {
+			tint.Colours[j] = parseHexColour(c)
+		}
+		tints[i] = tint
 	}
 
 	return protocol.Skin{
@@ -139,8 +217,8 @@ func buildSkin(cd login.ClientData) (protocol.Skin, error) {
 		PersonaSkin:              cd.PersonaSkin,
 		PersonaCapeOnClassicSkin: cd.CapeOnClassicSkin,
 		CapeID:                   cd.CapeID,
-		SkinColour:               cd.SkinColour,
-		ArmSize:                  cd.ArmSize,
+		SkinColour:               parseHexColour(cd.SkinColour),
+		ArmSize:                  armSize(cd.ArmSize),
 		PersonaPieces:            pieces,
 		PieceTintColours:         tints,
 		Trusted:                  cd.TrustedSkin,
@@ -169,12 +247,9 @@ func (r *registry) Join(s *session) {
 	entries := []protocol.PlayerListEntry{s.playerListEntry()}
 	for _, other := range r.sessions {
 		entries = append(entries, other.playerListEntry())
-		_ = other.conn.WritePacket(&packet.PlayerList{
-			ActionType: packet.PlayerListActionAdd,
-			Entries:    []protocol.PlayerListEntry{s.playerListEntry()},
-		})
+		_ = other.conn.WritePacket(&packet.PlayerList{Entries: []protocol.PlayerListEntry{s.playerListEntry()}})
 	}
-	_ = s.conn.WritePacket(&packet.PlayerList{ActionType: packet.PlayerListActionAdd, Entries: entries})
+	_ = s.conn.WritePacket(&packet.PlayerList{Entries: entries})
 	r.sessions[s.player.GetID()] = s
 }
 
@@ -187,8 +262,7 @@ func (r *registry) Leave(s *session) {
 
 	for _, other := range r.sessions {
 		_ = other.conn.WritePacket(&packet.PlayerList{
-			ActionType: packet.PlayerListActionRemove,
-			Entries:    []protocol.PlayerListEntry{{UUID: s.uuid}},
+			Entries: []protocol.PlayerListEntry{{ActionType: protocol.PlayerListActionRemove, UUID: s.uuid}},
 		})
 	}
 }

@@ -34,11 +34,11 @@ func newTestBedrock() *block.Bedrock {
 func TestBlockTranslatorTranslatesRegisteredBlocks(t *testing.T) {
 	tr := NewBlockTranslator()
 
-	if id := tr.InternalIDToNetworkID(newTestAir()); id != 13094 {
-		t.Errorf("air runtime ID = %d, want 13094", id)
+	if id := tr.InternalIDToNetworkID(newTestAir()); id != 17025 {
+		t.Errorf("air runtime ID = %d, want 17025", id)
 	}
-	if id := tr.InternalIDToNetworkID(newTestStone()); id != 2706 {
-		t.Errorf("stone runtime ID = %d, want 2706", id)
+	if id := tr.InternalIDToNetworkID(newTestStone()); id != 3317 {
+		t.Errorf("stone runtime ID = %d, want 3317", id)
 	}
 }
 
@@ -47,8 +47,8 @@ func TestBlockTranslatorTranslatesBedrockWithState(t *testing.T) {
 
 	b := newTestBedrock()
 	b.BurnsForeverFlag = false
-	if id := tr.InternalIDToNetworkID(b); id != 13805 {
-		t.Errorf("bedrock(burns=false) runtime ID = %d, want 13805", id)
+	if id := tr.InternalIDToNetworkID(b); id != 17901 {
+		t.Errorf("bedrock(burns=false) runtime ID = %d, want 17901", id)
 	}
 }
 

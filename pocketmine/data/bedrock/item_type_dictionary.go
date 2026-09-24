@@ -43,8 +43,9 @@ type rawItemTypeEntry struct {
 }
 
 // loadItemTypes is a port of ItemTypeDictionaryFromDataHelper::loadFromString, reading the vendored
-// required_item_list.json (from pmmp/BedrockData, the same tag as canonical_block_states.nbt - see
-// that file's own doc comment) instead of PHP's json_decode + manual field validation.
+// required_item_list.json (same Bedrock version and source as canonical_block_states.nbt - see
+// the package doc comment; converted from dragonfly's vanilla_items.nbt into BedrockData's JSON
+// shape) instead of PHP's json_decode + manual field validation.
 func loadItemTypes() {
 	itemTypesOnce.Do(func() {
 		var raw map[string]rawItemTypeEntry

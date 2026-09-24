@@ -410,7 +410,8 @@ func (h *Human) SpawnTo(player world.EntityViewer) {
 func (h *Human) SendSpawnPacket(player world.EntityViewer) {
 	_, isPlayer := AsPlayer(h.self)
 	if !isPlayer {
-		player.SendPacket(&packet.PlayerList{ActionType: packet.PlayerListActionAdd, Entries: []protocol.PlayerListEntry{{
+		player.SendPacket(&packet.PlayerList{Entries: []protocol.PlayerListEntry{{
+			ActionType:     protocol.PlayerListActionAdd,
 			UUID:           h.uuid,
 			EntityUniqueID: int64(h.id),
 			Username:       h.hself.GetName(),
@@ -453,7 +454,7 @@ func (h *Human) SendSpawnPacket(player world.EntityViewer) {
 	player.SendPacket(mobOffHandItemChangePacket(h))
 
 	if !isPlayer {
-		player.SendPacket(&packet.PlayerList{ActionType: packet.PlayerListActionRemove, Entries: []protocol.PlayerListEntry{{UUID: h.uuid}}})
+		player.SendPacket(&packet.PlayerList{Entries: []protocol.PlayerListEntry{{ActionType: protocol.PlayerListActionRemove, UUID: h.uuid}}})
 	}
 }
 

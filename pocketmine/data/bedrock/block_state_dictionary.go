@@ -1,9 +1,8 @@
 // Package bedrock is a port of a small slice of pocketmine\data\bedrock: reference data shipped
 // by the real PocketMine-MP as a separate Composer package (pocketmine/bedrock-data), not written
 // in PHP at all - so there's no PocketMine-MP source to port here, just the data file itself
-// (assets/canonical_block_states.nbt, vendored from pmmp/BedrockData tag 6.7.0+bedrock-1.26.30 -
-// the version matching the Bedrock protocol github.com/sandertv/gophertunnel currently speaks)
-// plus a loader/lookup matching pocketmine\network\mcpe\convert\BlockStateDictionary's shape.
+// (assets/canonical_block_states.nbt for Bedrock 1.26.50 - the version the pinned
+// github.com/sandertv/gophertunnel speaks) plus a loader/lookup matching pocketmine\network\mcpe\convert\BlockStateDictionary's shape.
 //
 // canonical_block_states.nbt lists every vanilla block state Bedrock recognises, in "network NBT"
 // encoding (NBT's tag structure, but with zigzag-varint-encoded integers/lengths instead of fixed-
@@ -14,6 +13,12 @@
 // same protocol library already relied on for the Bedrock connection itself - this is vendored
 // reference data plus the wire codec needed to read it, not "game logic" reimplemented via a
 // second library the way BlockTransactionImpl/ChunkSerializer are hand-written.
+//
+// Source: pmmp/BedrockData has no 1.26.50 release yet (its newest tag is 6.7.0+bedrock-1.26.30),
+// so the 1.26.50 assets are vendored from df-mc/dragonfly (MIT, assets/LICENSE-dragonfly), which
+// dumps the same files from the client. The format is identical to BedrockData's (states sorted by
+// the FNV-1 64 hash of the block name, like the client). Switch back to BedrockData once pmmp
+// publishes 1.26.50 data.
 //
 // A block's position in this list IS its Bedrock network runtime ID (BlockStateDictionary's
 // constructor takes a list<BlockStateDictionaryEntry> keyed by array index for exactly this

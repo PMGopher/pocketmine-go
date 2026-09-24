@@ -38,8 +38,15 @@ go run ./cmd/pocketmine-go -port 19133 -seed 1234 -world-dir world -motd "test" 
 ```
 
 - Go version: see `go.mod` (`go 1.26.1`).
-- Client protocol: whatever the pinned gophertunnel supports (v1.57.1 → Bedrock **1.26.30**,
-  protocol 1001). Bumping gophertunnel means re-checking the vendored assets (see §3).
+- Client protocol: whatever the pinned gophertunnel supports (v1.62.0 → Bedrock **1.26.50**,
+  protocol 2193). This is ahead of upstream PocketMine-MP 5.44.4 (1.26.30).
+- Bumping gophertunnel means updating the vendored assets in `pocketmine/data/bedrock/assets` to
+  the same client version: block runtime IDs are positions in `canonical_block_states.nbt`, so an
+  outdated palette makes every block after the first new one render wrong. pmmp/BedrockData has no
+  1.26.50 release yet, so the 1.26.50 block palette, item list and `data_driven_blocks.nbt` come
+  from df-mc/dragonfly (MIT, `assets/LICENSE-dragonfly`; same format). Replace them with
+  BedrockData once pmmp publishes 1.26.50 data. Since 1.26.50 the client also needs the
+  data-driven vanilla block definitions in StartGame (`bedrock.DataDrivenBlocks`).
 - Xbox Live auth is **disabled** (`AuthenticationDisabled: true` in `main.go`), so any client can join.
 - World data is written to `-world-dir` (LevelDB + `level.dat`). Delete that directory to regenerate.
 
