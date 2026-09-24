@@ -8,6 +8,7 @@ import (
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/world"
 )
 
@@ -75,15 +76,29 @@ type Player struct {
 	// viewDistance/usedChunks/loadQueue/tickingChunks back OrderChunks/RequestChunks and the
 	// world.ChunkListener implementation in chunk_streaming.go - see OrderChunks' own doc comment
 	// on the -1 default.
-	viewDistance  int
-	usedChunks    map[[2]int]UsedChunkStatus
-	loadQueue     map[[2]int]bool
+	viewDistance int
+	usedChunks   map[[2]int]UsedChunkStatus
+	loadQueue    map[[2]int]bool
+	// loadQueueOrder is loadQueue's iteration order (PHP arrays keep insertion order): nearest
+	// chunk first, as orderChunks fills it.
+	loadQueueOrder [][2]int
+	// chunksPerTick is Player::$chunksPerTick (pocketmine.yml chunk-sending.per-tick, default 4).
+	chunksPerTick int
 	tickingChunks map[[2]int]bool
 
 	// packetSender backs SendPacket/SetPacketSender (see network.go) - real PHP reaches this
 	// player's NetworkSession directly; this port has no NetworkSession type, so the caller that
 	// owns the actual connection (cmd/pocketmine-go) supplies this closure once instead.
 	packetSender PacketSender
+
+	// server and networkSession are PHP's $this->server and $this->networkSession, as the small
+	// interfaces this package needs from them (see server.go). Both are nil in tests.
+	server         Server
+	networkSession NetworkSession
+	// messageCounter is Player::$messageCounter: chat messages still allowed this tick.
+	messageCounter int
+	// startAction is Player::$startAction: the server tick item use started on, or -1.
+	startAction int64
 
 	// lastBroadcastLocation mirrors the lastLocation Player::processMostRecentMovements compares
 	// against to decide whether to broadcast movement.
@@ -95,6 +110,15 @@ type Player struct {
 // NewPlayer is a port of Player::__construct (for a player with no saved data): the player is
 // created as a real entity in w at position, with its own runtime entity ID.
 func NewPlayer(username string, playerUUID uuid.UUID, xuid string, w *world.World, position math.Vector3, gameMode GameMode, skin *entity.Skin) *Player {
+	return NewPlayerFromData(username, playerUUID, xuid, entity.LocationFromObject(position, w, 0, 0), gameMode, true, skin, nil, nil)
+}
+
+// NewPlayerFromData is a port of Player::__construct with saved player data ($namedtag, from
+// Server::getOfflinePlayerData) plus the data half of Player::initEntity: first/last played, the
+// saved game mode (unless forceGameMode, like server.properties' force-gamemode) and the custom
+// spawn point. tag may be nil for a new player. worldByName resolves SpawnLevel (PHP's
+// WorldManager::getWorldByName) and may be nil.
+func NewPlayerFromData(username string, playerUUID uuid.UUID, xuid string, location entity.Location, gameMode GameMode, forceGameMode bool, skin *entity.Skin, tag *nbt.CompoundTag, worldByName func(name string) (*world.World, bool)) *Player {
 	now := time.Now().UnixMilli()
 	p := &Player{
 		username:              username,
@@ -108,16 +132,72 @@ func NewPlayer(username string, playerUUID uuid.UUID, xuid string, w *world.Worl
 		autoJump:              true,
 		flightSpeedMultiplier: DefaultFlightSpeedMultiplier,
 		viewDistance:          -1,
+		messageCounter:        2,
+		startAction:           -1,
 		usedChunks:            map[[2]int]UsedChunkStatus{},
 		loadQueue:             map[[2]int]bool{},
+		chunksPerTick:         4,
 		tickingChunks:         map[[2]int]bool{},
 	}
-	location := entity.LocationFromObject(position, w, 0, 0)
-	p.ConstructHuman(p, location, skin, nil)
+	p.ConstructHuman(p, location, skin, tag)
+
+	if tag != nil {
+		p.firstPlayed = int64(tag.GetLongOr(TagFirstPlayed, nbt.LongTag(now)))
+		p.lastPlayed = int64(tag.GetLongOr(TagLastPlayed, nbt.LongTag(now)))
+		if gameModeTag, ok := tag.GetTag(tagGameMode); ok && !forceGameMode {
+			if id, ok := gameModeTag.(nbt.IntTag); ok {
+				gameMode = GameModeSurvival //TODO: bad hack here to avoid crashes on corrupted data
+				if id >= nbt.IntTag(GameModeSurvival) && id <= nbt.IntTag(GameModeSpectator) {
+					gameMode = GameMode(id)
+				}
+			}
+		}
+		if worldByName != nil {
+			if w, ok := worldByName(string(tag.GetStringOr(tagSpawnWorld, ""))); ok && w != nil {
+				p.spawnPosition = math.NewVector3(float64(tag.GetIntOr(tagSpawnX, 0)), float64(tag.GetIntOr(tagSpawnY, 0)), float64(tag.GetIntOr(tagSpawnZ, 0)))
+			}
+		}
+	}
 	p.internalSetGameMode(gameMode)
 	p.lastBroadcastLocation = p.GetLocation()
 	p.initNetworkHooks()
 	return p
+}
+
+// Saved player data tag names, Player::TAG_* (TagFirstPlayed/TagLastPlayed are in offline_player.go).
+const (
+	tagGameMode      = "playerGameType"
+	tagSpawnWorld    = "SpawnLevel"
+	tagSpawnX        = "SpawnX"
+	tagSpawnY        = "SpawnY"
+	tagSpawnZ        = "SpawnZ"
+	TagLevel         = "Level"
+	TagLastKnownXUID = "LastKnownXUID"
+)
+
+// GetSaveData is a port of Player::getSaveData: what Server::saveOfflinePlayerData writes to
+// players/<name>.dat. The death position isn't saved (Player::$deathPosition isn't ported).
+func (p *Player) GetSaveData() *nbt.CompoundTag {
+	tag := p.SaveNBT()
+
+	tag.SetString(TagLastKnownXUID, nbt.StringTag(p.xuid))
+
+	if w := p.GetWorld(); w != nil {
+		tag.SetString(TagLevel, nbt.StringTag(w.GetFolderName()))
+	}
+
+	if p.spawnPosition != (math.Vector3{}) {
+		tag.SetString(tagSpawnWorld, nbt.StringTag(p.GetWorld().GetFolderName()))
+		tag.SetInt(tagSpawnX, nbt.IntTag(p.spawnPosition.FloorX()))
+		tag.SetInt(tagSpawnY, nbt.IntTag(p.spawnPosition.FloorY()))
+		tag.SetInt(tagSpawnZ, nbt.IntTag(p.spawnPosition.FloorZ()))
+	}
+
+	tag.SetInt(tagGameMode, nbt.IntTag(p.gameMode))
+	tag.SetLong(TagFirstPlayed, nbt.LongTag(p.firstPlayed))
+	tag.SetLong(TagLastPlayed, nbt.LongTag(time.Now().UnixMilli()))
+
+	return tag
 }
 
 // DefaultFlightSpeedMultiplier mirrors Player::DEFAULT_FLIGHT_SPEED_MULTIPLIER.

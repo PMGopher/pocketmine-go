@@ -179,6 +179,8 @@ func (p *Player) OnUpdate(currentTick int64) bool {
 		return true
 	}
 
+	p.messageCounter = 2
+
 	p.LastUpdate = currentTick
 
 	if p.IsJustCreated() {
@@ -320,7 +322,7 @@ func (p *Player) Attack(source entityevent.DamageSource) {
 func (p *Player) SyncNetworkData(properties *entity.MetadataCollection) {
 	p.Human.SyncNetworkData(properties)
 
-	properties.SetGenericFlag(entity.FlagAction, false) // item use (startAction) isn't ported
+	properties.SetGenericFlag(entity.FlagAction, p.startAction > -1)
 	properties.SetGenericFlag(entity.FlagHasCollision, p.HasBlockCollision())
 
 	properties.SetPlayerFlag(playerFlagSleep, false)

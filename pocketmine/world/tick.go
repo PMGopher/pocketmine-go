@@ -3,6 +3,9 @@ package world
 import (
 	stdmath "math"
 
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
+	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/format"
 	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
@@ -406,4 +409,68 @@ func (w *World) DoTick(currentTick int64) {
 	// at the end - not immediately on every individual block change.
 	w.blockLightUpdate.Execute()
 	w.skyLightUpdate.Execute()
+
+	w.sendChangedBlocks()
+}
+
+// sendChangedBlocks is the changedBlocks part of World::actuallyDoTick: every block set this tick
+// is sent to the players using its chunk, or the whole chunk is resent (Player::onChunkChanged)
+// when more than 512 blocks changed in it.
+func (w *World) sendChangedBlocks() {
+	if len(w.changedBlocks) == 0 {
+		return
+	}
+	for chunkPos, blocks := range w.changedBlocks {
+		if len(blocks) == 0 { //blocks can be set normally and then later re-set with direct send
+			continue
+		}
+		chunk, ok := w.GetChunk(chunkPos[0], chunkPos[1])
+		if !ok {
+			//a previous chunk may have caused this one to be unloaded by a ChunkListener
+			continue
+		}
+		if len(blocks) > 512 {
+			for _, l := range w.GetChunkListeners(chunkPos[0], chunkPos[1]) {
+				if _, isPlayer := l.(viewer); isPlayer {
+					l.OnChunkChanged(chunkPos[0], chunkPos[1], chunk)
+				}
+			}
+			continue
+		}
+		positions := make([]math.Vector3, 0, len(blocks))
+		for _, pos := range blocks {
+			positions = append(positions, pos)
+		}
+		for _, pk := range w.CreateBlockUpdatePackets(positions) {
+			w.broadcastPacketToPlayersUsingChunk(chunkPos[0], chunkPos[1], pk)
+		}
+	}
+	w.changedBlocks = nil
+}
+
+// CreateBlockUpdatePackets is a port of World::createBlockUpdatePackets. Not ported: the tile
+// parts (the render-update workaround state and BlockActorDataPacket), since tiles aren't sent to
+// clients yet.
+func (w *World) CreateBlockUpdatePackets(blocks []math.Vector3) []packet.Packet {
+	packets := make([]packet.Packet, 0, len(blocks))
+	for _, b := range blocks {
+		x, y, z := b.FloorX(), b.FloorY(), b.FloorZ()
+		stateID := w.generateChunkOnly(x>>4, z>>4).GetBlockStateID(x&0xf, y, z&0xf)
+		packets = append(packets, &packet.UpdateBlock{
+			Position:          protocol.BlockPos{int32(x), int32(y), int32(z)},
+			NewBlockRuntimeID: uint32(w.translator.NetworkIDForCachedState(stateID)),
+			Flags:             packet.BlockUpdateNetwork,
+			Layer:             0, // UpdateBlockPacket::DATA_LAYER_NORMAL
+		})
+	}
+	return packets
+}
+
+// broadcastPacketToPlayersUsingChunk is a port of World::broadcastPacketToPlayersUsingChunk.
+func (w *World) broadcastPacketToPlayersUsingChunk(chunkX, chunkZ int, pk packet.Packet) {
+	for _, l := range w.GetChunkListeners(chunkX, chunkZ) {
+		if v, ok := l.(viewer); ok {
+			v.SendPacket(pk)
+		}
+	}
 }

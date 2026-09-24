@@ -138,3 +138,15 @@ func (p Position) AsVector3() math.Vector3 { return p.Vector3 }
 func (p Position) GetSide(side math.Facing, step int) Position {
 	return Position{Vector3: p.Vector3.GetSide(side, step), world: p.world}
 }
+
+// setBlockWithoutUpdate is World::setBlock($pos, $block, false): no light update and no neighbour
+// notification. Worlds that don't support the $update parameter (test doubles) fall back to a
+// normal SetBlock.
+func setBlockWithoutUpdate(w World, pos Position, blk Behavior) error {
+	if u, ok := w.(interface {
+		SetBlockUpdate(pos Position, blk Behavior, update bool) error
+	}); ok {
+		return u.SetBlockUpdate(pos, blk, false)
+	}
+	return w.SetBlock(pos, blk)
+}

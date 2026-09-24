@@ -45,6 +45,13 @@ type World struct {
 	generator  generator.Generator
 	translator *convert.BlockTranslator
 
+	// changedBlocks is World::$changedBlocks: blocks set since the last tick, per chunk, sent to
+	// the players using those chunks at the end of the tick (see sendChangedBlocks).
+	changedBlocks map[[2]int]map[[3]int]math.Vector3
+	// populationWrites is non-nil while a chunk is being populated and collects the chunks the
+	// populators wrote to (see ensurePopulated).
+	populationWrites map[[2]int]bool
+
 	// id/folderName/displayName are set by WorldManager (LoadWorld/GenerateWorld) - a bare in-
 	// memory World constructed directly via New (as main.go's own single-world setup still does)
 	// simply never has them populated, matching a world with id 0 and no name being harmless
@@ -455,10 +462,26 @@ func (w *World) ensurePopulated(chunkX, chunkZ int) {
 			w.generateChunkOnly(chunkX+dx, chunkZ+dz)
 		}
 	}
+	// In PHP population runs in an async PopulationTask on copies of the chunks
+	// (SimpleChunkManager: no neighbour updates, light or changed-block tracking), and the results
+	// come back through World::setChunk, which drops each modified chunk's changedBlocks and tells
+	// its listeners the whole chunk changed (players resend it).
+	w.populationWrites = map[[2]int]bool{{chunkX, chunkZ}: true}
 	w.generator.PopulateChunk(w, chunkX, chunkZ)
+	modified := w.populationWrites
+	w.populationWrites = nil
+
 	w.chunks[key].SetPopulated(true)
 	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
 		listener.OnChunkPopulated(chunkX, chunkZ, w.chunks[key])
+	}
+	for chunkPos := range modified {
+		delete(w.changedBlocks, chunkPos) // setChunk: unset($this->changedBlocks[$chunkHash])
+		if chunk, ok := w.chunks[chunkKey(chunkPos[0], chunkPos[1])]; ok {
+			for _, listener := range w.GetChunkListeners(chunkPos[0], chunkPos[1]) {
+				listener.OnChunkChanged(chunkPos[0], chunkPos[1], chunk)
+			}
+		}
 	}
 
 	// Light is recalculated after population (not generation) so it reflects the final terrain -
@@ -507,22 +530,48 @@ type positionable interface {
 // ever needs the $update=false fast path). Also registers blk as a state template (see
 // registerTemplate) so it can be read back later even if it wasn't in New's knownBlocks list.
 func (w *World) SetBlock(pos block.Position, blk block.Behavior) error {
+	return w.SetBlockUpdate(pos, blk, true)
+}
+
+// SetBlockUpdate is World::setBlock with its $update parameter: when update is false, light isn't
+// recalculated and neighbours aren't notified (Leaves and Farmland use this).
+//
+// While a chunk is being populated the write only changes the chunk data, like PHP's
+// SimpleChunkManager::setBlockAt in the async PopulationTask: see ensurePopulated.
+func (w *World) SetBlockUpdate(pos block.Position, blk block.Behavior, update bool) error {
 	x, y, z := pos.FloorX(), pos.FloorY(), pos.FloorZ()
 	w.registerTemplate(blk)
 	chunk := w.generateChunkOnly(x>>4, z>>4)
 	chunk.SetBlockStateID(x&0xf, y, z&0xf, int32(blk.GetStateId()))
 
-	// Matches updateAllLight's own guard: recalculating light against a chunk whose light hasn't
-	// been calculated at all yet would be meaningless (and RecalculateNode's BFS assumes its
-	// starting light values are already meaningful).
-	if lit, known := chunk.IsLightPopulated(); known && lit {
-		w.skyLightUpdate.RecalculateNode(x, y, z)
-		w.blockLightUpdate.RecalculateNode(x, y, z)
+	chunkPos := [2]int{x >> 4, z >> 4}
+	if w.populationWrites != nil {
+		w.populationWrites[chunkPos] = true
+		return nil
 	}
+
+	if w.changedBlocks == nil {
+		w.changedBlocks = map[[2]int]map[[3]int]math.Vector3{}
+	}
+	if w.changedBlocks[chunkPos] == nil {
+		w.changedBlocks[chunkPos] = map[[3]int]math.Vector3{}
+	}
+	w.changedBlocks[chunkPos][[3]int{x, y, z}] = math.NewVector3(float64(x), float64(y), float64(z))
+
 	for _, listener := range w.GetChunkListeners(x>>4, z>>4) {
 		listener.OnBlockChanged(math.NewVector3(float64(x), float64(y), float64(z)))
 	}
-	w.internalNotifyNeighbourBlockUpdate(x, y, z)
+
+	if update {
+		// Matches updateAllLight's own guard: recalculating light against a chunk whose light
+		// hasn't been calculated at all yet would be meaningless (and RecalculateNode's BFS
+		// assumes its starting light values are already meaningful).
+		if lit, known := chunk.IsLightPopulated(); known && lit {
+			w.skyLightUpdate.RecalculateNode(x, y, z)
+			w.blockLightUpdate.RecalculateNode(x, y, z)
+		}
+		w.internalNotifyNeighbourBlockUpdate(x, y, z)
+	}
 	return nil
 }
 

@@ -18,9 +18,8 @@ import (
 // spl_object_id-keyed inner arrays) rather than by-value equality.
 type ChunkListener interface {
 	// OnChunkChanged is a port of ChunkListener::onChunkChanged - called when a chunk is replaced
-	// by a new one (see World's own doc comment on why this port's single-provider, no-async
-	// pipeline never actually replaces an already-loaded chunk wholesale - this fires in principle,
-	// just never in practice yet).
+	// by a new one: after population changed it (ensurePopulated, PHP's setChunk of a
+	// PopulationTask result), or when more than 512 of its blocks changed in one tick.
 	OnChunkChanged(chunkX, chunkZ int, chunk *format.Chunk)
 	// OnChunkLoaded is a port of ChunkListener::onChunkLoaded.
 	OnChunkLoaded(chunkX, chunkZ int, chunk *format.Chunk)

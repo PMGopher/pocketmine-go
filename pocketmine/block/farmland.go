@@ -96,7 +96,7 @@ func (f *Farmland) OnRandomTick() {
 	if !f.canHydrate() {
 		if f.Wetness > 0 {
 			f.Wetness--
-			if err := world.SetBlock(f.position, f.self); err != nil {
+			if err := setBlockWithoutUpdate(world, f.position, f.self); err != nil {
 				panic(err)
 			}
 			changed = true
@@ -106,14 +106,14 @@ func (f *Farmland) OnRandomTick() {
 		}
 	} else if f.Wetness < FarmlandMaxWetness {
 		f.Wetness = FarmlandMaxWetness
-		if err := world.SetBlock(f.position, f.self); err != nil {
+		if err := setBlockWithoutUpdate(world, f.position, f.self); err != nil {
 			panic(err)
 		}
 		changed = true
 	}
 
 	if !changed && oldWaterPositionIndex != f.WaterPositionIndex {
-		if err := world.SetBlock(f.position, f.self); err != nil {
+		if err := setBlockWithoutUpdate(world, f.position, f.self); err != nil {
 			panic(err)
 		}
 	}

@@ -90,3 +90,23 @@ func nbtToAny(tag nbt.Tag) any {
 	}
 	return nil
 }
+
+// Core game mode IDs (GameModeIdMap: SURVIVAL 0, CREATIVE 1, ADVENTURE 2, SPECTATOR 3), which
+// player.GameMode's values are. Taken as an int so this package doesn't import player.
+const (
+	coreGameModeSurvival  = 0
+	coreGameModeCreative  = 1
+	coreGameModeAdventure = 2
+	coreGameModeSpectator = 3
+)
+
+// CoreGameModeToProtocol is a port of TypeConverter::coreGameModeToProtocol.
+func CoreGameModeToProtocol(gameMode int) int32 {
+	switch gameMode {
+	case coreGameModeCreative, coreGameModeSpectator: //TODO: native spectator support
+		return 1 // ProtocolGameMode::CREATIVE
+	case coreGameModeAdventure:
+		return 2 // ProtocolGameMode::ADVENTURE
+	}
+	return 0 // ProtocolGameMode::SURVIVAL
+}

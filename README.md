@@ -22,21 +22,19 @@ architecture, porting conventions and known issues.
 Requires Go (see `go.mod`).
 
 ```bash
-go run ./cmd/pocketmine-go
+go run ./cmd/pocketmine-go                 # data (server.properties, worlds/, players/) in the current directory
+go run ./cmd/pocketmine-go --data=server   # or in another folder (PocketMine.php's --data)
 ```
 
 Then add a server in Minecraft Bedrock pointing at your machine's IP, port `19132`.
-Xbox Live authentication is off, so any account can join.
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `-port` | `19132` | UDP port |
-| `-seed` | `0` | World seed (only used when the world is first created) |
-| `-world-dir` | `world` | Where the LevelDB world is saved |
-| `-motd` | `PocketMine-MP` | Server list name |
-| `-max-players` | `20` | Advertised player limit |
+Settings live in `server.properties`, created on first start with PocketMine-MP's defaults
+(`server-port`, `motd`, `max-players`, `gamemode`, `difficulty`, `level-name`, `level-seed`,
+`view-distance`, `xbox-auth`, ...). Any of them can be overridden on the command line with
+`--key=value`, e.g. `--server-port=19133` or `--xbox-auth=false`. Like PocketMine-MP,
+**`xbox-auth` is on by default**: players must be signed in to Xbox Live.
 
-Stop with Ctrl+C (the world is saved on shutdown). Run tests with `go test ./...`.
+Stop with Ctrl+C or by typing `stop` in the console (players and worlds are saved). Run tests with `go test ./...`.
 
 ## Progress
 
@@ -61,7 +59,7 @@ server.
 | `entity` (incl. effect, object, projectile, animation, attribute) | 77 / 77 |
 | `event` | 43 / 150 (base classes + every `event/entity` event + 2 player events) |
 | `inventory` | 10 / 35 (incl. player, armor, off-hand, ender inventories) |
-| `network` (above the protocol layer) | 6 / 85 |
+| `network` (above the protocol layer) | ~10 / 85 (NetworkSession, PreSpawn/InGame handlers, TypeConverter parts) |
 | `crafting`, `console`, `crash`, `resourcepacks`, `form` | 0 |
 
 _Counts are approximate: a class counts as ported if a Go file with its snake_case name or a Go
@@ -77,17 +75,18 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] StartGame, item table, abilities, spawn
 - [x] Chunk streaming by view distance as the player moves
 - [x] Multiple players see each other (player list, spawn, movement)
-- [ ] Xbox Live authentication (currently disabled)
-- [ ] `NetworkSession` and packet handlers ported from PMMP (currently a stand-in in `cmd/`)
+- [x] Xbox Live authentication (`xbox-auth`, on by default)
+- [x] `NetworkSession`, `PreSpawnPacketHandler`, `InGamePacketHandler` **(partial)**: login-to-spawn sequence, movement and input flags (sneak/sprint/swim/glide/fly/jump), block breaking, attacking, chat, hotbar selection, sub-chunk requests; item use, containers and ItemStackRequest execution aren't ported
+- [x] Block changes sent to players (`World::changedBlocks`/`sendBlocks`)
 - [ ] Packet rate limiting, broadcast batching, chunk cache
 - [ ] Query protocol, UPnP
 - [ ] Resource packs
 - [ ] Transfer server, forms
 
 ### Server core
-- [ ] `Server` class
-- [ ] `server.properties` / `pocketmine.yml`
-- [ ] Console input and console command sender
+- [x] `Server` class **(partial)**: startup, default world, tick loop, online players, broadcast, player data, shutdown; no plugins/commands/query/ban lists yet
+- [x] `server.properties` (`ServerConfigGroup`, `--key=value` overrides) · [ ] `pocketmine.yml`
+- [ ] Console input and console command sender **(partial)**: only `stop`
 - [x] Logger, text formatting, language/translation files (`lang`)
 - [x] Config files (YAML/JSON/properties) via `utils.Config`
 - [x] Sync task scheduler (not wired to the server yet)
@@ -143,8 +142,9 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Fall damage
 - [x] Chat formatters
 - [x] Player data file format (not wired to the server yet)
-- [ ] Held item / hotbar selection (everything acts as a bare hand)
-- [ ] Chat broadcast
+- [x] Held item / hotbar selection
+- [x] Chat broadcast (`/commands` answer "unknown command" until the command map is wired)
+- [x] Player data saved and restored (`players/<name>.dat`: position, health, hunger, XP, game mode)
 - [ ] Death and respawn **(partial)**: death logic, drops and XP drop ported; respawn screen/packet flow isn't
 - [x] Hunger, saturation, experience, attributes (logic ported; attribute packets sent)
 - [ ] Changing game mode in-game
@@ -182,7 +182,7 @@ All 77 classes under `pocketmine\entity` are ported, with their full logic.
 ## Roadmap
 
 1. **Make the world playable:** all block mappings, block placing, held items, chat.
-2. **Real server structure:** `Server`, `NetworkSession`, packet handlers, console, commands, events.
+2. **Real server structure:** `Server`, `NetworkSession` and packet handlers are in; console commands, the command map, events and permissions remain.
 3. **Gameplay:** inventory transactions, crafting, item NBT, and wiring the ported entities into item use.
 4. **Plugins.**
 5. **Everything else:** resource packs, query, auth, world upgraders, crash dumps.

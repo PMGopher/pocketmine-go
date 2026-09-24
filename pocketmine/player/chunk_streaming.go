@@ -75,6 +75,7 @@ func (p *Player) OrderChunks() {
 	}
 
 	newLoadQueue := map[[2]int]bool{}
+	var newLoadQueueOrder [][2]int
 	newTickingChunks := map[[2]int]bool{}
 	unloadChunks := make(map[[2]int]UsedChunkStatus, len(p.usedChunks))
 	for k, v := range p.usedChunks {
@@ -88,6 +89,7 @@ func (p *Player) OrderChunks() {
 	for chunk := range SelectChunks(p.viewDistance, centerX, centerZ) {
 		if status, ok := p.usedChunks[chunk]; !ok || status == UsedChunkStatusNeeded {
 			newLoadQueue[chunk] = true
+			newLoadQueueOrder = append(newLoadQueueOrder, chunk)
 		}
 		if radius < tickingChunkRadius {
 			newTickingChunks[chunk] = true
@@ -101,6 +103,7 @@ func (p *Player) OrderChunks() {
 	}
 
 	p.loadQueue = newLoadQueue
+	p.loadQueueOrder = newLoadQueueOrder
 	p.updateTickingChunkRegistrations(p.tickingChunks, newTickingChunks)
 	p.tickingChunks = newTickingChunks
 }
@@ -119,17 +122,27 @@ func (p *Player) updateTickingChunkRegistrations(oldTickingChunks, newTickingChu
 	}
 }
 
-// RequestChunks is a port of a slice of Player::requestChunks: generates (synchronously - this
-// port's whole generation pipeline already runs inline, see World.ensurePopulated's own doc
-// comment on why there's no async phase to throttle per tick the way real PHP's own
-// $chunksPerTick limit does) every chunk still queued, registers this player as their loader/
-// listener(+ticker where applicable), and returns the chunk coordinates that are now ready to
-// actually be sent over the network - the caller (cmd/pocketmine-go) is responsible for that part,
-// then calling MarkChunkSent once it has.
+// RequestChunks is a port of Player::requestChunks: at most chunksPerTick chunks from the load
+// queue (nearest first) are generated, registered for this player and returned as ready to send;
+// the caller (NetworkSession, PHP's startUsingChunk) sends them and calls MarkChunkSent.
+// Generation is synchronous in this port (see World.ensurePopulated), so there are never active
+// generation requests counting against the limit.
 func (p *Player) RequestChunks() [][2]int {
 	var readyToSend [][2]int
 
-	for chunk := range p.loadQueue {
+	count := 0
+	limit := p.chunksPerTick
+	remaining := p.loadQueueOrder[:0]
+	for _, chunk := range p.loadQueueOrder {
+		if !p.loadQueue[chunk] {
+			continue // unloaded (unloadChunk) since it was queued
+		}
+		if count >= limit {
+			remaining = append(remaining, chunk)
+			continue
+		}
+		count++
+
 		chunkX, chunkZ := chunk[0], chunk[1]
 
 		p.usedChunks[chunk] = UsedChunkStatusRequestedGeneration
@@ -146,6 +159,7 @@ func (p *Player) RequestChunks() [][2]int {
 		p.usedChunks[chunk] = UsedChunkStatusRequestedSending
 		readyToSend = append(readyToSend, chunk)
 	}
+	p.loadQueueOrder = remaining
 
 	return readyToSend
 }

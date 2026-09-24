@@ -33,8 +33,8 @@ server written in PHP) in Go, **keeping its game logic faithful to the original*
 ```bash
 go build ./...                      # builds everything
 go test ./...                       # all packages currently pass
-go run ./cmd/pocketmine-go          # starts a server on UDP :19132
-go run ./cmd/pocketmine-go -port 19133 -seed 1234 -world-dir world -motd "test" -max-players 20
+go run ./cmd/pocketmine-go                                   # server on UDP :19132, data in the current directory
+go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # PocketMine.php options + server.properties overrides
 ```
 
 - Go version: see `go.mod` (`go 1.26.1`).
@@ -47,7 +47,7 @@ go run ./cmd/pocketmine-go -port 19133 -seed 1234 -world-dir world -motd "test" 
   from df-mc/dragonfly (MIT, `assets/LICENSE-dragonfly`; same format). Replace them with
   BedrockData once pmmp publishes 1.26.50 data. Since 1.26.50 the client also needs the
   data-driven vanilla block definitions in StartGame (`bedrock.DataDrivenBlocks`).
-- Chunks are sent in **sub-chunk request mode** (`cmd/pocketmine-go/subchunk.go`): LevelChunk
+- Chunks are sent in **sub-chunk request mode** (`pocketmine/network/mcpe/sub_chunk_request.go`): LevelChunk
   carries only biomes + `SubChunkLimit`, and `SubChunkRequest` is answered with `SubChunk`
   entries (sub-chunk format **version 9**). This matches the vanilla server and Dragonfly on
   1.26.50. PocketMine-MP 5.44.4 still sends full chunks with version 8 sub-chunks, but it only
@@ -56,7 +56,7 @@ go run ./cmd/pocketmine-go -port 19133 -seed 1234 -world-dir world -motd "test" 
   for that (not yet confirmed with a real client at the time of writing).
 - StartGame must set `BaseGameVersion` and server-authoritative block breaking
   (`PlayerMovementSettings(0, true)` like PreSpawnPacketHandler).
-- After StartGame, `sendPreSpawnData` (main.go) sends the rest of PreSpawnPacketHandler's packets:
+- After StartGame, `PreSpawnPacketHandler.SetUp` sends the rest of PreSpawnPacketHandler's packets:
   `AvailableActorIdentifiers` (pmmp BedrockData 1.26.30 `entity_identifiers.nbt`),
   `BiomeDefinitionList` (1.26.50, captured from Dragonfly: `assets/biome_definitions.bin`, see
   `bedrock.BiomeDefinitionList`), `AvailableCommands` (empty), the player's own `SetActorData`,
@@ -64,17 +64,22 @@ go run ./cmd/pocketmine-go -port 19133 -seed 1234 -world-dir world -motd "test" 
 - The 1.26.50 block palette was cross-checked against pmmp's official 1.26.30 file: Dragonfly's
   state order matches it on all 676 unchanged multi-state blocks (an altay/BedrockData 1.26.50 dump
   disagrees on 12, so don't use that one), and the 98 data-driven block definitions match altay's.
-- Xbox Live auth is **disabled** (`AuthenticationDisabled: true` in `main.go`), so any client can join.
-- World data is written to `-world-dir` (LevelDB + `level.dat`). Delete that directory to regenerate.
+- `xbox-auth` is **on** by default, like PocketMine-MP. Test clients that can't sign in (e.g. a
+  gophertunnel Dialer) need `--xbox-auth=false`.
+- The data folder (`--data`, default: working directory) holds `server.properties`,
+  `worlds/<level-name>/` (LevelDB + `level.dat`) and `players/<name>.dat`. Delete `worlds/` to
+  regenerate.
+- gophertunnel's own errors go to the server log (`ErrorLog`, see `server/slog_handler.go`), and a
+  client's `PacketViolationWarning` is logged as a warning: check those first when a client
+  disconnects.
 
 ## 3. Repository layout
 
 ```
-cmd/pocketmine-go/     The runnable server. main.go = startup, tick loop, packet read loop.
-                       session.go = per-connection state + player registry (join/leave/move/
-                       sound/particle broadcast). Currently acts as a stand-in for Server +
-                       NetworkSession + InGamePacketHandler (none of which exist yet).
+cmd/pocketmine-go/     Entry point only (port of PocketMine.php): --data/--version, then server.New/Start.
 pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP/src/.
+  server/              Server, ServerProperties, ServerConfigGroup (PHP's root-namespace classes;
+                       own package because the root package is imported by entity/world)
   block/               ~260 of 270 block classes, tile/ (tiles), inventory/ (block inventories), utils/
   item/                ~110 of 136 item classes, VanillaItems (partial)
   world/               World, WorldManager, Explosion, tick loop, ChunkListener
@@ -83,7 +88,10 @@ pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP
     generator/         Flat, Normal, hell (Nether), noise, populators, trees/ores, biomeselector
     light/             sky + block light propagation
     biome/, particle/, sound/, utils/
-  network/mcpe/convert/     BlockTranslator, BlockStateSerializer, ItemTranslator (internal ↔ network IDs)
+  network/mcpe/        NetworkSession (on gophertunnel's minecraft.Conn), sub-chunk requests
+  network/mcpe/handler/     PreSpawnPacketHandler, InGamePacketHandler
+  network/mcpe/convert/     BlockTranslator, BlockStateSerializer, ItemTranslator, TypeConverter parts,
+                            ClientDataToSkinDataHelper
   network/mcpe/serializer/  ChunkSerializer (LevelChunk payload)
   data/bedrock/        BlockStateDictionary, ItemTypeDictionary + vendored assets/
                        (canonical_block_states.nbt, required_item_list.json)
@@ -147,15 +155,13 @@ Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §
 | world core | World, ticking, scheduled/random updates, light, explosions, WorldManager, ChunkListener, level.dat, LevelDB save/load: done. |
 | generators | Flat, Normal (all biomes), Nether done. Trees: only oak/spruce/birch. Generation is synchronous (no async executor). |
 | entity | **All 77 `pocketmine\entity` classes ported with their logic** (physics/collision `Entity::move`, fire, air, attributes, hunger, XP, effects, armor + enchantment damage reduction, knockback, death/drops, objects, projectiles, mobs, EntityFactory + LevelDB entity save/load). Entities are ticked by `World`. Not reachable in-game yet where it depends on item use (bows, throwing, spawn eggs) or packet handlers. |
-| player | Player now embeds `entity.Human` (like PHP). Chunk streaming, survival block breaking, PvP, fall damage via `Entity` physics. Death/respawn flow, most player events, NetworkSession: missing. |
+| player | Player embeds `entity.Human` (like PHP). Chunk streaming (chunksPerTick, nearest first), survival block breaking, PvP, fall damage, chat, hotbar selection, input toggles, join/quit, saved player data. Death/respawn flow and player events: missing. |
 | framework libs | command (base only), event (base + all `event/entity` events, 2 player events), permission, scheduler (sync only), lang, timings, log, promise, plugin (description parsing only). |
-| **server glue** | **Missing.** No `Server`, `ServerProperties`, `pocketmine.yml`, console, `NetworkSession`, packet handlers. `cmd/pocketmine-go/main.go` is a hand-written stand-in. |
+| server glue | **Partly ported.** `Server` (startup, default world via `WorldManager`, tick loop, online players, broadcast, player data via `DatFilePlayerDataProvider`, shutdown), `ServerConfigGroup` + `server.properties`, `NetworkSession`, `PreSpawnPacketHandler`, `InGamePacketHandler`. Missing: `pocketmine.yml`, console commands (only `stop`), command map wiring, permissions/ops, ban/whitelist, plugins, query, `DeathPacketHandler`, `ResourcePacksPacketHandler` (gophertunnel does resource packs). |
 | not started | crafting, inventory transactions, cursor/creative inventories, item NBT serialization, non-entity concrete events (block, player, inventory, world, server, plugin), default commands, plugin loading, resource packs, query, crash dumps, region (Anvil/McRegion) world formats, block-state upgrader (old world compatibility). |
 
-**Important: many ported packages are not used by the running server yet.** `command`, `event`,
-`permission`, `scheduler`, `WorldManager` and `DatFilePlayerDataProvider` all exist and are tested,
-but `main.go` doesn't call any of them. Wiring them up through a real `Server` type is the next
-big structural step (Phase 2 below).
+**Some ported packages are still not used by the running server:** `command`, `event`,
+`permission` and `scheduler` exist and are tested, but `Server` doesn't use them yet (Phase 2).
 
 ### What a player can do today
 
@@ -178,15 +184,17 @@ change game mode.
   never denied, so the swim-up gesture enabled flying). **Probable cause found (not yet confirmed
   in a client):** `StartGame` was sent the *feet* position and `PlayerAuthInput`'s position (the
   client's *eye* position) was stored as the feet position, so every player was 1.62 blocks too
-  high server-side (and to other players). `main.go` now sends `Human::getOffsetPosition` (feet +
+  high server-side (and to other players). `PreSpawnPacketHandler` now sends `Human::getOffsetPosition` (feet +
   1.621) in `StartGame` and subtracts 1.62 from `PlayerAuthInput`, like PHP. If the bug is still
   seen, check `UpdateAbilities` ordering and leftover `MayFly`/`Flying` state.
 - Movement is still client-authoritative: `Player.HandleMovement` (port of
   `Player::handleMovement`) only rejects moves > 15 blocks per tick; no anti-fly.
 - Blocks the generator can place but that have no network serializer can't be sent to the client.
-  Keep `main.go`'s block list and `convert/vanilla_block_mappings.go` in sync until the full
+  Keep `server.knownBlocks` and `convert/vanilla_block_mappings.go` in sync until the full
   mappings are ported.
-- `MobEquipment` isn't handled, so the held item is always hotbar slot 0.
+- Population writes behave like PHP's async `PopulationTask` (`World.populationWrites`): no
+  neighbour updates or changed-block tracking, then `setChunk` semantics (`OnChunkChanged`).
+  Before this, populated ores lit up and leaves kept re-checking decay forever.
 - Item NBT isn't serialized, so dropped items (`ItemEntity`) and tridents don't save with the
   chunk (`CanSaveWithChunk` returns false), and Human inventories aren't saved in entity NBT.
 - Architecture note for the entity port: `world.Entity` is the polymorphic entity interface;
@@ -214,19 +222,21 @@ something a person can see working in the client.
 5. **Chat broadcast** (`Text` packet → all players, with the `chat` formatters already ported).
 6. **Investigate the spawn/floating issue** above.
 
-### Phase 2: Real server structure (replace the stand-in in `cmd/`)
-1. Port `Server` (+ `ServerProperties`, `ServerConfigGroup`, `server.properties`/`pocketmine.yml`
-   loading via the existing `utils.Config`).
-2. Port `NetworkSession` + `handler/*` (`PreSpawnPacketHandler`, `InGamePacketHandler`,
-   `DeathPacketHandler`, ...) on top of gophertunnel's `minecraft.Conn`, and `TypeConverter`.
-3. Move `main.go`'s logic into those types. Use `WorldManager` instead of a single `world.New`.
-   Drive the tick through `Server`. Use `scheduler.TaskScheduler`.
+### Phase 2: Real server structure
+1. ~~Port `Server`, `ServerProperties`, `ServerConfigGroup`~~ (done; `pocketmine.yml` isn't
+   vendored yet, so `GetProperty` only sees command-line values and defaults).
+2. ~~Port `NetworkSession`, `PreSpawnPacketHandler`, `InGamePacketHandler`~~ (done, partial
+   handlers). Remaining: `DeathPacketHandler`, `InventoryManager`, item use in
+   `InGamePacketHandler`.
+3. ~~Move `main.go`'s logic into those types, use `WorldManager`, drive the tick through
+   `Server`~~ (done). Remaining: `scheduler.TaskScheduler` in the tick.
 4. Console reader + `ConsoleCommandSender`, then the default commands (`command/defaults`: start
    with `stop`, `help`, `list`, `say`, `gamemode`, `tp`, `give`, `time`, `op`/`deop`, `kick`,
    `ban`, `whitelist`).
 5. Port all concrete **events** (`event/block|entity|inventory|player|plugin|server|world`) and
    fire them from the places PHP fires them. Required before plugins make sense.
-6. Player data persistence (wire `DatFilePlayerDataProvider`), permissions/ops wired to players.
+6. ~~Player data persistence~~ (done). Permissions/ops wired to players, which also makes
+   `Player` a command sender.
 
 ### Phase 3: Gameplay systems
 - Inventories: `PlayerInventory`, armor, offhand, cursor, crafting grid, ender chest, creative
@@ -274,6 +284,6 @@ When you finish a chunk of work, update the checklist in `README.md` and §5 of 
 - Always have the PHP source open for whatever you're porting. Behaviour must match it.
 - Check whether a helper is already ported before writing one (`grep -rn "is a port of" pocketmine`).
 - Don't add features PocketMine-MP doesn't have.
-- `cmd/pocketmine-go/main.go` is temporary glue. Put new logic in the proper `pocketmine/...`
-  package and keep `main.go` thin.
+- `cmd/pocketmine-go/main.go` is only the entry point (PocketMine.php). Put new logic in the proper
+  `pocketmine/...` package.
 - Run `go vet ./... && go test ./...` before committing.

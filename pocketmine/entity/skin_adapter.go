@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 )
 
@@ -36,6 +37,13 @@ func SkinToNetwork(skin *Skin) protocol.Skin {
 		CapeImageHeight:   capeHeight,
 		CapeData:          capeData,
 		SkinGeometry:      skin.GetGeometryData(),
+		// The rest are SkinData::__construct's defaults, which toSkinData doesn't override.
+		GeometryDataEngineVersion: []byte(protocol.CurrentVersion), // ProtocolInfo::MINECRAFT_VERSION_NETWORK
+		FullID:                    uuid.New().String(),             // $fullSkinId ?? Uuid::uuid4()
+		ArmSize:                   protocol.ArmSizeWide,
+		Trusted:                   true, // isVerified
+		PrimaryUser:               true,
+		OverrideAppearance:        true,
 	}
 }
 

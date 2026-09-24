@@ -81,7 +81,7 @@ func (l *Leaves) OnNearbyBlockChange() {
 	if !l.NoDecay && !l.CheckDecay {
 		l.CheckDecay = true
 		if world, err := l.position.GetWorld(); err == nil {
-			if err := world.SetBlock(l.position, l.self); err != nil {
+			if err := setBlockWithoutUpdate(world, l.position, l.self); err != nil {
 				panic(err)
 			}
 		}
@@ -102,7 +102,7 @@ func (l *Leaves) OnRandomTick() {
 	}
 	if l.findLog(l.position.AsVector3(), map[[3]int]bool{}, 0) {
 		l.CheckDecay = false
-		if err := world.SetBlock(l.position, l.self); err != nil {
+		if err := setBlockWithoutUpdate(world, l.position, l.self); err != nil {
 			panic(err)
 		}
 	} else {

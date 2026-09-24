@@ -23,12 +23,20 @@ func TestOrderChunksThenRequestChunksLoadsChunksAroundThePlayer(t *testing.T) {
 		t.Fatal("OrderChunks() did not queue any chunks to load")
 	}
 
-	sent := p.RequestChunks()
+	// Player::requestChunks handles chunksPerTick chunks per call (one call per tick).
+	var sent [][2]int
+	for range 100 {
+		ready := p.RequestChunks()
+		if len(ready) == 0 {
+			break
+		}
+		sent = append(sent, ready...)
+	}
 	if len(sent) == 0 {
 		t.Fatal("RequestChunks() returned no newly-ready chunks")
 	}
 	if len(p.loadQueue) != 0 {
-		t.Error("RequestChunks() did not drain the load queue")
+		t.Error("repeated RequestChunks() did not drain the load queue")
 	}
 
 	for _, c := range sent {
@@ -78,7 +86,8 @@ func TestOrderChunksUnloadsChunksThatFallOutsideTheNewRadius(t *testing.T) {
 	p := newTestPlayer(t, 1, math.NewVector3(8, 70, 8))
 	p.SetViewDistance(6)
 	p.OrderChunks()
-	p.RequestChunks()
+	for len(p.RequestChunks()) > 0 {
+	}
 
 	before := len(p.GetUsedChunks())
 	if before == 0 {
@@ -129,5 +138,23 @@ func TestOnChunkChangedResetsASentChunkBackToNeeded(t *testing.T) {
 	status, ok := p.GetUsedChunkStatus(c[0], c[1])
 	if !ok || status != UsedChunkStatusNeeded {
 		t.Errorf("status after OnChunkChanged = %v (ok=%v), want UsedChunkStatusNeeded", status, ok)
+	}
+}
+
+func TestRequestChunksSendsAtMostChunksPerTickNearestFirst(t *testing.T) {
+	p := newTestPlayer(t, 1, math.NewVector3(8, 70, 8)) // chunk (0,0)
+	p.SetViewDistance(4)
+	p.OrderChunks()
+
+	first := p.RequestChunks()
+	if len(first) != p.chunksPerTick {
+		t.Fatalf("RequestChunks() returned %d chunks, want chunksPerTick (%d)", len(first), p.chunksPerTick)
+	}
+	if first[0] != [2]int{0, 0} {
+		t.Errorf("first chunk requested = %v, want the player's own chunk (0,0)", first[0])
+	}
+	second := p.RequestChunks()
+	if len(second) != p.chunksPerTick || second[0] == first[0] {
+		t.Errorf("second RequestChunks() = %v, want %d new chunks", second, p.chunksPerTick)
 	}
 }

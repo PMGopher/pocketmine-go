@@ -124,6 +124,14 @@ func (m *WorldManager) UnloadWorld(w *World, forceUnload bool) (bool, error) {
 	if w == m.defaultWorld {
 		m.defaultWorld = nil
 	}
+	// World::onUnload -> World::save: level.dat is saved along with the chunks (Close).
+	if wd, ok := m.worldData[w.GetID()]; ok {
+		wd.SetTime(w.GetTime())
+		wd.SetSpawn(w.GetSpawnLocation())
+		if err := wd.Save(m.worldPath(w.GetFolderName())); err != nil {
+			return false, fmt.Errorf("world manager: saving %q's level.dat: %w", w.GetFolderName(), err)
+		}
+	}
 	delete(m.worlds, w.GetID())
 	delete(m.worldData, w.GetID())
 
