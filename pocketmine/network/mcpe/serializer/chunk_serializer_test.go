@@ -109,11 +109,11 @@ func TestSerializeSubChunkStructure(t *testing.T) {
 	sc := format.NewSubChunk(int32(air.GetStateId()), nil, format.NewPalettedBlockArray(1))
 	sc.SetBlockStateID(0, 0, 0, int32(stone.GetStateId()))
 
-	data := SerializeSubChunk(sc, tr)
+	data := SerializeSubChunk(sc, -3, tr)
 
 	offset := 0
-	if data[offset] != 8 {
-		t.Fatalf("version byte = %d, want 8", data[offset])
+	if data[offset] != 9 {
+		t.Fatalf("version byte = %d, want 9", data[offset])
 	}
 	offset++
 	layerCount := data[offset]
@@ -121,6 +121,10 @@ func TestSerializeSubChunkStructure(t *testing.T) {
 	if layerCount != 1 {
 		t.Fatalf("layer count = %d, want 1", layerCount)
 	}
+	if y := int8(data[offset]); y != -3 {
+		t.Fatalf("sub-chunk Y index = %d, want -3", y)
+	}
+	offset++
 
 	header := data[offset]
 	offset++
@@ -200,7 +204,7 @@ func TestSerializeFullChunkIncludesEverySubChunkUpToTopmostNonEmpty(t *testing.T
 	var want []byte
 	writtenCount := 0
 	for y := format.MinSubChunkIndex; writtenCount < expectedSubChunkCount; y, writtenCount = y+1, writtenCount+1 {
-		want = append(want, SerializeSubChunk(c.GetSubChunk(y), tr)...)
+		want = append(want, SerializeSubChunk(c.GetSubChunk(y), y, tr)...)
 	}
 	for y := format.MinSubChunkIndex; y <= format.MaxSubChunkIndex; y++ {
 		want = append(want, serializeBiomePalette(c.GetSubChunk(y).GetBiomeArray())...)

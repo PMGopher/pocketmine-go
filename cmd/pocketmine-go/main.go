@@ -45,7 +45,6 @@ import (
 	"pocketmine-go/pocketmine/log"
 	pmmath "pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
-	"pocketmine-go/pocketmine/network/mcpe/serializer"
 	"pocketmine-go/pocketmine/player"
 	"pocketmine-go/pocketmine/world"
 	worldio "pocketmine-go/pocketmine/world/format/io"
@@ -480,7 +479,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	for {
 		pk, err := conn.ReadPacket()
 		if err != nil {
-			logger.Info(fmt.Sprintf("%s disconnected", name))
+			logger.Info(fmt.Sprintf("%s disconnected: %v", name, err))
 			return
 		}
 		serverMu.Lock()
@@ -507,6 +506,11 @@ func handlePacket(conn *minecraft.Conn, w *world.World, sess *session, pk packet
 		}
 		if actions, ok := input.BlockActions.Value(); ok {
 			handleBlockActions(conn, p, actions, logger, name)
+		}
+	case *packet.SubChunkRequest:
+		if err := conn.WritePacket(handleSubChunkRequest(w, input)); err != nil {
+			logger.Warning(fmt.Sprintf("%s: failed to send sub-chunks: %v", name, err))
+			return false
 		}
 	case *packet.InventoryTransaction:
 		handleInventoryTransaction(w, p, input, logger, name)
@@ -618,7 +622,7 @@ func handleBlockActions(conn *minecraft.Conn, p *player.Player, actions []protoc
 // streamChunksToPlayer is a port of the network-sending half of Player::requestChunks: drives p's
 // own real OrderChunks/RequestChunks (see player.Player's own doc comment on the real per-player
 // view-distance-driven chunk streaming this replaces the old fixed-area broadcast with), sends a
-// LevelChunk packet for every newly-ready chunk, marks each one sent, and syncs the client's view
+// (sub-chunk request mode) LevelChunk packet for every newly-ready chunk, marks each one sent, and syncs the client's view
 // area center point - callers call this both once at spawn and again on every PlayerAuthInput, so
 // chunks stream in as the player moves instead of only ever covering one fixed area. Returns how
 // many chunks were sent this call.
@@ -635,13 +639,9 @@ func streamChunksToPlayer(conn *minecraft.Conn, p *player.Player) (int, error) {
 		if !ok {
 			continue
 		}
-		payload := serializer.SerializeFullChunk(chunk, w.Translator())
-		pk := &packet.LevelChunk{
-			Position:      protocol.ChunkPos{int32(c[0]), int32(c[1])},
-			SubChunkCount: uint32(serializer.GetSubChunkCount(chunk)),
-			RawPayload:    payload,
-		}
-		if err := conn.WritePacket(pk); err != nil {
+		// Sub-chunk request mode (see subchunk.go): the blocks follow in SubChunk packets once the
+		// client asks for them.
+		if err := conn.WritePacket(levelChunkPacket(c[0], c[1], chunk)); err != nil {
 			return 0, err
 		}
 		p.MarkChunkSent(c[0], c[1])

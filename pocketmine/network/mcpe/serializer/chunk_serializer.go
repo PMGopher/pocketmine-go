@@ -34,19 +34,20 @@ func GetSubChunkCount(chunk *format.Chunk) int {
 // dimension and always using network (non-persistent, runtime-ID-based) block state IDs - the
 // persistent (world-save, NBT-based) block state path isn't ported, since nothing in this port
 // writes chunks to disk yet, only sends them over the network.
+//
+// cmd/pocketmine-go sends chunks in sub-chunk request mode instead (SerializeBiomesPayload +
+// SerializeSubChunk), which is what Bedrock 1.26.50 servers known to work use; this full-chunk
+// form is kept for the LevelChunk non-request path.
 func SerializeFullChunk(chunk *format.Chunk, translator *convert.BlockTranslator) []byte {
 	var buf []byte
 
 	subChunkCount := GetSubChunkCount(chunk)
 	writtenCount := 0
 	for y := overworldMinSubChunkIndex; writtenCount < subChunkCount; y, writtenCount = y+1, writtenCount+1 {
-		buf = append(buf, SerializeSubChunk(chunk.GetSubChunk(y), translator)...)
+		buf = append(buf, SerializeSubChunk(chunk.GetSubChunk(y), y, translator)...)
 	}
 
-	// "all biomes must always be written" - PHP's own comment on the loop below.
-	for y := overworldMinSubChunkIndex; y <= overworldMaxSubChunkIndex; y++ {
-		buf = append(buf, serializeBiomePalette(chunk.GetSubChunk(y).GetBiomeArray())...)
-	}
+	buf = append(buf, serializeBiomes(chunk)...)
 
 	buf = append(buf, 0) // border block array count - always empty (see ChunkSerializer.php's own comment: these crash the regular client)
 
@@ -58,11 +59,33 @@ func SerializeFullChunk(chunk *format.Chunk, translator *convert.BlockTranslator
 	return buf
 }
 
+// SerializeBiomesPayload is the LevelChunk payload for sub-chunk request mode: every sub-chunk's
+// biomes followed by the (always empty) border block count. The blocks themselves are sent later,
+// one SubChunk packet entry per sub-chunk the client asks for.
+func SerializeBiomesPayload(chunk *format.Chunk) []byte {
+	return append(serializeBiomes(chunk), 0)
+}
+
+// serializeBiomes writes the biome palette of every overworld sub-chunk ("all biomes must always
+// be written" - PHP's own comment on this loop in serializeFullChunk).
+func serializeBiomes(chunk *format.Chunk) []byte {
+	var buf []byte
+	for y := overworldMinSubChunkIndex; y <= overworldMaxSubChunkIndex; y++ {
+		buf = append(buf, serializeBiomePalette(chunk.GetSubChunk(y).GetBiomeArray())...)
+	}
+	return buf
+}
+
 // SerializeSubChunk is a port of ChunkSerializer::serializeSubChunk, always using network
 // (non-persistent) block state IDs (the `$persistentBlockStates` parameter is always false here).
-func SerializeSubChunk(subChunk *format.SubChunk, translator *convert.BlockTranslator) []byte {
+//
+// Unlike PocketMine-MP 5.44.4 (which only supports clients up to 1.26.30 and writes version 8),
+// this writes sub-chunk format version 9, which carries the sub-chunk's absolute Y index after the
+// layer count. Version 9 is what the vanilla server and Dragonfly send, and what the sub-chunk
+// request system requires. y is the sub-chunk index (format.MinSubChunkIndex..MaxSubChunkIndex).
+func SerializeSubChunk(subChunk *format.SubChunk, y int, translator *convert.BlockTranslator) []byte {
 	layers := subChunk.GetBlockLayers()
-	buf := []byte{8, byte(len(layers))} // version, layer count
+	buf := []byte{9, byte(len(layers)), byte(int8(y))} // version, layer count, sub-chunk Y index
 
 	for _, layer := range layers {
 		bitsPerBlock := layer.GetBitsPerBlock()

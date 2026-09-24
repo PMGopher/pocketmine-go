@@ -47,6 +47,15 @@ go run ./cmd/pocketmine-go -port 19133 -seed 1234 -world-dir world -motd "test" 
   from df-mc/dragonfly (MIT, `assets/LICENSE-dragonfly`; same format). Replace them with
   BedrockData once pmmp publishes 1.26.50 data. Since 1.26.50 the client also needs the
   data-driven vanilla block definitions in StartGame (`bedrock.DataDrivenBlocks`).
+- Chunks are sent in **sub-chunk request mode** (`cmd/pocketmine-go/subchunk.go`): LevelChunk
+  carries only biomes + `SubChunkLimit`, and `SubChunkRequest` is answered with `SubChunk`
+  entries (sub-chunk format **version 9**). This matches the vanilla server and Dragonfly on
+  1.26.50. PocketMine-MP 5.44.4 still sends full chunks with version 8 sub-chunks, but it only
+  supports up to 1.26.30. A 1.26.51 client disconnected with "Block" (ClientDisconnection-90)
+  while we sent full chunks with v8 sub-chunks; the switch to Dragonfly's proven path is the fix
+  for that (not yet confirmed with a real client at the time of writing).
+- StartGame must set `BaseGameVersion` and server-authoritative block breaking
+  (`PlayerMovementSettings(0, true)` like PreSpawnPacketHandler).
 - Xbox Live auth is **disabled** (`AuthenticationDisabled: true` in `main.go`), so any client can join.
 - World data is written to `-world-dir` (LevelDB + `level.dat`). Delete that directory to regenerate.
 
