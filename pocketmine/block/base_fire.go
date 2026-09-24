@@ -1,6 +1,6 @@
 package block
 
-import "pocketmine-go/pocketmine/entity"
+import entityevent "pocketmine-go/pocketmine/event/entity"
 
 // fireShaper lets BaseFire reach a concrete leaf's GetFireDamage - same self-dispatch shape as
 // bannerShaper/signShaper elsewhere in this port.
@@ -24,10 +24,10 @@ func (b *BaseFire) CanBeReplaced() bool { return true }
 // behavioural gap versus a full stub.
 func (b *BaseFire) OnEntityInside(e Entity) bool {
 	damage := b.self.(fireShaper).GetFireDamage()
-	dmgEv := entity.NewEntityDamageByBlockEvent(b.self, e, entity.EntityDamageCauseFire, float64(damage), nil)
+	dmgEv := entityevent.NewEntityDamageByBlockEvent(b.self, e, entityevent.CauseFire, float64(damage), nil)
 	e.Attack(dmgEv)
 
-	combustEv := entity.NewEntityCombustByBlockEvent(b.self, e, 8)
+	combustEv := entityevent.NewEntityCombustByBlockEvent(b.self, e, 8)
 	combustEv.Call()
 	if !combustEv.IsCancelled() {
 		e.SetOnFire(combustEv.GetDuration())

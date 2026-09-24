@@ -1,7 +1,7 @@
 package block
 
 import (
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
@@ -37,7 +37,7 @@ func (w *Water) GetMinAdjacentSourcesToFormSource() (int, bool) { return 2, true
 func (w *Water) OnEntityInside(e Entity) bool {
 	e.ResetFallDistance()
 	if e.IsOnFire() {
-		e.ExtinguishWithCause(entity.EntityExtinguishCauseWater)
+		e.ExtinguishWithCause(entityevent.ExtinguishCauseWater)
 	}
 	return true
 }

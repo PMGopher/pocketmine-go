@@ -4,56 +4,87 @@ import (
 	"testing"
 
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/world"
 )
 
-func TestTrackFallStateAppliesNoDamageForAShortFall(t *testing.T) {
-	p := newTestPlayer(t, 1, math.NewVector3(0, 70, 0))
+// groundY returns the Y of the top surface of the test world's terrain at x=0,z=0 (the feet
+// position of a player standing on it).
+func groundY(t *testing.T, w *world.World) float64 {
+	t.Helper()
+	chunk := w.GetOrLoadChunk(0, 0)
+	h, ok := chunk.GetHighestBlockAt(0, 0)
+	if !ok {
+		t.Fatal("test world has no terrain at 0,0")
+	}
+	return float64(h + 1)
+}
 
-	// Falling 2 blocks (less than the 3-block-free fall allowance) and landing.
-	p.TrackFallState(69, false)
-	p.TrackFallState(68, true)
-
-	if p.GetHealth() != float64(p.GetMaxHealth()) {
-		t.Errorf("GetHealth() = %v, want unchanged %v after a short fall", p.GetHealth(), p.GetMaxHealth())
+// fallTo moves p down one block per movement (like per-tick PlayerAuthInput reports) until its
+// feet reach y.
+func fallTo(t *testing.T, p *Player, y float64) {
+	t.Helper()
+	for pos := p.GetPosition(); pos.Y > y; pos = p.GetPosition() {
+		next := max(pos.Y-1, y)
+		if !p.HandleMovement(math.NewVector3(pos.X, next, pos.Z)) {
+			t.Fatalf("HandleMovement refused a 1-block move to y=%v", next)
+		}
 	}
 }
 
-func TestTrackFallStateAppliesRealDamageForALongFall(t *testing.T) {
-	p := newTestPlayer(t, 1, math.NewVector3(0, 90, 0))
+func TestShortFallDealsNoDamage(t *testing.T) {
+	w := newTestWorld(t)
+	ground := groundY(t, w)
+	p := newTestPlayerIn(t, w, math.NewVector3(0.5, ground+2, 0.5))
+
+	fallTo(t, p, ground)
+
+	if p.GetHealth() != float64(p.GetMaxHealth()) {
+		t.Errorf("GetHealth() = %v, want unchanged %v after a 2-block fall", p.GetHealth(), p.GetMaxHealth())
+	}
+	if !p.IsOnGround() {
+		t.Error("IsOnGround() = false after landing, want true")
+	}
+}
+
+func TestLongFallDealsLivingFallDamage(t *testing.T) {
+	w := newTestWorld(t)
+	ground := groundY(t, w)
+	p := newTestPlayerIn(t, w, math.NewVector3(0.5, ground+10, 0.5))
 	startHealth := p.GetHealth()
 
-	// Fall 10 blocks then land - one TrackFallState call per block of descent, matching how
-	// PlayerAuthInput reports position every tick.
-	y := 90.0
-	for i := 0; i < 10; i++ {
-		y--
-		p.TrackFallState(y, false)
-	}
-	p.TrackFallState(y, true) // land
+	fallTo(t, p, ground)
 
-	wantDamage := p.CalculateFallDamage(10)
-	if p.GetHealth() != startHealth-wantDamage {
-		t.Errorf("GetHealth() = %v, want %v (fall damage %v)", p.GetHealth(), startHealth-wantDamage, wantDamage)
+	want := startHealth - p.CalculateFallDamage(10)
+	if p.GetHealth() != want {
+		t.Errorf("GetHealth() = %v, want %v after a 10-block fall", p.GetHealth(), want)
 	}
 	if p.GetFallDistance() != 0 {
 		t.Errorf("GetFallDistance() = %v, want 0 after landing", p.GetFallDistance())
 	}
 }
 
-func TestTrackFallStateOnlyAppliesDamageOnceOnLanding(t *testing.T) {
-	p := newTestPlayer(t, 1, math.NewVector3(0, 90, 0))
+func TestFlyingPlayersTakeNoFallDamage(t *testing.T) {
+	w := newTestWorld(t)
+	ground := groundY(t, w)
+	p := newTestPlayerIn(t, w, math.NewVector3(0.5, ground+10, 0.5))
+	p.SetFlying(true)
 
-	y := 90.0
-	for i := 0; i < 10; i++ {
-		y--
-		p.TrackFallState(y, false)
+	fallTo(t, p, ground)
+
+	if p.GetHealth() != float64(p.GetMaxHealth()) {
+		t.Errorf("GetHealth() = %v, want unchanged (Player::calculateFallDamage is 0 while flying)", p.GetHealth())
 	}
-	p.TrackFallState(y, true)
-	healthAfterFirstLanding := p.GetHealth()
+}
 
-	// Reporting onGround=true again without an intervening fall shouldn't re-apply damage.
-	p.TrackFallState(y, true)
-	if p.GetHealth() != healthAfterFirstLanding {
-		t.Errorf("GetHealth() = %v, want unchanged %v (damage should only apply once per landing)", p.GetHealth(), healthAfterFirstLanding)
+func TestHandleMovementRefusesMovesOfMoreThan15Blocks(t *testing.T) {
+	w := newTestWorld(t)
+	ground := groundY(t, w)
+	p := newTestPlayerIn(t, w, math.NewVector3(0.5, ground, 0.5))
+
+	if p.HandleMovement(math.NewVector3(0.5, ground, 20.5)) {
+		t.Error("HandleMovement accepted a 20-block move, want it refused")
+	}
+	if p.GetPosition().Z != 0.5 {
+		t.Errorf("position Z = %v after a refused move, want unchanged 0.5", p.GetPosition().Z)
 	}
 }

@@ -7,11 +7,11 @@
 // existing hand-written network chunk serializer.
 //
 // Scoped to the overworld dimension only (no dimension suffix on keys) and to exactly the tags
-// this port's World actually needs to round-trip: SUBCHUNK block data and 3D biomes. Tiles,
-// entities, scheduled ticks, legacy conversion data and every other ChunkDataKey tag aren't
-// written or read - this port has no Tile-in-World/Entity-in-World system yet for the first two,
-// and the rest only exist to support migrating old worlds forward, which doesn't apply to a world
-// this port itself created.
+// this port's World actually needs to round-trip: SUBCHUNK block data, 3D biomes and ENTITIES
+// (see entities.go). Tiles, scheduled ticks, legacy conversion data and every other ChunkDataKey
+// tag aren't written or read - tile persistence isn't wired into World yet, and the rest only
+// exist to support migrating old worlds forward, which doesn't apply to a world this port itself
+// created.
 package leveldb
 
 import "pocketmine-go/pocketmine/binaryutils"
@@ -22,6 +22,7 @@ const (
 	tagNewVersion           byte = 0x2c
 	tagSubChunk             byte = 0x2f
 	tagFinalization         byte = 0x36
+	tagEntities             byte = 0x32
 )
 
 // chunkVersion is a port of WorldDataVersions::CHUNK (ChunkVersion::v1_21_120 = 42), written under

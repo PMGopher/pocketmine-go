@@ -29,6 +29,19 @@ const noBlockRuntimeID = 0
 // port's bare Clownfish type doesn't carry (no tropical-fish-variant data model exists anywhere in
 // this port yet) - a documented gap, not an oversight.
 var itemTypeNames = map[int]string{
+	item.INK_SAC:                "minecraft:ink_sac",
+	item.IRON_INGOT:             "minecraft:iron_ingot",
+	item.ARROW:                  "minecraft:arrow",
+	item.EGG:                    "minecraft:egg",
+	item.SNOWBALL:               "minecraft:snowball",
+	item.ICE_BOMB:               "minecraft:ice_bomb",
+	item.ENDER_PEARL:            "minecraft:ender_pearl",
+	item.EXPERIENCE_BOTTLE:      "minecraft:experience_bottle",
+	item.PAINTING:               "minecraft:painting",
+	item.END_CRYSTAL:            "minecraft:end_crystal",
+	item.ZOMBIE_SPAWN_EGG:       "minecraft:zombie_spawn_egg",
+	item.SQUID_SPAWN_EGG:        "minecraft:squid_spawn_egg",
+	item.VILLAGER_SPAWN_EGG:     "minecraft:villager_spawn_egg",
 	item.APPLE:                  "minecraft:apple",
 	item.BAKED_POTATO:           "minecraft:baked_potato",
 	item.BEETROOT_SEEDS:         "minecraft:beetroot_seeds",

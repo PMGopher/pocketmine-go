@@ -3,27 +3,27 @@ package block
 import (
 	"testing"
 
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
 type fakeLivingEntity struct{}
 
-func (fakeLivingEntity) ResetFallDistance()                   {}
-func (fakeLivingEntity) GetPosition() math.Vector3            { return math.Vector3{} }
-func (fakeLivingEntity) SetOnGround(onGround bool)            {}
-func (fakeLivingEntity) GetFallDistance() float64             { return 0 }
-func (fakeLivingEntity) SetFallDistance(fallDistance float64) {}
-func (fakeLivingEntity) IsLiving() bool                       { return true }
-func (fakeLivingEntity) IsSneaking() bool                     { return false }
-func (fakeLivingEntity) GetBoundingBox() math.AxisAlignedBB   { return math.AxisAlignedBB{} }
-func (fakeLivingEntity) GetMotion() math.Vector3              { return math.Vector3{} }
-func (fakeLivingEntity) SetOnFire(seconds int)                {}
-func (fakeLivingEntity) IsOnFire() bool                       { return false }
-func (fakeLivingEntity) Extinguish()                          {}
-func (fakeLivingEntity) ExtinguishWithCause(cause int)        {}
-func (fakeLivingEntity) CanBeMovedByCurrents() bool           { return true }
-func (fakeLivingEntity) Attack(source entity.DamageSource)    {}
+func (fakeLivingEntity) ResetFallDistance()                     {}
+func (fakeLivingEntity) GetPosition() math.Vector3              { return math.Vector3{} }
+func (fakeLivingEntity) SetOnGround(onGround bool)              {}
+func (fakeLivingEntity) GetFallDistance() float64               { return 0 }
+func (fakeLivingEntity) SetFallDistance(fallDistance float64)   {}
+func (fakeLivingEntity) IsLiving() bool                         { return true }
+func (fakeLivingEntity) IsSneaking() bool                       { return false }
+func (fakeLivingEntity) GetBoundingBox() math.AxisAlignedBB     { return math.AxisAlignedBB{} }
+func (fakeLivingEntity) GetMotion() math.Vector3                { return math.Vector3{} }
+func (fakeLivingEntity) SetOnFire(seconds int)                  {}
+func (fakeLivingEntity) IsOnFire() bool                         { return false }
+func (fakeLivingEntity) Extinguish()                            {}
+func (fakeLivingEntity) ExtinguishWithCause(cause int)          {}
+func (fakeLivingEntity) CanBeMovedByCurrents() bool             { return true }
+func (fakeLivingEntity) Attack(source entityevent.DamageSource) {}
 
 // entityWorld extends fakeWorld with a settable list of nearby entities, for exercising
 // PressurePlate.OnScheduledUpdate.
@@ -77,19 +77,19 @@ func TestStonePressurePlatePressesForLivingEntityOnly(t *testing.T) {
 // filter.
 type fakeItemLikeEntity struct{}
 
-func (fakeItemLikeEntity) ResetFallDistance()                   {}
-func (fakeItemLikeEntity) GetPosition() math.Vector3            { return math.Vector3{} }
-func (fakeItemLikeEntity) SetOnGround(onGround bool)            {}
-func (fakeItemLikeEntity) GetFallDistance() float64             { return 0 }
-func (fakeItemLikeEntity) SetFallDistance(fallDistance float64) {}
-func (fakeItemLikeEntity) GetBoundingBox() math.AxisAlignedBB   { return math.AxisAlignedBB{} }
-func (fakeItemLikeEntity) GetMotion() math.Vector3              { return math.Vector3{} }
-func (fakeItemLikeEntity) SetOnFire(seconds int)                {}
-func (fakeItemLikeEntity) IsOnFire() bool                       { return false }
-func (fakeItemLikeEntity) Extinguish()                          {}
-func (fakeItemLikeEntity) ExtinguishWithCause(cause int)        {}
-func (fakeItemLikeEntity) CanBeMovedByCurrents() bool           { return true }
-func (fakeItemLikeEntity) Attack(source entity.DamageSource)    {}
+func (fakeItemLikeEntity) ResetFallDistance()                     {}
+func (fakeItemLikeEntity) GetPosition() math.Vector3              { return math.Vector3{} }
+func (fakeItemLikeEntity) SetOnGround(onGround bool)              {}
+func (fakeItemLikeEntity) GetFallDistance() float64               { return 0 }
+func (fakeItemLikeEntity) SetFallDistance(fallDistance float64)   {}
+func (fakeItemLikeEntity) GetBoundingBox() math.AxisAlignedBB     { return math.AxisAlignedBB{} }
+func (fakeItemLikeEntity) GetMotion() math.Vector3                { return math.Vector3{} }
+func (fakeItemLikeEntity) SetOnFire(seconds int)                  {}
+func (fakeItemLikeEntity) IsOnFire() bool                         { return false }
+func (fakeItemLikeEntity) Extinguish()                            {}
+func (fakeItemLikeEntity) ExtinguishWithCause(cause int)          {}
+func (fakeItemLikeEntity) CanBeMovedByCurrents() bool             { return true }
+func (fakeItemLikeEntity) Attack(source entityevent.DamageSource) {}
 
 func TestWeightedPressurePlateSignalStrengthScalesWithEntityCount(t *testing.T) {
 	w := &entityWorld{}
@@ -111,3 +111,7 @@ func TestWeightedPressurePlateSignalStrengthScalesWithEntityCount(t *testing.T) 
 		t.Errorf("GetOutputSignalStrength() = %d, want 3", newState.GetOutputSignalStrength())
 	}
 }
+func (fakeItemLikeEntity) GetID() int     { return 0 }
+func (fakeItemLikeEntity) IsClosed() bool { return false }
+func (fakeLivingEntity) GetID() int       { return 0 }
+func (fakeLivingEntity) IsClosed() bool   { return false }

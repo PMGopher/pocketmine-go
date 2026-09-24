@@ -1,10 +1,12 @@
 package item
 
-import runtime "pocketmine-go/pocketmine/data/runtime"
+import (
+	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/entity/effect"
+)
 
-// SuspiciousStew is a port of pocketmine\item\SuspiciousStew. GetAdditionalEffects (delegating to
-// SuspiciousStewType.GetEffects) and GetResidue (VanillaItems.BOWL()) aren't ported - see
-// SuspiciousStewType's and Food's doc comments for why.
+// SuspiciousStew is a port of pocketmine\item\SuspiciousStew. GetResidue (VanillaItems.BOWL())
+// isn't ported - see Food's doc comment.
 type SuspiciousStew struct {
 	Food
 
@@ -39,4 +41,8 @@ func (s *SuspiciousStew) describeState(w runtime.DataDescriber) {
 	t := int(s.StewType)
 	w.BoundedIntAuto(int(SuspiciousStewTypePoppy), int(SuspiciousStewTypeWitherRose), &t)
 	s.StewType = SuspiciousStewType(t)
+}
+
+func (s *SuspiciousStew) GetAdditionalEffects() []*effect.EffectInstance {
+	return s.StewType.GetEffects()
 }

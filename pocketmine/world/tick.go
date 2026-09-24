@@ -98,14 +98,6 @@ func (w *World) NotifyNeighbourBlockUpdate(pos math.Vector3) {
 	w.internalNotifyNeighbourBlockUpdate(pos.FloorX(), pos.FloorY(), pos.FloorZ())
 }
 
-// nearbyBlockChangeNotifiable is the optional surface an entity can implement to receive
-// onNearbyBlockChange notifications (see updateNeighbourBlockUpdates) - declared locally since
-// registeredEntity/block.Entity don't require it: pocketmine/entity has no concrete spawnable
-// type yet to actually implement it (see registeredEntity's own doc comment on the same gap), so
-// this is a forward-compatible optional interface, checked via type assertion, rather than a
-// required method every future entity is forced to carry even if it never cares.
-type nearbyBlockChangeNotifiable interface{ OnNearbyBlockChange() }
-
 // updateNeighbourBlockUpdates is a port of the "Normal updates" loop in World::actuallyDoTick.
 // Real PHP also fires a cancellable BlockUpdateEvent here - this port has no plugin/event system
 // wired into World yet (matches every other "no event bus yet" gap elsewhere in this port), so
@@ -125,10 +117,8 @@ func (w *World) updateNeighbourBlockUpdates() {
 			MinX: float64(x), MinY: float64(y), MinZ: float64(z),
 			MaxX: float64(x + 1), MaxY: float64(y + 1), MaxZ: float64(z + 1),
 		}
-		for _, e := range w.GetNearbyEntities(bb) {
-			if n, ok := e.(nearbyBlockChangeNotifiable); ok {
-				n.OnNearbyBlockChange()
-			}
+		for _, e := range w.GetNearbyEntitiesExcept(bb, nil) {
+			e.OnNearbyBlockChange()
 		}
 
 		w.GetBlockAt(x, y, z).OnNearbyBlockChange()
@@ -256,11 +246,8 @@ func (w *World) isChunkTickable(chunkX, chunkZ int) bool {
 // tickedBlocksPerSubchunkPerTick mirrors World::DEFAULT_TICKED_BLOCKS_PER_SUBCHUNK_PER_TICK.
 const tickedBlocksPerSubchunkPerTick = 3
 
-// tickChunk is a port of World::tickChunk's random-tick block sampling. Real PHP also ticks
-// per-chunk entities here (foreach($this->getChunkEntities(...) as $entity) $entity->
-// onRandomUpdate()) - this port's flat entity registry (see registeredEntity's doc comment) has no
-// per-chunk index to iterate the same way, and no concrete Entity type implements onRandomUpdate
-// yet regardless, so that part is a documented gap rather than a guess.
+// tickChunk is a port of World::tickChunk: random updates for the chunk's entities, then
+// random-tick block sampling.
 //
 // The 60-bit-random/12-bits-per-axis decoding is ported exactly (x = k&0xf, y = (k>>4)&0xf,
 // z = (k>>8)&0xf, refilled every 5th iteration) - only the random source itself differs (this
@@ -272,6 +259,9 @@ func (w *World) tickChunk(chunkX, chunkZ int) {
 	if !ok {
 		// The chunk may have been unloaded during a previous chunk's update in this same tick.
 		return
+	}
+	for _, entity := range w.GetChunkEntities(chunkX, chunkZ) {
+		entity.OnRandomUpdate()
 	}
 
 	for subY, subChunk := range chunk.GetSubChunks() {
@@ -338,11 +328,16 @@ func (w *World) unloadChunk(chunkX, chunkZ int, safe bool) bool {
 		if err := worldio.SaveChunk(w.provider, int32(chunkX), int32(chunkZ), chunk, w.lookupBlockState); err != nil {
 			return false
 		}
+		if err := worldio.SaveEntities(w.provider, int32(chunkX), int32(chunkZ), w.saveChunkEntities(chunkX, chunkZ)); err != nil {
+			return false
+		}
 	}
 
 	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
 		listener.OnChunkUnloaded(chunkX, chunkZ, chunk)
 	}
+
+	w.closeChunkEntities(chunkX, chunkZ)
 
 	chunk.OnUnload()
 	delete(w.chunks, key)
@@ -383,8 +378,7 @@ func (w *World) unloadChunks() {
 // loader" timestamp unloadChunks measures its grace window against.
 //
 // Not ported: sendTime()/provider garbage collection (both are pure network/disk-housekeeping
-// concerns with nothing behavioural to get wrong by omitting), and the entity-tick pass (see
-// tickChunk's own doc comment on why - no concrete Entity type exists yet to tick).
+// concerns with nothing behavioural to get wrong by omitting).
 func (w *World) DoTick(currentTick int64) {
 	w.doingTick = true
 	defer func() { w.doingTick = false }()
@@ -401,6 +395,8 @@ func (w *World) DoTick(currentTick int64) {
 
 	w.updateScheduledBlocks(currentTick)
 	w.updateNeighbourBlockUpdates()
+
+	w.tickEntities(currentTick)
 
 	w.tickChunks()
 

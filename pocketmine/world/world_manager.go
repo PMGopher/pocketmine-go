@@ -226,7 +226,7 @@ func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, optio
 }
 
 // FindEntity is a port of WorldManager::findEntity.
-func (m *WorldManager) FindEntity(entityID int) (block.Entity, bool) {
+func (m *WorldManager) FindEntity(entityID int) (Entity, bool) {
 	for _, w := range m.worlds {
 		if e, ok := w.GetEntity(entityID); ok {
 			return e, true

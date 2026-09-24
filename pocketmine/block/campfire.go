@@ -3,7 +3,7 @@ package block
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -146,7 +146,7 @@ func (c *Campfire) OnEntityInside(e Entity) bool {
 		}
 	} else if living, ok := e.(Living); ok {
 		damage := c.self.(campfireEntityDamageShaper).GetEntityCollisionDamage()
-		ev := entity.NewEntityDamageByBlockEvent(c.self, e, entity.EntityDamageCauseFire, float64(damage), nil)
+		ev := entityevent.NewEntityDamageByBlockEvent(c.self, e, entityevent.CauseFire, float64(damage), nil)
 		living.Attack(ev)
 	}
 	return true

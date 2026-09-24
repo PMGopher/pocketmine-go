@@ -1,6 +1,6 @@
 package block
 
-import "pocketmine-go/pocketmine/entity"
+import entityevent "pocketmine-go/pocketmine/event/entity"
 
 // Magma is a port of pocketmine\block\Magma.
 type Magma struct {
@@ -28,7 +28,7 @@ func (m *Magma) HasEntityCollision() bool { return true }
 // damages any non-sneaking Living entity, frost walker or not.
 func (m *Magma) OnEntityInside(e Entity) bool {
 	if living, ok := e.(Living); ok && !living.IsSneaking() {
-		ev := entity.NewEntityDamageByBlockEvent(m.self, e, entity.EntityDamageCauseFire, 1, nil)
+		ev := entityevent.NewEntityDamageByBlockEvent(m.self, e, entityevent.CauseFire, 1, nil)
 		living.Attack(ev)
 	}
 	return true

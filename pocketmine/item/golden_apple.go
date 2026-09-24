@@ -1,8 +1,10 @@
 package item
 
-// GoldenApple is a port of pocketmine\item\GoldenApple. GetAdditionalEffects (regeneration +
-// absorption) isn't ported - EffectInstance (entity/effect package) isn't ported, same gap as
-// Food.GetAdditionalEffects's doc comment.
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
+// GoldenApple is a port of pocketmine\item\GoldenApple.
 type GoldenApple struct {
 	Food
 }
@@ -24,3 +26,10 @@ func (g *GoldenApple) RequiresHunger() bool { return false }
 func (g *GoldenApple) GetFoodRestore() int { return 4 }
 
 func (g *GoldenApple) GetSaturationRestore() float64 { return 9.6 }
+
+func (g *GoldenApple) GetAdditionalEffects() []*effect.EffectInstance {
+	return []*effect.EffectInstance{
+		effect.NewEffectInstanceWith(effect.VanillaRegeneration(), 100, 1),
+		effect.NewEffectInstanceWith(effect.VanillaAbsorption(), 2400, 0),
+	}
+}

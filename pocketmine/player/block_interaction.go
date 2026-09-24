@@ -14,21 +14,6 @@ const (
 	maxReachDistanceSurvival = 7
 )
 
-// GetDirectionVector is a port of Entity::getDirectionVector, using Player's own yaw/pitch (this
-// port's Entity doesn't carry a Location with rotation - see Player's own doc comment on why
-// yaw/pitch live here instead).
-func (p *Player) GetDirectionVector() math.Vector3 {
-	pitchRad := p.pitch * stdmath.Pi / 180
-	yawRad := p.yaw * stdmath.Pi / 180
-
-	y := -stdmath.Sin(pitchRad)
-	xz := stdmath.Cos(pitchRad)
-	x := -xz * stdmath.Sin(yawRad)
-	z := xz * stdmath.Cos(yawRad)
-
-	return math.NewVector3(x, y, z).Normalize()
-}
-
 // CanInteract is a port of Player::canInteract.
 func (p *Player) CanInteract(pos math.Vector3, maxDistance float64) bool {
 	return p.canInteract(pos, maxDistance, stdmath.Sqrt(3)/2)
@@ -71,7 +56,7 @@ func (p *Player) AttackBlock(pos math.Vector3, face math.Facing, heldItem block.
 		return false
 	}
 
-	target := p.world.GetBlockAt(pos.FloorX(), pos.FloorY(), pos.FloorZ())
+	target := p.GetWorld().GetBlockAt(pos.FloorX(), pos.FloorY(), pos.FloorZ())
 
 	if target.OnAttack(heldItem, face, p) {
 		return true
@@ -80,7 +65,7 @@ func (p *Player) AttackBlock(pos math.Vector3, face math.Facing, heldItem block.
 	if sa, ok := target.(sideAccessible); ok {
 		sideBlock := sa.GetSide(face, 1)
 		if tc, ok := sideBlock.(hasTypeTagChecker); ok && tc.HasTypeTag(blockTypeTagsFire) {
-			_ = p.world.SetBlock(sideBlock.GetPosition(), block.VanillaAir())
+			_ = p.GetWorld().SetBlock(sideBlock.GetPosition(), block.VanillaAir())
 			return true
 		}
 	}
@@ -126,14 +111,14 @@ func (p *Player) BreakBlock(pos math.Vector3) bool {
 		return false
 	}
 
-	target := p.world.GetBlockAt(pos.FloorX(), pos.FloorY(), pos.FloorZ())
+	target := p.GetWorld().GetBlockAt(pos.FloorX(), pos.FloorY(), pos.FloorZ())
 
 	p.StopBreakBlock(pos)
-	if !p.world.UseBreakOn(pos) {
+	if !p.GetWorld().UseBreakOn(pos) {
 		return false
 	}
 
-	p.world.AddParticle(pos.Add(0.5, 0.5, 0.5), particle.BlockBreakParticle{BlockStateID: target.GetStateId()})
+	p.GetWorld().AddParticle(pos.Add(0.5, 0.5, 0.5), particle.BlockBreakParticle{BlockStateID: target.GetStateId()})
 	return true
 }
 

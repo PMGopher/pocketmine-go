@@ -1,7 +1,7 @@
 package block
 
 import (
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -79,10 +79,10 @@ func (l *Lava) checkForHarden() bool {
 
 // OnEntityInside is a port of Lava::onEntityInside.
 func (l *Lava) OnEntityInside(e Entity) bool {
-	dmgEv := entity.NewEntityDamageByBlockEvent(l.self, e, entity.EntityDamageCauseLava, 4, nil)
+	dmgEv := entityevent.NewEntityDamageByBlockEvent(l.self, e, entityevent.CauseLava, 4, nil)
 	e.Attack(dmgEv)
 
-	combustEv := entity.NewEntityCombustByBlockEvent(l.self, e, 8)
+	combustEv := entityevent.NewEntityCombustByBlockEvent(l.self, e, 8)
 	combustEv.Call()
 	if !combustEv.IsCancelled() {
 		e.SetOnFire(combustEv.GetDuration())

@@ -1,27 +1,31 @@
 package entity
 
 import (
+	"encoding/json"
 	"fmt"
+
+	"github.com/df-mc/jsonc"
 
 	"pocketmine-go/pocketmine/binaryutils"
 )
 
 // acceptedSkinSizes mirrors Skin::ACCEPTED_SKIN_SIZES.
-var acceptedSkinSizes = map[int]bool{
-	64 * 32 * 4:   true,
-	64 * 64 * 4:   true,
-	128 * 128 * 4: true,
+var acceptedSkinSizes = []int{
+	64 * 32 * 4,
+	64 * 64 * 4,
+	128 * 128 * 4,
 }
 
-// capeDataSize mirrors Skin's own hardcoded "must be exactly 8192 bytes" cape data length.
+// capeDataSize mirrors Skin's "must be exactly 8192 bytes" cape data length.
 const capeDataSize = 8192
 
-// Skin is a port of pocketmine\entity\Skin: raw skin/cape/geometry bytes, validated at
-// construction. Not ported: the geometryData "un-pretty-print" JSON minification real PHP's
-// constructor applies (CommentedJsonDecoder-decode then re-encode, purely to shrink the packet
-// this data eventually goes out in) - a bandwidth optimisation with no effect on correctness, and
-// this port has nowhere that sends this data over the network yet regardless (see
-// entity.Human's own doc comment on why Skin isn't wired into Human/Player yet either).
+// InvalidSkinError is a port of pocketmine\entity\InvalidSkinException.
+type InvalidSkinError struct{ Message string }
+
+func (e *InvalidSkinError) Error() string { return e.Message }
+
+// Skin is a port of pocketmine\entity\Skin: raw skin/cape/geometry data, validated at
+// construction.
 type Skin struct {
 	skinID       string
 	skinData     []byte
@@ -30,26 +34,50 @@ type Skin struct {
 	geometryData []byte
 }
 
-// NewSkin is a port of Skin::__construct, including its real validation (skin ID/geometry name/
-// geometry data length limits, valid skin data dimensions, exact cape data size).
+func checkSkinFieldLength(value []byte, name string, maxLength int) error {
+	if len(value) > maxLength {
+		return &InvalidSkinError{Message: fmt.Sprintf("%s must be at most %d bytes, but have %d bytes", name, maxLength, len(value))}
+	}
+	return nil
+}
+
+// NewSkin is a port of Skin::__construct (PHP's defaults for the last three parameters are empty).
+// The geometry data, if any, must be valid JSON (comments allowed, like PHP's
+// CommentedJsonDecoder).
 func NewSkin(skinID string, skinData, capeData []byte, geometryName string, geometryData []byte) (*Skin, error) {
-	if len(skinID) > binaryutils.Int16Max {
-		return nil, fmt.Errorf("skin: Skin ID must be at most %d bytes, but have %d bytes", binaryutils.Int16Max, len(skinID))
+	if err := checkSkinFieldLength([]byte(skinID), "Skin ID", binaryutils.Int16Max); err != nil {
+		return nil, err
 	}
-	if len(geometryName) > binaryutils.Int16Max {
-		return nil, fmt.Errorf("skin: Geometry name must be at most %d bytes, but have %d bytes", binaryutils.Int16Max, len(geometryName))
+	if err := checkSkinFieldLength([]byte(geometryName), "Geometry name", binaryutils.Int16Max); err != nil {
+		return nil, err
 	}
-	if len(geometryData) > binaryutils.Int32Max {
-		return nil, fmt.Errorf("skin: Geometry data must be at most %d bytes, but have %d bytes", binaryutils.Int32Max, len(geometryData))
+	if err := checkSkinFieldLength(geometryData, "Geometry data", binaryutils.Int32Max); err != nil {
+		return nil, err
 	}
+
 	if skinID == "" {
-		return nil, fmt.Errorf("skin: Skin ID must not be empty")
+		return nil, &InvalidSkinError{Message: "Skin ID must not be empty"}
 	}
-	if !acceptedSkinSizes[len(skinData)] {
-		return nil, fmt.Errorf("skin: invalid skin data size %d bytes", len(skinData))
+	accepted := false
+	for _, size := range acceptedSkinSizes {
+		if len(skinData) == size {
+			accepted = true
+			break
+		}
 	}
+	if !accepted {
+		return nil, &InvalidSkinError{Message: fmt.Sprintf("Invalid skin data size %d bytes (allowed sizes: %d, %d, %d)", len(skinData), acceptedSkinSizes[0], acceptedSkinSizes[1], acceptedSkinSizes[2])}
+	}
+
 	if len(capeData) != 0 && len(capeData) != capeDataSize {
-		return nil, fmt.Errorf("skin: invalid cape data size %d bytes (must be exactly %d bytes)", len(capeData), capeDataSize)
+		return nil, &InvalidSkinError{Message: fmt.Sprintf("Invalid cape data size %d bytes (must be exactly %d bytes)", len(capeData), capeDataSize)}
+	}
+
+	if len(geometryData) != 0 {
+		var decoded any
+		if err := json.Unmarshal(jsonc.ToJSON(geometryData), &decoded); err != nil {
+			return nil, &InvalidSkinError{Message: "Invalid geometry data: " + err.Error()}
+		}
 	}
 
 	return &Skin{

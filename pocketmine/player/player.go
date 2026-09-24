@@ -1,84 +1,56 @@
 package player
 
 import (
-	stdmath "math"
 	"time"
+
+	"github.com/google/uuid"
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/entity"
-	"pocketmine-go/pocketmine/inventory"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world"
 )
 
 // var _ block.Player = (*Player)(nil) confirms *Player structurally satisfies block.Player's local
-// interface (ResetFallDistance/GetPosition/.../Attack via Entity, GetHorizontalFacing/IsSneaking/
-// GetYaw/GetID/GetEyePos/IsSurvival) - the same compile-time check World.go uses for block.World.
+// interface - the same compile-time check World.go uses for block.World.
 var _ block.Player = (*Player)(nil)
 
-// humanBoundingBoxHalfWidth/Height mirror Human::getInitialSizeInfo's EntitySizeInfo(1.8, 0.6, ...)
-// - width 0.6 (±0.3 from center), height 1.8.
-const (
-	humanBoundingBoxHalfWidth = 0.3
-	humanBoundingBoxHeight    = 1.8
-)
+// var _ entity.Player = (*Player)(nil) confirms *Player satisfies the entity package's view of a
+// player (pickups, collision callbacks, game-mode checks).
+var _ entity.Player = (*Player)(nil)
 
-// mainInventorySize mirrors PlayerInventory's own real slot count (9 hotbar + 27 main = 36).
-const mainInventorySize = 36
-
-// Player is a port of a large slice of pocketmine\player\Player (2900+ lines in the original).
+// Player is a port of a large slice of pocketmine\player\Player (2900+ lines in the original),
+// built on a real entity.Human: health, hunger, experience, effects, armor/offhand/ender
+// inventories, damage, knockback, death and network (de)spawning all come from the entity
+// package, exactly as in PHP where Player extends Human.
 //
-// Real, not stubbed: identity (username/UUID/XUID/firstPlayed/lastPlayed), a real main Inventory
-// (see NewHuman's own doc comment on why it lives here instead of on entity.Human), GameMode,
-// flight/auto-jump/block-collision/sneak-pressed flags, real per-player chunk streaming (view
-// distance, ChunkSelector-driven load ordering, UsedChunkStatus tracking, world.ChunkListener -
-// see chunk_streaming.go), real survival block-breaking (AttackBlock/ContinueBreakBlock/
-// StopBreakBlock/BreakBlock/UpdateBreakingBlock driving a genuine SurvivalBlockBreakHandler that
-// broadcasts real BLOCK_START_BREAK/BLOCK_BREAK_SPEED/BLOCK_STOP_BREAK network packets and real
-// punch sound/particle - see block_interaction.go/survival_block_break_handler.go), a real
-// viewer/broadcast-to-nearby-players network layer (SendPacket/SetPacketSender, plus
-// World.AddSound/AddParticle/BroadcastPacketToViewers actually delivering packets - see
-// network.go), real PvP (AttackEntity: damage, knockback, hit sound, arm-swing/hurt animations -
-// see combat.go), and real fall damage (TrackFallState - see fall_damage.go) - everything
-// block.Player/block.Living/block.Entity's local interfaces need to treat a *Player as a genuine
-// entity registered in a World. cmd/pocketmine-go's own "session" struct (previously an
-// explicitly-documented stand-in for exactly this) now wraps one of these instead of
-// reimplementing player-shaped state itself.
+// Also real: identity (username/UUID/XUID/firstPlayed/lastPlayed), GameMode,
+// flight/auto-jump/block-collision/sneak-pressed flags, per-player chunk streaming (view distance,
+// ChunkSelector-driven load ordering, UsedChunkStatus tracking, world.ChunkListener - see
+// chunk_streaming.go), survival block-breaking (see block_interaction.go/
+// survival_block_break_handler.go), PvP (AttackEntity - see combat.go), fall damage (see
+// fall_damage.go) and the Player-specific entity overrides in entity_overrides.go (ticking
+// without server-side physics, picking up items/arrows, damage rules, death).
 //
-// Not ported (each needs a real subsystem this port doesn't have anywhere else yet either, so
-// each is a documented gap, not a guess - see the individual methods' own doc comments for exact
-// PHP-behaviour differences): inventory windows beyond the base inventory (cursor/crafting-grid/
-// creative), forms, sleeping/respawn, PlayerInfo/PlayerDataProvider aren't wired into
-// NewPlayer/persistence automatically yet (both real types exist and are usable, just not
-// connected to a save/load pipeline), permissions/CommandSender, chat (ChatFormatter exists and is
-// usable, just not wired to a broadcast pipeline), item use/consumption, real server-side movement
-// physics/collision (position is trusted from the client's own PlayerAuthInput reports - see
-// cmd/pocketmine-go's own doc comments), hunger/experience, and the cancellable events real PHP fires throughout (no event bus wired to
-// World/Player - matches every other "no event bus yet" gap elsewhere in this port).
+// Not ported (each needs a subsystem this port doesn't have yet): NetworkSession (packets go
+// through SetPacketSender), inventory windows beyond the player's own inventories, forms,
+// sleeping/respawn, PlayerInfo/PlayerDataProvider persistence wiring, permissions/CommandSender,
+// chat broadcasting, item use/consumption actions, server-side movement validation (position is
+// trusted from the client's PlayerAuthInput reports), and the pocketmine\event\player events
+// other than PlayerExhaustEvent/PlayerExperienceChangeEvent.
 type Player struct {
 	entity.Human
-
-	// id is this player's entity ID (block.Player.GetID(), also needed to satisfy World's own
-	// registeredEntity interface for AddEntity/RemoveEntity) - *entity.Entity itself has no GetID
-	// of its own (see explosion_test.go's identical explosionTestEntity wrapper, needed for the
-	// same reason), so Player supplies one directly instead. Caller-assigned at construction,
-	// matching how cmd/pocketmine-go's own connection-accept path already hands out a unique
-	// entity runtime ID per session.
-	id int
 
 	username    string
 	displayName string
 	xuid        string
+	playerUUID  uuid.UUID
 	gameMode    GameMode
 	spawned     bool
 
-	world         *world.World
 	spawnPosition math.Vector3
 
-	yaw, pitch float64
-	flying     bool
-
-	inventory *inventory.SimpleInventory
+	flying bool
 
 	// blockBreakHandler mirrors Player::$blockBreakHandler - non-nil exactly while a survival
 	// block-break action is in progress (see block_interaction.go's AttackBlock/StopBreakBlock/
@@ -113,31 +85,23 @@ type Player struct {
 	// owns the actual connection (cmd/pocketmine-go) supplies this closure once instead.
 	packetSender PacketSender
 
-	// lastY backs UpdateFallState's own per-call Y-delta computation (see fall_damage.go) -
-	// initialized to the spawn position's Y in NewPlayer so the very first UpdateFallState call
-	// doesn't see a bogus delta from a zero-value default.
-	lastY float64
+	// lastBroadcastLocation mirrors the lastLocation Player::processMostRecentMovements compares
+	// against to decide whether to broadcast movement.
+	lastBroadcastLocation entity.Location
+
+	inAirTicks int
 }
 
-// NewPlayer is a port of a slice of Player::__construct/PlayerInfo - see Player's own doc comment
-// for what's deliberately left out. id is this player's entity ID (see the Player.id field's own
-// doc comment on why the caller supplies it rather than Player generating one itself).
-func NewPlayer(id int, username, uuid, xuid string, w *world.World, position math.Vector3, gameMode GameMode) *Player {
-	bb, _ := math.NewAxisAlignedBB(
-		position.X-humanBoundingBoxHalfWidth, position.Y, position.Z-humanBoundingBoxHalfWidth,
-		position.X+humanBoundingBoxHalfWidth, position.Y+humanBoundingBoxHeight, position.Z+humanBoundingBoxHalfWidth,
-	)
-
+// NewPlayer is a port of Player::__construct (for a player with no saved data): the player is
+// created as a real entity in w at position, with its own runtime entity ID.
+func NewPlayer(username string, playerUUID uuid.UUID, xuid string, w *world.World, position math.Vector3, gameMode GameMode, skin *entity.Skin) *Player {
 	now := time.Now().UnixMilli()
 	p := &Player{
-		Human:                 *entity.NewHuman(position, bb, uuid),
-		id:                    id,
 		username:              username,
 		displayName:           username,
 		xuid:                  xuid,
+		playerUUID:            playerUUID,
 		gameMode:              gameMode,
-		world:                 w,
-		inventory:             inventory.NewSimpleInventory(mainInventorySize),
 		firstPlayed:           now,
 		lastPlayed:            now,
 		hasBlockCollision:     true,
@@ -147,17 +111,12 @@ func NewPlayer(id int, username, uuid, xuid string, w *world.World, position mat
 		usedChunks:            map[[2]int]UsedChunkStatus{},
 		loadQueue:             map[[2]int]bool{},
 		tickingChunks:         map[[2]int]bool{},
-		lastY:                 position.Y,
 	}
-	// Re-anchor Entity's internal self-dispatch pointer (see entityShaper in the entity package) to
-	// the real *Player: entity.NewHuman already called Init on the *entity.Human it returned, but
-	// embedding *that* value into Player above copies the whole Human/Living/Entity struct - self
-	// still points at the original, now-detached Human, not at this Player. Player doesn't override
-	// any entityShaper hook itself (IsFireProof/onDeath/onHitGround all still resolve to Entity's/
-	// Living's own promoted implementations), so re-pointing self at p is exactly equivalent to what
-	// PHP's single real object identity already gives it for free - it only matters here because
-	// Go's embed-by-value copy would otherwise silently split the object in two.
-	p.Init(p)
+	location := entity.LocationFromObject(position, w, 0, 0)
+	p.ConstructHuman(p, location, skin, nil)
+	p.internalSetGameMode(gameMode)
+	p.lastBroadcastLocation = p.GetLocation()
+	p.initNetworkHooks()
 	return p
 }
 
@@ -208,13 +167,15 @@ func (p *Player) SetSneakPressed(pressed bool) { p.sneakPressed = pressed }
 func (p *Player) GetLocale() string       { return p.locale }
 func (p *Player) SetLocale(locale string) { p.locale = locale }
 
-// GetID is a port of Entity::getId - see the Player.id field's own doc comment on why Player
-// defines this itself rather than inheriting it.
-func (p *Player) GetID() int { return p.id }
-
 // GetName is a port of Player::getName (IPlayer/OfflinePlayer's shared getName - real PHP has
 // several overlapping name getters across Player's interfaces; this port only needs one).
 func (p *Player) GetName() string { return p.username }
+
+// GetYaw is Player's shorthand for getLocation()->getYaw() (block.Player needs it).
+func (p *Player) GetYaw() float64 { return p.GetLocation().Yaw }
+
+// GetPitch is Player's shorthand for getLocation()->getPitch().
+func (p *Player) GetPitch() float64 { return p.GetLocation().Pitch }
 
 // GetDisplayName is a port of Player::getDisplayName.
 func (p *Player) GetDisplayName() string { return p.displayName }
@@ -225,33 +186,75 @@ func (p *Player) SetDisplayName(name string) { p.displayName = name }
 // GetXuid is a port of Player::getXuid.
 func (p *Player) GetXuid() string { return p.xuid }
 
-// GetWorld is a port of Human::getWorld (declared on Living in real PHP's Location, simplified
-// here to a bare accessor - this port's Human/Entity doesn't carry a Location object, just a bare
-// Vector3 position, so the owning World is tracked directly on Player instead).
-func (p *Player) GetWorld() *world.World { return p.world }
-
 // IsSpawned is a port of Player::$spawned (there's no dedicated getter in real PHP - the property
 // itself is public - but this port keeps its fields unexported, matching its own convention
 // elsewhere).
 func (p *Player) IsSpawned() bool { return p.spawned }
 
+// SetSpawned marks this player as spawned. Becoming spawned is the entity half of
+// Player::doFirstSpawn: the player is spawned to everyone who can see it, and every entity in the
+// chunks it has received is spawned to it.
+//
 // SetSpawned marks this player as spawned - a port of the several `$this->spawned = true;`
 // assignments scattered through Player::sendChunk/doFirstSpawn (this port has no chunk-send state
 // machine to hook that transition to yet, so callers set this directly once whatever spawn
 // sequence this port does end up implementing decides the player is ready).
-func (p *Player) SetSpawned(spawned bool) { p.spawned = spawned }
-
-// GetInventory is a port of Human::getInventory - see NewHuman's own doc comment on why this
-// lives on Player instead of entity.Human.
-func (p *Player) GetInventory() *inventory.SimpleInventory { return p.inventory }
+func (p *Player) SetSpawned(spawned bool) {
+	wasSpawned := p.spawned
+	p.spawned = spawned
+	if spawned && !wasSpawned {
+		p.SpawnToAll()
+		p.spawnEntitiesOnAllChunks()
+	}
+}
 
 // GetGamemode is a port of Player::getGamemode.
 func (p *Player) GetGamemode() GameMode { return p.gameMode }
 
-// SetGamemode is a port of a slice of Player::setGamemode - minus the cancellable
-// PlayerGameModeChangeEvent and ability-recalculation/effect-clearing side effects real PHP
-// applies when switching modes (no event bus or AbilityMap/EffectManager wired up here yet).
-func (p *Player) SetGamemode(gameMode GameMode) { p.gameMode = gameMode }
+// internalSetGameMode is a port of Player::internalSetGameMode. Not ported: the spectator
+// sendPosition(MODE_TELEPORT) resync and the checkGroundState(0,...) call (both need the network
+// session/server-side movement handling this port doesn't have).
+func (p *Player) internalSetGameMode(gameMode GameMode) {
+	p.gameMode = gameMode
+
+	p.allowFlight = p.gameMode == GameModeCreative
+	p.GetHungerManager().SetEnabled(p.IsSurvival())
+
+	if p.IsSpectator() {
+		p.SetFlying(true)
+		p.SetHasBlockCollision(false)
+		p.SetSilent(true)
+		p.OnGround = false
+	} else {
+		if p.IsSurvival() {
+			p.SetFlying(false)
+		}
+		p.SetHasBlockCollision(true)
+		p.SetSilent(false)
+	}
+}
+
+// SetGamemode is a port of Player::setGamemode, minus the cancellable PlayerGameModeChangeEvent
+// (not ported) and syncing the game mode to the client (no network session - the caller must send
+// it). Returns whether the game mode changed.
+func (p *Player) SetGamemode(gameMode GameMode) bool {
+	if p.gameMode == gameMode {
+		return false
+	}
+
+	p.internalSetGameMode(gameMode)
+
+	if p.IsSpectator() {
+		p.DespawnFromAll()
+	} else {
+		p.SpawnToAll()
+	}
+	return true
+}
+
+// HasFiniteResources is a port of Player::hasFiniteResources: whether the player's game mode
+// consumes items (everything but creative).
+func (p *Player) HasFiniteResources() bool { return p.gameMode != GameModeCreative }
 
 // IsSurvival is a port of Player::isSurvival($literal = false) - block.Player's local interface
 // only needs the non-literal form (Adventure counts as survival-like for block-breaking purposes).
@@ -277,40 +280,13 @@ func (p *Player) IsSpectator() bool { return p.gameMode == GameModeSpectator }
 // via requestSafeSpawn/getSpawn's null-coalescing default).
 func (p *Player) GetSpawn() math.Vector3 {
 	if p.spawnPosition == (math.Vector3{}) {
-		return p.world.GetSpawnLocation()
+		return p.GetWorld().GetSpawnLocation()
 	}
 	return p.spawnPosition
 }
 
 // SetSpawn is a port of Player::setSpawn.
 func (p *Player) SetSpawn(pos math.Vector3) { p.spawnPosition = pos }
-
-// GetYaw/GetPitch/SetRotation port Location's yaw/pitch accessors as used by Player.
-func (p *Player) GetYaw() float64   { return p.yaw }
-func (p *Player) GetPitch() float64 { return p.pitch }
-func (p *Player) SetRotation(yaw, pitch float64) {
-	p.yaw = yaw
-	p.pitch = pitch
-}
-
-// GetHorizontalFacing is a port of Entity::getHorizontalFacing.
-func (p *Player) GetHorizontalFacing() math.Facing {
-	angle := stdmath.Mod(p.yaw, 360)
-	if angle < 0 {
-		angle += 360
-	}
-
-	switch {
-	case (angle >= 0 && angle < 45) || (angle >= 315 && angle < 360):
-		return math.South
-	case angle >= 45 && angle < 135:
-		return math.West
-	case angle >= 135 && angle < 225:
-		return math.North
-	default:
-		return math.East
-	}
-}
 
 // IsFlying is a port of Player::isFlying.
 func (p *Player) IsFlying() bool { return p.flying }

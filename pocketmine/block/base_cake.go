@@ -2,6 +2,7 @@ package block
 
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/entity/effect"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -50,10 +51,8 @@ func (b *BaseCake) GetSaturationRestore() float64 { return 0.4 }
 
 func (b *BaseCake) RequiresHunger() bool { return true }
 
-// GetAdditionalEffects is a port of BaseCake::getAdditionalEffects, which always returns an empty
-// array in the base class - EffectInstance (entity/effect package) isn't ported, so there's
-// nothing to return a slice of yet.
-func (b *BaseCake) GetAdditionalEffects() {}
+// GetAdditionalEffects is a port of BaseCake::getAdditionalEffects: no extra effects.
+func (b *BaseCake) GetAdditionalEffects() []*effect.EffectInstance { return nil }
 
 // cakeShaper lets OnConsume reach a concrete leaf's GetResidue override - same self-dispatch shape
 // as fireShaper.
@@ -61,8 +60,9 @@ type cakeShaper interface {
 	GetResidue() Behavior
 }
 
-// OnConsume is a port of BaseCake::onConsume.
-func (b *BaseCake) OnConsume(consumer Living) {
+// OnConsume is a port of BaseCake::onConsume. The consumer parameter is effect.Living so cakes
+// satisfy pocketmine/entity's Consumable/FoodSource interfaces, like consumable items do.
+func (b *BaseCake) OnConsume(consumer effect.Living) {
 	world, err := b.position.GetWorld()
 	if err != nil {
 		return

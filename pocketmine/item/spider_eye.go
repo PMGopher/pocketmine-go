@@ -1,7 +1,10 @@
 package item
 
-// SpiderEye is a port of pocketmine\item\SpiderEye. GetAdditionalEffects (a Poison effect) isn't
-// ported - see GoldenApple's doc comment for why.
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
+// SpiderEye is a port of pocketmine\item\SpiderEye.
 type SpiderEye struct {
 	Food
 }
@@ -21,3 +24,7 @@ func (s *SpiderEye) Clone() Item {
 func (s *SpiderEye) GetFoodRestore() int { return 2 }
 
 func (s *SpiderEye) GetSaturationRestore() float64 { return 3.2 }
+
+func (s *SpiderEye) GetAdditionalEffects() []*effect.EffectInstance {
+	return []*effect.EffectInstance{effect.NewEffectInstanceWith(effect.VanillaPoison(), 80, 0)}
+}

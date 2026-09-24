@@ -3,7 +3,10 @@ package player
 import (
 	"testing"
 
+	"github.com/google/uuid"
+
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world"
@@ -23,10 +26,25 @@ func newTestWorld(t *testing.T) *world.World {
 	})
 }
 
+func newTestSkin(t *testing.T) *entity.Skin {
+	t.Helper()
+	skin, err := entity.NewSkin("Standard_Custom", make([]byte, 64*64*4), nil, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return skin
+}
+
+// newTestPlayer creates a player in a fresh world. id is unused (entity IDs are allocated by the
+// entity package, like PHP's Entity::nextRuntimeId) but kept so call sites stay readable.
 func newTestPlayer(t *testing.T, id int, pos math.Vector3) *Player {
 	t.Helper()
-	w := newTestWorld(t)
-	return NewPlayer(id, "Steve", "uuid-"+string(rune(id)), "xuid-1", w, pos, GameModeSurvival)
+	return newTestPlayerIn(t, newTestWorld(t), pos)
+}
+
+func newTestPlayerIn(t *testing.T, w *world.World, pos math.Vector3) *Player {
+	t.Helper()
+	return NewPlayer("Steve", uuid.New(), "xuid-1", w, pos, GameModeSurvival, newTestSkin(t))
 }
 
 func TestNewPlayerSetsIdentityFields(t *testing.T) {
@@ -40,8 +58,8 @@ func TestNewPlayerSetsIdentityFields(t *testing.T) {
 	if got := p.GetXuid(); got != "xuid-1" {
 		t.Errorf("GetXuid() = %q, want %q", got, "xuid-1")
 	}
-	if got := p.GetID(); got != 1 {
-		t.Errorf("GetID() = %d, want 1", got)
+	if got := p.GetID(); got <= 0 {
+		t.Errorf("GetID() = %d, want a positive runtime entity ID", got)
 	}
 }
 
@@ -122,22 +140,18 @@ func TestGetHorizontalFacingMatchesTheRealAngleRanges(t *testing.T) {
 	}
 }
 
-func TestPlayerCanBeRegisteredAsARealWorldEntity(t *testing.T) {
+func TestPlayerIsARealWorldEntity(t *testing.T) {
 	w := newTestWorld(t)
-	p := NewPlayer(1, "Steve", "uuid-1", "xuid-1", w, math.NewVector3(5, 70, 5), GameModeSurvival)
+	p := newTestPlayerIn(t, w, math.NewVector3(5, 70, 5))
 
-	w.AddEntity(p)
-	got, ok := w.GetEntity(1)
-	if !ok {
-		t.Fatal("GetEntity(1) not found after AddEntity")
-	}
-	if got.GetID() != 1 {
-		t.Errorf("registered entity GetID() = %d, want 1", got.GetID())
+	got, ok := w.GetEntity(p.GetID())
+	if !ok || got != world.Entity(p) {
+		t.Fatalf("GetEntity(%d) = (%v, %v), want the player (NewPlayer registers it, like PHP's constructor)", p.GetID(), got, ok)
 	}
 
-	w.RemoveEntity(p)
-	if _, ok := w.GetEntity(1); ok {
-		t.Error("GetEntity(1) still found after RemoveEntity")
+	p.Close()
+	if _, ok := w.GetEntity(p.GetID()); ok {
+		t.Error("the player is still registered after Close")
 	}
 }
 
@@ -147,7 +161,7 @@ func TestGetInventoryReturnsARealUsableInventory(t *testing.T) {
 	if inv == nil {
 		t.Fatal("GetInventory() = nil")
 	}
-	if got := inv.GetSize(); got != mainInventorySize {
-		t.Errorf("GetInventory().GetSize() = %d, want %d", got, mainInventorySize)
+	if got := inv.GetSize(); got != 36 {
+		t.Errorf("GetInventory().GetSize() = %d, want 36", got)
 	}
 }

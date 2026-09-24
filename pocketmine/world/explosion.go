@@ -7,7 +7,8 @@ import (
 
 	"pocketmine-go/pocketmine/block"
 	blockutils "pocketmine-go/pocketmine/block/utils"
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
+	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/particle"
 	"pocketmine-go/pocketmine/world/sound"
@@ -19,26 +20,16 @@ const explosionRays = 16
 
 // Explosion is a port of pocketmine\world\Explosion.
 //
-// What is a nilable block.Behavior, not a broader Entity|Block union like PHP's $what: this port
-// has no concrete "explosive entity" type yet (PrimedTNT, Creeper, ...; see TNTBlock.Ignite's own
-// doc comment on the identical gap), so only the "explosion sourced by a Block" and "no source"
-// (nil) cases are supported here. An Entity-sourced explosion - and so EntityDamageByEntityEvent,
-// which isn't ported either - awaits that concrete type existing to construct one from.
-//
-// Also not ported, all for the same reason (no infrastructure yet to plug into, matching this
-// port's other documented AddSound/ScheduleDelayedBlockUpdate-style gaps at the time they were
-// first added):
-//   - EntityExplodeEvent/BlockExplodeEvent: no cancellable "about to explode" event exists yet, so
-//     ExplodeB always proceeds using ExplodeA's own affected-block list and yield, as if no plugin
-//     ever intervened.
-//   - Dropping destroyed blocks' items into the world: World has no ItemEntity/dropItem yet, so
-//     drops are computed (GetDrops/GetDropsForCompatibleTool would be called) but not spawned -
-//     currently skipped outright rather than computed and silently discarded.
+// PHP's `Entity|Block|null $what` is split into two nilable fields - What (a Block source) and
+// WhatEntity (an Entity source, e.g. PrimedTNT); at most one is set. Not ported:
+// BlockExplodeEvent (pocketmine\event\block isn't ported), so block-sourced explosions always
+// proceed with ExplodeA's own affected blocks and yield.
 type Explosion struct {
 	world      *World
 	Source     math.Vector3
 	Radius     float64
 	What       block.Behavior
+	WhatEntity Entity
 	FireChance float64
 	StepLen    float64
 
@@ -48,10 +39,8 @@ type Explosion struct {
 	affectedOrder  [][3]int
 	fireIgnitions  map[[3]int]bool
 
-	// Yield is set by ExplodeB - the drop chance (0-100) each affected block's contents would roll
-	// against, matching what BlockExplodeEvent/EntityExplodeEvent::getYield() would return. Not
-	// consumed by anything yet (see Explosion's own doc comment on why drops aren't spawned), but
-	// computed and exposed for whatever eventually wires that up, and for tests.
+	// Yield is set by ExplodeB - the drop chance (0-100) each affected block's contents roll
+	// against (EntityExplodeEvent::getYield() for entity-sourced explosions).
 	Yield float64
 }
 
@@ -89,6 +78,16 @@ func NewExplosion(source block.Position, radius float64, what block.Behavior, fi
 		AffectedBlocks:   map[[3]int]block.Behavior{},
 		fireIgnitions:    map[[3]int]bool{},
 	}, nil
+}
+
+// NewEntityExplosion is Explosion::__construct with an Entity as $what.
+func NewEntityExplosion(source block.Position, radius float64, what Entity, fireChance float64) (*Explosion, error) {
+	e, err := NewExplosion(source, radius, nil, fireChance)
+	if err != nil {
+		return nil, err
+	}
+	e.WhatEntity = what
+	return e, nil
 }
 
 // ExplodeA is a port of Explosion::explodeA: calculates which blocks will be destroyed by this
@@ -195,14 +194,6 @@ type interceptable interface {
 	CalculateIntercept(pos1, pos2 math.Vector3) (math.RayTraceResult, bool)
 }
 
-// motionSettable is the optional surface an entity can implement to receive explosion knockback -
-// declared locally (matching this port's established optional-capability pattern, e.g. tick.go's
-// nearbyBlockChangeNotifiable) since block.Entity's own interface doesn't include SetMotion, only
-// GetMotion; *entity.Entity satisfies this structurally already.
-type motionSettable interface {
-	SetMotion(motion math.Vector3) bool
-}
-
 // ExplodeB is a port of Explosion::explodeB: applies the explosion's effects on the world -
 // destroying blocks (if ExplodeA found any), harming and knocking back entities, and adding a
 // particle and sound. See Explosion's own doc comment for what isn't ported yet (event
@@ -210,6 +201,42 @@ type motionSettable interface {
 func (e *Explosion) ExplodeB() bool {
 	sourcePos := math.NewVector3(stdmath.Floor(e.Source.X), stdmath.Floor(e.Source.Y), stdmath.Floor(e.Source.Z))
 	e.Yield = stdmath.Min(100, (1/e.Radius)*100)
+
+	if e.WhatEntity != nil {
+		blockList := make([]entityevent.Block, 0, len(e.affectedOrder))
+		for _, key := range e.affectedOrder {
+			blockList = append(blockList, e.AffectedBlocks[key])
+		}
+		ignitions := make([]entityevent.Block, 0, len(e.fireIgnitions))
+		for _, key := range e.affectedOrder {
+			if e.fireIgnitions[key] {
+				ignitions = append(ignitions, e.AffectedBlocks[key])
+			}
+		}
+		ev := entityevent.NewEntityExplodeEvent(e.WhatEntity, entityevent.Position{Vector3: e.Source, World: e.world}, blockList, e.Yield, ignitions)
+		ev.Call()
+		if ev.IsCancelled() {
+			return false
+		}
+		e.Yield = ev.GetYield()
+		e.AffectedBlocks = map[[3]int]block.Behavior{}
+		e.affectedOrder = nil
+		for _, b := range ev.GetBlockList() {
+			if blk, ok := b.(block.Behavior); ok {
+				key := positionKey(blk)
+				if _, exists := e.AffectedBlocks[key]; !exists {
+					e.affectedOrder = append(e.affectedOrder, key)
+				}
+				e.AffectedBlocks[key] = blk
+			}
+		}
+		e.fireIgnitions = map[[3]int]bool{}
+		for _, b := range ev.GetIgnitions() {
+			if blk, ok := b.(block.Behavior); ok {
+				e.fireIgnitions[positionKey(blk)] = true
+			}
+		}
+	}
 
 	explosionSize := e.Radius * 2
 	minX := stdmath.Floor(e.Source.X - explosionSize - 1)
@@ -220,7 +247,7 @@ func (e *Explosion) ExplodeB() bool {
 	maxZ := stdmath.Ceil(e.Source.Z + explosionSize + 1)
 	explosionBB := math.AxisAlignedBB{MinX: minX, MinY: minY, MinZ: minZ, MaxX: maxX, MaxY: maxY, MaxZ: maxZ}
 
-	for _, ent := range e.world.GetNearbyEntities(explosionBB) {
+	for _, ent := range e.world.GetNearbyEntitiesExcept(explosionBB, e.WhatEntity) {
 		entPos := ent.GetPosition()
 		distance := entPos.Distance(e.Source) / explosionSize
 
@@ -233,17 +260,17 @@ func (e *Explosion) ExplodeB() bool {
 		impact := (1 - distance) * exposure
 		damage := int(((impact*impact+impact)/2)*8*explosionSize + 1)
 
-		var source entity.DamageSource
-		if e.What != nil {
-			source = entity.NewEntityDamageByBlockEvent(e.What, ent, entity.EntityDamageCauseBlockExplosion, float64(damage), nil)
+		var source entityevent.DamageSource
+		if e.WhatEntity != nil {
+			source = entityevent.NewEntityDamageByEntityEvent(e.WhatEntity, ent, entityevent.CauseEntityExplosion, float64(damage), nil)
+		} else if e.What != nil {
+			source = entityevent.NewEntityDamageByBlockEvent(e.What, ent, entityevent.CauseBlockExplosion, float64(damage), nil)
 		} else {
-			source = entity.NewEntityDamageEvent(ent, entity.EntityDamageCauseBlockExplosion, float64(damage), nil)
+			source = entityevent.NewEntityDamageEvent(ent, entityevent.CauseBlockExplosion, float64(damage), nil)
 		}
 
 		ent.Attack(source)
-		if ms, ok := ent.(motionSettable); ok {
-			ms.SetMotion(ent.GetMotion().AddVector(motion.Multiply(impact)))
-		}
+		ent.SetMotion(ent.GetMotion().AddVector(motion.Multiply(impact)))
 	}
 
 	air := block.VanillaAir()
@@ -258,11 +285,23 @@ func (e *Explosion) ExplodeB() bool {
 			continue
 		}
 
-		// Drops aren't spawned into the world yet - see Explosion's own doc comment on why (the
-		// real "roll mt_rand(0,100) < yield, then GetDrops/GetDropsForCompatibleTool" step would
-		// go here, once World has an ItemEntity/dropItem to actually hand the result to).
-
 		pos := block.NewPosition(float64(x), float64(y), float64(z), e.world)
+
+		if float64(rand.Intn(101)) < e.Yield {
+			air := explosionAirItem()
+			var drops []block.Item
+			if blk.GetBreakInfo().IsExplosionHarvestable() {
+				drops = blk.GetDropsForCompatibleTool(air)
+			} else {
+				drops = blk.GetDrops(air)
+			}
+			for _, drop := range drops {
+				if it, ok := drop.(item.Item); ok {
+					e.world.DropItem(pos.AsVector3().Add(0.5, 0.5, 0.5), it, nil, 10)
+				}
+			}
+		}
+
 		if t, ok := e.world.GetTile(pos); ok {
 			t.OnBlockDestroyed()
 		}
@@ -284,6 +323,22 @@ func (e *Explosion) ExplodeB() bool {
 	e.world.AddSound(sourcePos, sound.ExplodeSound{})
 
 	return true
+}
+
+// positionKey is the [3]int block key used by AffectedBlocks/fireIgnitions.
+func positionKey(blk block.Behavior) [3]int {
+	pos := blk.GetPosition()
+	return [3]int{pos.FloorX(), pos.FloorY(), pos.FloorZ()}
+}
+
+// explosionAirItem is PHP's VanillaItems::AIR() as passed to getDrops: an empty (null) item.
+func explosionAirItem() block.Item {
+	if asItem, ok := block.VanillaAir().(interface{ AsItem() (block.Item, error) }); ok {
+		if it, err := asItem.AsItem(); err == nil {
+			return it
+		}
+	}
+	return nil
 }
 
 // getExposure is a port of Explosion::getExposure: the fraction of sample points across ent's

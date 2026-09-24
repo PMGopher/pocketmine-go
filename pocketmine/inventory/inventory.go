@@ -28,8 +28,7 @@ type InventoryListener interface {
 // their own storage is ready, and implement the handful of methods BaseInventory has no sensible
 // default for (GetSize/GetItem/InternalSetItem/InternalSetContents/GetContents).
 //
-// Not ported: getSlotValidators (SlotValidatedInventory - needs the unported transaction/action/
-// validator package). getViewers/onOpen/onClose keep working (just identity tracking), but
+// getViewers/onOpen/onClose keep working (just identity tracking), but
 // onSlotChange/onContentChange's network-sync calls to viewer.getNetworkSession().getInvManager()
 // aren't ported (needs the unported network/player packages) - listeners still fire correctly.
 type Inventory interface {
@@ -81,6 +80,7 @@ type BaseInventory struct {
 	maxStackSize int
 	viewers      []Player
 	listeners    *utils.ObjectSet[InventoryListener]
+	validators   *utils.ObjectSet[SlotValidator]
 }
 
 // Init finishes constructing b, given self (the concrete inventory type embedding this
@@ -89,7 +89,12 @@ func (b *BaseInventory) Init(self inventoryStorage) {
 	b.self = self
 	b.maxStackSize = MaxStack
 	b.listeners = utils.NewObjectSet[InventoryListener]()
+	b.validators = utils.NewObjectSet[SlotValidator]()
 }
+
+// GetSlotValidators is a port of BaseInventory::getSlotValidators (SlotValidatedInventory): the
+// validators inventory transactions consult before placing an item in a slot.
+func (b *BaseInventory) GetSlotValidators() *utils.ObjectSet[SlotValidator] { return b.validators }
 
 // newEmptyItem returns a fresh always-empty Item, standing in for the PHP original's
 // VanillaItems::AIR() sentinel (the item registry isn't ported, so a real Air item can't be

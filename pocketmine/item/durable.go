@@ -1,6 +1,10 @@
 package item
 
-import "pocketmine-go/pocketmine/nbt"
+import (
+	"pocketmine-go/pocketmine/item/enchantment"
+	"pocketmine-go/pocketmine/nbt"
+	"pocketmine-go/pocketmine/utils"
+)
 
 const (
 	tagUnbreakable = "Unbreakable"
@@ -19,11 +23,6 @@ type durableShaper interface {
 // satisfies block.Durable (the forward-compatible marker declared in block/candle_component.go),
 // so a real Durable-embedding item (like FlintSteel) now works with Candle's lighting logic
 // instead of only a hypothetical one.
-//
-// getUnbreakingDamageReduction isn't ported: it depends on GetEnchantmentLevel(UNBREAKING), and
-// enchantments are always empty in this port (see ItemBase.deserializeCompoundTag's doc comment),
-// so the reduction is always 0 and applyDamage below just skips straight to applying the full
-// amount.
 type Durable struct {
 	ItemBase
 
@@ -40,12 +39,37 @@ func (d *Durable) ApplyDamage(amount int) bool {
 	if d.IsUnbreakable() || d.IsBroken() {
 		return false
 	}
+	amount -= d.self.(unbreakingReducer).getUnbreakingDamageReduction(amount)
+
 	maxDurability := d.self.(durableShaper).GetMaxDurability()
 	d.Damage = min(d.Damage+amount, maxDurability)
 	if d.IsBroken() {
 		d.onBroken()
 	}
 	return true
+}
+
+// unbreakingReducer is the self-dispatch hook letting Armor override getUnbreakingDamageReduction
+// (PHP's protected method override).
+type unbreakingReducer interface {
+	getUnbreakingDamageReduction(amount int) int
+}
+
+// getUnbreakingDamageReduction is a port of Durable::getUnbreakingDamageReduction: each point of
+// damage has a 1/(level+1) chance of applying with Unbreaking.
+func (d *Durable) getUnbreakingDamageReduction(amount int) int {
+	unbreakingLevel := d.self.GetEnchantmentLevel(enchantment.VanillaUnbreaking())
+	if unbreakingLevel <= 0 {
+		return 0
+	}
+	negated := 0
+	chance := 1 / float64(unbreakingLevel+1)
+	for i := 0; i < amount; i++ {
+		if utils.GetRandomFloat() > chance {
+			negated++
+		}
+	}
+	return negated
 }
 
 func (d *Durable) GetDamage() int { return d.Damage }

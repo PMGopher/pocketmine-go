@@ -18,9 +18,8 @@ func (g *Gravel) Clone() Behavior {
 	return &c
 }
 
-// OnNearbyBlockChange should replace itself with air and spawn a FallingBlock entity when
-// unsupported — see Sand.OnNearbyBlockChange / FallableComponent's doc comment for the same gap.
-func (g *Gravel) OnNearbyBlockChange() {}
+// OnNearbyBlockChange is FallableTrait::onNearbyBlockChange.
+func (g *Gravel) OnNearbyBlockChange() { FallableOnNearbyBlockChange(g.self) }
 
 // GetDropsForCompatibleTool's FortuneDropHelper-based flint chance needs the unported item
 // package for real Item construction (see Block.GetDropsForCompatibleTool's doc comment); the

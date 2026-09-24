@@ -63,10 +63,23 @@ func (t *TNTBlock) OnInteract(item Item, face math.Facing, clickVector math.Vect
 	return false
 }
 
-// Ignite is a port of TNT::ignite. It needs the unported PrimedTNT entity type to actually spawn
-// the primed TNT entity and remove this block, so this is a no-op for now - see
-// Block.GetDropsForCompatibleTool's doc comment for the same category of gap.
-func (t *TNTBlock) Ignite(fuse int) {}
+// SpawnPrimedTNTFunc creates, launches and spawns a PrimedTNT entity for TNT ignited at pos (the
+// entity half of TNT::ignite). pocketmine/entity/object installs it from its init() - the same
+// dependency-inversion hook as NewItemBlockFunc.
+var SpawnPrimedTNTFunc func(pos Position, worksUnderwater bool, fuse int)
+
+// Ignite is a port of TNT::ignite (PHP's default fuse is 80).
+func (t *TNTBlock) Ignite(fuse int) {
+	world, err := t.position.GetWorld()
+	if err != nil {
+		return
+	}
+	_ = world.SetBlock(t.position, VanillaAir())
+
+	if SpawnPrimedTNTFunc != nil {
+		SpawnPrimedTNTFunc(t.position, t.WorksUnderwater, fuse)
+	}
+}
 
 func (t *TNTBlock) GetFlameEncouragement() int { return 15 }
 

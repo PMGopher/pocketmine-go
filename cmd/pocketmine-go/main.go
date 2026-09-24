@@ -14,12 +14,14 @@
 // This is still an early milestone, not a playable server: block placing and real inventory
 // interaction (ItemStackRequest handling - the client now sees its real inventory contents via
 // InventoryContent, but can't yet move/drop/use items) aren't wired up yet - see handleConn's read
-// loop.
+// loop. Players are real entities (pocketmine/entity, pocketmine/player): they take damage, starve,
+// drown, pick up dropped items and experience, and see every other entity in the world.
 package main
 
 import (
 	"flag"
 	"fmt"
+	stdmath "math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -36,7 +38,10 @@ import (
 	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/data/bedrock"
-	"pocketmine-go/pocketmine/item"
+	// Linked for their init(): EntityFactory registrations and the world/block hooks that create
+	// item entities, experience orbs, falling blocks and primed TNT.
+	_ "pocketmine-go/pocketmine/entity/object"
+	_ "pocketmine-go/pocketmine/entity/projectile"
 	"pocketmine-go/pocketmine/log"
 	pmmath "pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
@@ -116,6 +121,10 @@ func main() {
 		block.VanillaBirchLog(),
 		block.VanillaBirchLeaves(),
 	})
+
+	if wd != nil {
+		w.SetDifficulty(wd.GetDifficulty())
+	}
 
 	if err := w.OpenProvider(*worldDir); err != nil {
 		logger.Critical(fmt.Sprintf("failed to open world at %q: %v", *worldDir, err))
@@ -260,7 +269,9 @@ func runTickLoop(w *world.World) {
 	var currentTick int64
 	for range ticker.C {
 		currentTick++
+		serverMu.Lock()
 		w.DoTick(currentTick)
+		serverMu.Unlock()
 	}
 }
 
@@ -275,54 +286,6 @@ func acceptLoop(listener *minecraft.Listener, w *world.World, reg *registry, see
 	}
 }
 
-// handleConn drives one player's connection for as long as it stays open. By the time Accept
-// returns a *minecraft.Conn, gophertunnel has already completed the entire login handshake
-// (encryption, resource pack negotiation) internally - StartGame is the first thing this port
-// itself is responsible for.
-//
-// GameData.Items is now real - built from the vendored required_item_list.json (see
-// pocketmine/data/bedrock.ItemTypes, the item-table counterpart of BlockStates) rather than left
-// empty. This is the client's whole vocabulary of known item names/network IDs - without it every
-// item renders as an unknown/blank icon regardless of what this port's own item registry supports.
-// itemTranslator is stateless (a bare lookup table plus the vendored item runtime-ID index - see
-// convert.ItemTranslator's own doc comment), so one shared instance is safe across every session,
-// unlike the per-world convert.BlockTranslator.
-var itemTranslator = convert.NewItemTranslator()
-
-// itemStackForNetwork builds a real protocol.ItemStack from an item.Item, via itemTranslator. Null
-// items and item types itemTranslator has no mapping for both become an empty ItemStack (a network
-// no-item slot) - the same thing an unmapped item resolves to, since there's no way to represent
-// "this slot secretly holds an item the client has never heard of."
-func itemStackForNetwork(it item.Item) protocol.ItemStack {
-	if it == nil || it.IsNull() {
-		return protocol.ItemStack{}
-	}
-	networkID, meta, blockRuntimeID, ok := itemTranslator.ToNetworkID(it)
-	if !ok {
-		return protocol.ItemStack{}
-	}
-	return protocol.ItemStack{
-		ItemType:       protocol.ItemType{NetworkID: networkID, MetadataValue: uint32(meta)},
-		BlockRuntimeID: blockRuntimeID,
-		Count:          uint16(it.GetCount()),
-		HasNetworkID:   true,
-	}
-}
-
-// itemInstanceForNetwork wraps itemStackForNetwork with a real StackNetworkID: 0 for an empty slot
-// (the protocol's own convention for "no item"), 1 otherwise - matching what real PHP sends when
-// server-authoritative inventory transactions are disabled (this port doesn't yet track real
-// per-slot stack IDs across requests - see ItemStackRequest handling's own doc comment, a
-// documented follow-up, not a guess dressed up as a real ID).
-func itemInstanceForNetwork(it item.Item) protocol.ItemInstance {
-	stack := itemStackForNetwork(it)
-	stackNetworkID := int32(0)
-	if it != nil && !it.IsNull() {
-		stackNetworkID = 1
-	}
-	return protocol.ItemInstance{StackNetworkID: stackNetworkID, Stack: stack}
-}
-
 // sendInventoryContent is a port of the player-inventory-sync half of InventoryManager's real
 // per-window InventoryContentPacket broadcast - sent once right after spawn so the client actually
 // knows what's in the player's own inventory (previously nothing was ever sent, so every slot
@@ -333,7 +296,7 @@ func sendInventoryContent(conn *minecraft.Conn, p *player.Player) error {
 	inv := p.GetInventory()
 	content := make([]protocol.ItemInstance, inv.GetSize())
 	for i := range content {
-		content[i] = itemInstanceForNetwork(inv.GetItem(i))
+		content[i] = convert.ItemStackWrapperLegacy(inv.GetItem(i))
 	}
 	return conn.WritePacket(&packet.InventoryContent{
 		WindowID:  protocol.WindowIDInventory,
@@ -394,6 +357,15 @@ func survivalAbilities(entityUniqueID int64) *packet.UpdateAbilities {
 	}}
 }
 
+// handleConn drives one player's connection for as long as it stays open. By the time Accept
+// returns a *minecraft.Conn, gophertunnel has already completed the entire login handshake
+// (encryption, resource pack negotiation) internally - StartGame is the first thing this port
+// itself is responsible for.
+//
+// GameData.Items is real - built from the vendored required_item_list.json (see
+// pocketmine/data/bedrock.ItemTypes, the item-table counterpart of BlockStates). This is the
+// client's whole vocabulary of known item names/network IDs - without it every item renders as an
+// unknown/blank icon regardless of what this port's own item registry supports.
 func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.World, reg *registry, seed int64, spawn spawnPoint, logger log.Logger) {
 	defer conn.Close()
 	defer listener.Disconnect(conn, "server closed")
@@ -401,21 +373,30 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	name := conn.IdentityData().DisplayName
 	logger.Info(fmt.Sprintf("%s connecting from %s", name, conn.RemoteAddr()))
 
-	spawnVec := mgl32.Vec3{float32(spawn.X) + 0.5, float32(spawn.Y), float32(spawn.Z) + 0.5}
-	sess, err := newSession(conn, w, spawnVec)
+	spawnFeet := pmmath.NewVector3(float64(spawn.X)+0.5, float64(spawn.Y), float64(spawn.Z)+0.5)
+
+	serverMu.Lock()
+	sess, err := newSession(conn, w, spawnFeet)
+	serverMu.Unlock()
 	if err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to build session: %v", name, err))
+		_ = listener.Disconnect(conn, "disconnectionScreen.invalidSkin")
 		return
 	}
+	p := sess.player
 
+	// StartGame's player position is the client's eye position: the entity's feet plus
+	// Human::getOffsetPosition's 1.621 (PHP sends $player->getOffsetPosition($location)). Sending the
+	// feet position here would spawn the client with its head at ground level, inside the terrain.
+	eyePos := p.GetOffsetPosition(p.GetPosition())
 	data := minecraft.GameData{
 		WorldName:       pocketmine.Name,
 		WorldSeed:       seed,
-		Difficulty:      2, // normal
-		EntityUniqueID:  sess.entityUniqueID,
-		EntityRuntimeID: sess.entityRuntimeID,
+		Difficulty:      int32(w.GetDifficulty()),
+		EntityUniqueID:  int64(p.GetID()),
+		EntityRuntimeID: uint64(p.GetID()),
 		PlayerGameMode:  0, // survival
-		PlayerPosition:  spawnVec,
+		PlayerPosition:  mgl32.Vec3{float32(eyePos.X), float32(eyePos.Y), float32(eyePos.Z)},
 		WorldSpawn:      protocol.BlockPos{spawn.X, spawn.Y, spawn.Z},
 		WorldGameMode:   0,
 		Time:            6000,
@@ -424,6 +405,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	}
 	if err := conn.StartGame(data); err != nil {
 		logger.Warning(fmt.Sprintf("%s failed to start game: %v", name, err))
+		serverMu.Lock()
+		p.Close()
+		serverMu.Unlock()
 		return
 	}
 
@@ -432,28 +416,41 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	// process movement input.
 	if err := conn.WritePacket(survivalAbilities(data.EntityUniqueID)); err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to send abilities: %v", name, err))
+		serverMu.Lock()
+		p.Close()
+		serverMu.Unlock()
 		return
 	}
 	logger.Info(fmt.Sprintf("%s spawned, sending terrain...", name))
 
-	sess.player.SetViewDistance(spawnChunkRadius)
-	sent, err := streamChunksToPlayer(conn, sess.player)
+	serverMu.Lock()
+	p.SetViewDistance(spawnChunkRadius)
+	sent, err := streamChunksToPlayer(conn, p)
+	if err == nil {
+		err = sendInventoryContent(conn, p)
+	}
+	if err == nil {
+		// Join (the player list) must precede spawning, so other clients know this player's
+		// skin before AddPlayer arrives.
+		reg.Join(sess)
+		p.SetSpawned(true)
+	}
+	count := reg.Count()
+	serverMu.Unlock()
 	if err != nil {
-		logger.Warning(fmt.Sprintf("%s: failed to send terrain: %v", name, err))
+		logger.Warning(fmt.Sprintf("%s: failed to finish spawning: %v", name, err))
+		serverMu.Lock()
+		p.Close()
+		serverMu.Unlock()
 		return
 	}
-	logger.Info(fmt.Sprintf("%s: terrain sent (%d chunks)", name, sent))
+	logger.Info(fmt.Sprintf("%s: terrain sent (%d chunks), joined (%d player(s) online)", name, sent, count))
 
-	if err := sendInventoryContent(conn, sess.player); err != nil {
-		logger.Warning(fmt.Sprintf("%s: failed to send inventory content: %v", name, err))
-		return
-	}
-
-	// Join makes every already-connected player visible to this one and vice versa (PlayerList +
-	// AddPlayer both ways) - see registry's doc comment. Leave (on disconnect, below) reverses it.
-	reg.Join(sess)
-	defer reg.Leave(sess)
-	logger.Info(fmt.Sprintf("%s: joined (%d player(s) online)", name, reg.Count()))
+	defer func() {
+		serverMu.Lock()
+		reg.Leave(sess)
+		serverMu.Unlock()
+	}()
 
 	for {
 		pk, err := conn.ReadPacket()
@@ -461,91 +458,106 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 			logger.Info(fmt.Sprintf("%s disconnected", name))
 			return
 		}
-		switch input := pk.(type) {
-		case *packet.Text:
-			// Chat isn't broadcast to anyone yet - just proves packets round-trip both ways.
-		case *packet.PlayerAuthInput:
-			// The client reports its own predicted position/rotation every tick once
-			// server-authoritative movement is active (see PlayerAuthInput's own doc comment - this
-			// is now the only movement path modern Bedrock versions speak, MovePlayer/client-
-			// authoritative movement no longer exists in this protocol version). This port has no
-			// real physics/collision yet, so the client's report is simply trusted as-is - the same
-			// "no correction unless there's a pending teleport" approach real Bedrock servers use
-			// for ordinary movement (see e.g. Dragonfly's PlayerAuthInputHandler) - then relayed to
-			// every other connected player so they see this player move.
-			sess.SetPositionAndRotation(input.Position, input.Pitch, input.Yaw, input.HeadYaw)
-			reg.BroadcastMove(sess)
-			// InputFlagVerticalCollision is the client's own report of touching something
-			// vertically (ground or ceiling) this tick - the real on-ground signal this port has,
-			// since (like position/rotation above) there's no server-side physics to derive it from
-			// independently. Drives real fall-damage tracking (see Player.TrackFallState's own doc
-			// comment).
-			sess.player.TrackFallState(float64(input.Position[1]), input.InputData.Load(packet.InputFlagVerticalCollision))
-			if _, err := streamChunksToPlayer(conn, sess.player); err != nil {
-				logger.Warning(fmt.Sprintf("%s: failed to stream terrain: %v", name, err))
-				return
-			}
-			sess.player.UpdateBreakingBlock(bareHandItem{})
-			handleBlockActions(conn, sess.player, input.BlockActions, logger, name)
-		case *packet.InventoryTransaction:
-			handleInventoryTransaction(sess, reg, input, logger, name)
-		case *packet.RequestAbility:
-			// This port doesn't support granting any client-requested ability yet (no flying, no
-			// noclip - see survivalAbilities' own doc comment on why simply not replying isn't an
-			// option: the client predicts the request succeeded until told otherwise). Re-asserting
-			// the same survival ability set denies every request uniformly.
-			if err := conn.WritePacket(survivalAbilities(sess.entityUniqueID)); err != nil {
-				logger.Warning(fmt.Sprintf("%s: failed to re-send abilities: %v", name, err))
-				return
-			}
+		serverMu.Lock()
+		keepGoing := handlePacket(conn, w, sess, pk, logger, name)
+		serverMu.Unlock()
+		if !keepGoing {
+			return
 		}
 	}
 }
 
-// handleInventoryTransaction is a port of the entity-attack half of PlayerAuthInput/
-// InventoryTransaction handling onto Player's own real AttackEntity - real PvP (damage, knockback,
-// hit sound, arm-swing/hurt animations). Only UseItemOnEntityTransactionData with
-// UseItemOnEntityActionAttack is handled - Interact (right-click) isn't wired to anything yet (no
-// entity-interact use case exists in this port - villager trading, boat/mount riding, etc.).
-func handleInventoryTransaction(sess *session, reg *registry, pk *packet.InventoryTransaction, logger log.Logger, name string) {
+// handlePacket is this port's stand-in for InGamePacketHandler. Returns false if the connection
+// should be closed.
+func handlePacket(conn *minecraft.Conn, w *world.World, sess *session, pk packet.Packet, logger log.Logger, name string) bool {
+	p := sess.player
+	switch input := pk.(type) {
+	case *packet.Text:
+		// Chat isn't broadcast to anyone yet - just proves packets round-trip both ways.
+	case *packet.PlayerAuthInput:
+		handlePlayerAuthInput(conn, p, input)
+		if _, err := streamChunksToPlayer(conn, p); err != nil {
+			logger.Warning(fmt.Sprintf("%s: failed to stream terrain: %v", name, err))
+			return false
+		}
+		handleBlockActions(conn, p, input.BlockActions, logger, name)
+	case *packet.InventoryTransaction:
+		handleInventoryTransaction(w, p, input, logger, name)
+	case *packet.RequestAbility:
+		// This port doesn't support granting any client-requested ability yet (no flying, no
+		// noclip - see survivalAbilities' own doc comment on why simply not replying isn't an
+		// option: the client predicts the request succeeded until told otherwise). Re-asserting
+		// the same survival ability set denies every request uniformly.
+		if err := conn.WritePacket(survivalAbilities(int64(p.GetID()))); err != nil {
+			logger.Warning(fmt.Sprintf("%s: failed to re-send abilities: %v", name, err))
+			return false
+		}
+	}
+	return true
+}
+
+// handlePlayerAuthInput is a port of the movement half of InGamePacketHandler::handlePlayerAuthInput:
+// the client reports its eye position (hence the 1.62 subtracted to get the feet position the
+// entity is positioned by) and rotation every tick. Movement the player can't make (more than 15
+// blocks, or into unloaded terrain) is reverted by resetting the client's position, like PHP's
+// Player::revertMovement.
+func handlePlayerAuthInput(conn *minecraft.Conn, p *player.Player, input *packet.PlayerAuthInput) {
+	for _, v := range []float32{input.Position[0], input.Position[1], input.Position[2], input.Yaw, input.HeadYaw, input.Pitch} {
+		if stdmath.IsNaN(float64(v)) || stdmath.IsInf(float64(v), 0) {
+			return //Invalid movement received, contains NAN/INF components
+		}
+	}
+
+	yaw := stdmath.Mod(float64(input.Yaw), 360)
+	pitch := stdmath.Mod(float64(input.Pitch), 360)
+	if yaw < 0 {
+		yaw += 360
+	}
+	location := p.GetLocation()
+	if yaw != location.Yaw || pitch != location.Pitch {
+		p.SetRotation(yaw, pitch)
+	}
+
+	newPos := pmmath.NewVector3(float64(input.Position[0]), float64(input.Position[1])-1.62, float64(input.Position[2])).Round(4)
+	if !p.HandleMovement(newPos) {
+		from := p.GetLocation()
+		eye := p.GetOffsetPosition(from.Vector3)
+		_ = conn.WritePacket(&packet.MovePlayer{
+			EntityRuntimeID: uint64(p.GetID()),
+			Position:        mgl32.Vec3{float32(eye.X), float32(eye.Y), float32(eye.Z)},
+			Pitch:           float32(from.Pitch),
+			Yaw:             float32(from.Yaw),
+			HeadYaw:         float32(from.Yaw),
+			Mode:            packet.MoveModeReset,
+			OnGround:        p.IsOnGround(),
+		})
+	}
+}
+
+// handleInventoryTransaction is a port of the entity-attack half of InventoryTransaction handling
+// onto Player.AttackEntity - real PvP and mob combat (damage, knockback, enchantments, critical
+// hits, animations, sounds). Only UseItemOnEntityTransactionData with UseItemOnEntityActionAttack
+// is handled - Interact (right-click) isn't wired to anything yet.
+func handleInventoryTransaction(w *world.World, p *player.Player, pk *packet.InventoryTransaction, logger log.Logger, name string) {
 	data, ok := pk.TransactionData.(*protocol.UseItemOnEntityTransactionData)
 	if !ok || data.ActionType != protocol.UseItemOnEntityActionAttack {
 		return
 	}
 
-	target, ok := reg.Get(data.TargetEntityRuntimeID)
+	target, ok := w.GetEntity(int(data.TargetEntityRuntimeID))
 	if !ok {
 		return
 	}
 
-	if sess.player.AttackEntity(target.player, bareHandItem{}) {
-		logger.Info(fmt.Sprintf("%s attacked %s", name, target.name))
+	if p.AttackEntity(target) {
+		logger.Debug(fmt.Sprintf("%s attacked entity %d", name, target.GetID()))
 	}
 }
 
-// bareHandItem is a stand-in block.Item for "whatever the player is currently holding" - this
-// port's inventory isn't wired to a "selected hotbar slot" concept yet (no ItemStackRequest
-// handling exists - see this file's own package doc comment), so every break/attack action is
-// computed as if the player were holding nothing (efficiency 1.0, no tool type), matching a bare
-// hand exactly. A real held-item lookup replaces this once hotbar selection exists.
-type bareHandItem struct{}
-
-func (bareHandItem) GetTypeId() int                                        { return 0 }
-func (bareHandItem) GetBlockToolType() block.ToolType                      { return block.ToolTypeNone }
-func (bareHandItem) GetBlockToolHarvestLevel() int                         { return 0 }
-func (bareHandItem) GetMiningEfficiency(isCompatibleToolType bool) float64 { return 1 }
-func (bareHandItem) Pop()                                                  {}
-func (bareHandItem) IsNull() bool                                          { return false }
-func (bareHandItem) GetCustomName() string                                 { return "" }
-func (bareHandItem) GetCount() int                                         { return 1 }
-func (bareHandItem) SetCount(count int)                                    {}
-
-// handleBlockActions is a port of the block-breaking half of PlayerAuthInput handling (the
-// placing half isn't wired up yet - that goes through ItemStackRequest, a separate, inventory-
-// shaped undertaking) onto Player's own real AttackBlock/ContinueBreakBlock/StopBreakBlock/
-// BreakBlock - a genuine SurvivalBlockBreakHandler now drives the break-time state machine (see
-// player.SurvivalBlockBreakHandler's own doc comment for what it still doesn't model: haste/mining
-// fatigue/aqua affinity, and the network broadcasts to viewers).
+// handleBlockActions is a port of the block-breaking half of PlayerAuthInput handling (the placing
+// half isn't wired up yet - that goes through ItemStackRequest, a separate, inventory-shaped
+// undertaking) onto Player's own real AttackBlock/ContinueBreakBlock/StopBreakBlock/BreakBlock,
+// using the item the player is holding.
 func handleBlockActions(conn *minecraft.Conn, p *player.Player, actions []protocol.PlayerBlockAction, logger log.Logger, name string) {
 	for _, action := range actions {
 		pos := action.BlockPos
@@ -554,7 +566,7 @@ func handleBlockActions(conn *minecraft.Conn, p *player.Player, actions []protoc
 
 		switch action.Action {
 		case protocol.PlayerActionStartBreak:
-			p.AttackBlock(vec, face, bareHandItem{})
+			p.AttackBlock(vec, face, p.GetInventory().GetItemInHand())
 		case protocol.PlayerActionContinueDestroyBlock:
 			p.ContinueBreakBlock(vec, face)
 		case protocol.PlayerActionAbortBreak:

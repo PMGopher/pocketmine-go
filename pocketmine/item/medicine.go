@@ -1,10 +1,12 @@
 package item
 
-import runtime "pocketmine-go/pocketmine/data/runtime"
+import (
+	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/entity/effect"
+)
 
-// Medicine is a port of pocketmine\item\Medicine. OnConsume/GetResidue/CanStartUsingItem all need
-// pieces that aren't ported (a real Living/Player with effect management, and the item registry
-// for GetResidue's VanillaItems.GLASS_BOTTLE()) - see the Item interface's doc comment.
+// Medicine is a port of pocketmine\item\Medicine. GetResidue (VanillaItems.GLASS_BOTTLE()) and
+// CanStartUsingItem (needs a real Player) aren't ported - see the Item interface's doc comment.
 type Medicine struct {
 	ItemBase
 
@@ -34,3 +36,10 @@ func (m *Medicine) describeState(w runtime.DataDescriber) {
 	w.BoundedIntAuto(int(MedicineTypeAntidote), int(MedicineTypeTonic), &t)
 	m.MedicineTypeValue = MedicineType(t)
 }
+
+// OnConsume is a port of Medicine::onConsume: cures the medicine type's effect.
+func (m *Medicine) OnConsume(consumer effect.Living) {
+	consumer.GetEffects().Remove(m.MedicineTypeValue.GetCuredEffect())
+}
+
+func (m *Medicine) GetAdditionalEffects() []*effect.EffectInstance { return nil }

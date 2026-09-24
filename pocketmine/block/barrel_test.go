@@ -84,3 +84,4 @@ func TestBarrelGetFuelTime(t *testing.T) {
 		t.Errorf("GetFuelTime() = %d, want 300", b.GetFuelTime())
 	}
 }
+func (p barrelPlayer) IsClosed() bool { return false }

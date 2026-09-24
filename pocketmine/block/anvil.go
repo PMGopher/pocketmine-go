@@ -97,3 +97,6 @@ func (a *Anvil) GetFallDamagePerBlock() float64 { return 2.0 }
 func (a *Anvil) GetMaxFallDamage() float64 { return 40.0 }
 
 func (a *Anvil) GetLandSound() (sound.Sound, bool) { return sound.AnvilFallSound{}, true }
+
+// OnNearbyBlockChange is FallableTrait::onNearbyBlockChange.
+func (a *Anvil) OnNearbyBlockChange() { FallableOnNearbyBlockChange(a.self) }

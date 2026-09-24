@@ -1,8 +1,13 @@
 package item
 
 import (
+	"math/rand/v2"
+
 	"pocketmine-go/pocketmine/color"
+	entityevent "pocketmine-go/pocketmine/event/entity"
+	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/nbt"
+	"pocketmine-go/pocketmine/utils"
 )
 
 const tagCustomColor = "customColor"
@@ -11,13 +16,8 @@ const tagCustomColor = "customColor"
 // instantiable in the PHP original (not abstract) - different armor pieces are just Armor
 // instances constructed with different ArmorTypeInfo, so this is both the base and the leaf here.
 //
-// getEnchantmentProtectionFactor isn't ported: it needs ProtectionEnchantment (item/enchantment
-// package, not ported), and enchantments are always empty here anyway (see
-// ItemBase.deserializeCompoundTag's doc comment). getUnbreakingDamageReduction is skipped for the
-// same reason as Durable's (see its doc comment) - Armor's version has an extra 40%-of-the-time
-// gate on top, but since the enchantment level is always 0 the whole method is moot either way.
-// OnClickAir (equipping the armor) needs a real Player/ArmorInventory - see the Item interface's
-// doc comment on Player/Entity-interaction methods.
+// OnClickAir (equipping the armor) needs a real Player - see the Item interface's doc comment on
+// Player/Entity-interaction methods.
 type Armor struct {
 	Durable
 
@@ -61,6 +61,36 @@ func (a *Armor) GetCustomColor() (color.Color, bool) { return a.customColor, a.h
 func (a *Armor) SetCustomColor(c color.Color) { a.customColor = c; a.hasCustomColor = true }
 
 func (a *Armor) ClearCustomColor() { a.customColor = color.Color{}; a.hasCustomColor = false }
+
+// GetEnchantmentProtectionFactor is a port of Armor::getEnchantmentProtectionFactor: the total
+// enchantment protection factor this armour piece offers from all applicable protection
+// enchantments on the item.
+func (a *Armor) GetEnchantmentProtectionFactor(event entityevent.DamageSource) int {
+	epf := 0
+	for _, instance := range a.GetEnchantments() {
+		if t, ok := instance.GetType().(*enchantment.ProtectionEnchantment); ok && t.IsApplicable(event) {
+			epf += t.GetProtectionFactor(instance.GetLevel())
+		}
+	}
+	return epf
+}
+
+// getUnbreakingDamageReduction is a port of Armor::getUnbreakingDamageReduction: unbreaking only
+// applies to armor 40% of the time at best.
+func (a *Armor) getUnbreakingDamageReduction(amount int) int {
+	unbreakingLevel := a.GetEnchantmentLevel(enchantment.VanillaUnbreaking())
+	if unbreakingLevel <= 0 {
+		return 0
+	}
+	negated := 0
+	chance := 1 / float64(unbreakingLevel+1)
+	for i := 0; i < amount; i++ {
+		if rand.IntN(100)+1 > 60 && utils.GetRandomFloat() > chance {
+			negated++
+		}
+	}
+	return negated
+}
 
 // deserializeCompoundTag/serializeCompoundTag extend Durable's own pair, the same self-dispatch
 // participation described on Durable's - the ARGB round trip skips PHP's Binary::signInt/

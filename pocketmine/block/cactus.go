@@ -5,7 +5,7 @@ import (
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -50,7 +50,7 @@ func (c *Cactus) GetSupportType(facing math.Facing) blockutils.SupportType {
 
 // OnEntityInside is a port of Cactus::onEntityInside.
 func (c *Cactus) OnEntityInside(e Entity) bool {
-	ev := entity.NewEntityDamageByBlockEvent(c.self, e, entity.EntityDamageCauseContact, 1, nil)
+	ev := entityevent.NewEntityDamageByBlockEvent(c.self, e, entityevent.CauseContact, 1, nil)
 	e.Attack(ev)
 	return true
 }

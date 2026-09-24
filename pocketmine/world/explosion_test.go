@@ -4,22 +4,13 @@ import (
 	"testing"
 
 	"pocketmine-go/pocketmine/block"
-	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
-// explosionTestEntity adapts *entity.Entity (which already satisfies block.Entity in full - see
-// the entity package's own doc comment) to registeredEntity by adding the bare GetID() World's
-// registry needs but Entity itself doesn't have yet.
-type explosionTestEntity struct {
-	*entity.Entity
-	id int
-}
-
-func (e *explosionTestEntity) GetID() int { return e.id }
-
-func newExplosionTestEntity(id int, pos math.Vector3, bb math.AxisAlignedBB) *explosionTestEntity {
-	return &explosionTestEntity{Entity: entity.NewEntity(pos, bb), id: id}
+func newExplosionTestEntity(w *World, id int, pos math.Vector3, bb math.AxisAlignedBB) *fakeEntity {
+	e := newFakeEntity(w, id, bb)
+	e.pos = pos
+	return e
 }
 
 func TestNewExplosionValidatesArguments(t *testing.T) {
@@ -176,8 +167,8 @@ func TestExplodeBDamagesAndKnocksBackANearbyEntityButNotAFarOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	near := newExplosionTestEntity(1, math.NewVector3(9.5, 100, 8.5), nearBB)
-	far := newExplosionTestEntity(2, math.NewVector3(8.5, 100, 500.5), farBB)
+	near := newExplosionTestEntity(w, 1, math.NewVector3(9.5, 100, 8.5), nearBB)
+	far := newExplosionTestEntity(w, 2, math.NewVector3(8.5, 100, 500.5), farBB)
 	w.AddEntity(near)
 	w.AddEntity(far)
 

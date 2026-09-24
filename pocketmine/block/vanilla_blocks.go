@@ -71,6 +71,9 @@ var (
 	vanillaBirchLeaves       Behavior
 	vanillaFire              Behavior
 	vanillaTNT               Behavior
+	vanillaIce               Behavior
+	vanillaFrostedIce        Behavior
+	vanillaOakPlanks         Behavior
 	vanillaLava              Behavior
 	vanillaNetherQuartzOre   Behavior
 )
@@ -631,4 +634,32 @@ func VanillaNetherQuartzOre() Behavior {
 		vanillaNetherQuartzOre = NewNetherQuartzOre(mustVanillaBlockIdentifier(NETHER_QUARTZ_ORE), "Nether Quartz Ore", NewBlockTypeInfo(BlockBreakInfoPickaxe(3.0, vanillaToolTierWood, nil), nil, nil))
 	}
 	return vanillaNetherQuartzOre.Clone()
+}
+
+// VanillaIce is a port of VanillaBlocks::ICE() - see VanillaBlocksInputs.php's
+// register("ice", ...): new Info(BreakInfo::pickaxe(0.5)).
+func VanillaIce() Behavior {
+	if vanillaIce == nil {
+		vanillaIce = NewIce(mustVanillaBlockIdentifier(ICE), "Ice", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.5, nil, nil), nil, nil))
+	}
+	return vanillaIce.Clone()
+}
+
+// VanillaFrostedIce is a port of VanillaBlocks::FROSTED_ICE() - see VanillaBlocksInputs.php's
+// register("frosted_ice", ...): new Info(BreakInfo::pickaxe(0.5)).
+func VanillaFrostedIce() Behavior {
+	if vanillaFrostedIce == nil {
+		vanillaFrostedIce = NewFrostedIce(mustVanillaBlockIdentifier(FROSTED_ICE), "Frosted Ice", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.5, nil, nil), nil, nil))
+	}
+	return vanillaFrostedIce.Clone()
+}
+
+// VanillaOakPlanks is a port of VanillaBlocks::OAK_PLANKS() - see VanillaBlocksInputs.php's
+// wood-type loop: new Planks($id, "Oak Planks", new Info(BreakInfo::axe(2.0, null, 15.0)), WoodType::OAK).
+func VanillaOakPlanks() Behavior {
+	if vanillaOakPlanks == nil {
+		blastResistance := 15.0
+		vanillaOakPlanks = NewPlanks(mustVanillaBlockIdentifier(OAK_PLANKS), "Oak Planks", NewBlockTypeInfo(BlockBreakInfoAxe(2.0, nil, &blastResistance), nil, nil), blockutils.WoodTypeOak)
+	}
+	return vanillaOakPlanks.Clone()
 }

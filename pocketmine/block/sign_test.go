@@ -5,7 +5,7 @@ import (
 
 	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -113,22 +113,23 @@ func TestBaseSignWaxPreventsFurtherInteraction(t *testing.T) {
 // fakeSignPlayer satisfies the Player interface for BaseSign.OnInteract's frontFace calculation.
 type fakeSignPlayer struct{}
 
-func (fakeSignPlayer) ResetFallDistance()                   {}
-func (fakeSignPlayer) GetPosition() math.Vector3            { return math.Vector3{X: 1, Y: 2, Z: 4} }
-func (fakeSignPlayer) SetOnGround(onGround bool)            {}
-func (fakeSignPlayer) GetFallDistance() float64             { return 0 }
-func (fakeSignPlayer) SetFallDistance(fallDistance float64) {}
-func (fakeSignPlayer) GetBoundingBox() math.AxisAlignedBB   { return math.AxisAlignedBB{} }
-func (fakeSignPlayer) GetMotion() math.Vector3              { return math.Vector3{} }
-func (fakeSignPlayer) SetOnFire(seconds int)                {}
-func (fakeSignPlayer) IsOnFire() bool                       { return false }
-func (fakeSignPlayer) Extinguish()                          {}
-func (fakeSignPlayer) ExtinguishWithCause(cause int)        {}
-func (fakeSignPlayer) CanBeMovedByCurrents() bool           { return true }
-func (fakeSignPlayer) Attack(source entity.DamageSource)    {}
-func (fakeSignPlayer) GetHorizontalFacing() math.Facing     { return math.North }
-func (fakeSignPlayer) IsSneaking() bool                     { return false }
-func (fakeSignPlayer) GetYaw() float64                      { return 0 }
-func (fakeSignPlayer) GetID() int                           { return 99 }
-func (fakeSignPlayer) GetEyePos() math.Vector3              { return math.Vector3{X: 1, Y: 3.62, Z: 4} }
-func (fakeSignPlayer) IsSurvival() bool                     { return true }
+func (fakeSignPlayer) ResetFallDistance()                     {}
+func (fakeSignPlayer) GetPosition() math.Vector3              { return math.Vector3{X: 1, Y: 2, Z: 4} }
+func (fakeSignPlayer) SetOnGround(onGround bool)              {}
+func (fakeSignPlayer) GetFallDistance() float64               { return 0 }
+func (fakeSignPlayer) SetFallDistance(fallDistance float64)   {}
+func (fakeSignPlayer) GetBoundingBox() math.AxisAlignedBB     { return math.AxisAlignedBB{} }
+func (fakeSignPlayer) GetMotion() math.Vector3                { return math.Vector3{} }
+func (fakeSignPlayer) SetOnFire(seconds int)                  {}
+func (fakeSignPlayer) IsOnFire() bool                         { return false }
+func (fakeSignPlayer) Extinguish()                            {}
+func (fakeSignPlayer) ExtinguishWithCause(cause int)          {}
+func (fakeSignPlayer) CanBeMovedByCurrents() bool             { return true }
+func (fakeSignPlayer) Attack(source entityevent.DamageSource) {}
+func (fakeSignPlayer) GetHorizontalFacing() math.Facing       { return math.North }
+func (fakeSignPlayer) IsSneaking() bool                       { return false }
+func (fakeSignPlayer) GetYaw() float64                        { return 0 }
+func (fakeSignPlayer) GetID() int                             { return 99 }
+func (fakeSignPlayer) GetEyePos() math.Vector3                { return math.Vector3{X: 1, Y: 3.62, Z: 4} }
+func (fakeSignPlayer) IsSurvival() bool                       { return true }
+func (fakeSignPlayer) IsClosed() bool                         { return false }

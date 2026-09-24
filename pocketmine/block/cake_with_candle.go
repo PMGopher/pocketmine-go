@@ -2,6 +2,7 @@ package block
 
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/entity/effect"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -71,4 +72,4 @@ func (c *CakeWithCandle) GetDropsForCompatibleTool(item Item) []Item { return ni
 // OnConsume is a port of CakeWithCandle::onConsume, minus the world.dropItem(candle) call, which
 // needs World.DropItem (not in the ported World interface - same recurring gap as
 // SweetBerryBush's doc comment). The residue swap (delegated to BaseCake.OnConsume) is real.
-func (c *CakeWithCandle) OnConsume(consumer Living) { c.BaseCake.OnConsume(consumer) }
+func (c *CakeWithCandle) OnConsume(consumer effect.Living) { c.BaseCake.OnConsume(consumer) }

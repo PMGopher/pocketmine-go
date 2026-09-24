@@ -46,18 +46,22 @@ func (p *Player) HasReceivedChunk(chunkX, chunkZ int) bool {
 	return ok && s == UsedChunkStatusSent
 }
 
-// unloadChunk is a port of Player::unloadChunk - minus despawning this chunk's entities to the
-// player (no despawnFrom/viewer-tracking mechanism exists on entities yet) and
-// NetworkSession::stopUsingChunk (no network session type in this package).
+// unloadChunk is a port of Player::unloadChunk - minus NetworkSession::stopUsingChunk (no network
+// session type in this package).
 func (p *Player) unloadChunk(chunkX, chunkZ int) {
 	key := [2]int{chunkX, chunkZ}
 	if _, ok := p.usedChunks[key]; ok {
+		for _, e := range p.GetWorld().GetChunkEntities(chunkX, chunkZ) {
+			if e != world.Entity(p) {
+				e.DespawnFrom(p, true)
+			}
+		}
 		delete(p.usedChunks, key)
 	}
-	p.world.UnregisterChunkLoader(p, chunkX, chunkZ)
-	p.world.UnregisterChunkListener(p, chunkX, chunkZ)
+	p.GetWorld().UnregisterChunkLoader(p, chunkX, chunkZ)
+	p.GetWorld().UnregisterChunkListener(p, chunkX, chunkZ)
 	delete(p.loadQueue, key)
-	p.world.UnregisterTickingChunk(p, chunkX, chunkZ)
+	p.GetWorld().UnregisterTickingChunk(p, chunkX, chunkZ)
 	delete(p.tickingChunks, key)
 }
 
@@ -77,7 +81,7 @@ func (p *Player) OrderChunks() {
 		unloadChunks[k] = v
 	}
 
-	tickingChunkRadius := p.world.GetChunkTickRadius()
+	tickingChunkRadius := p.GetWorld().GetChunkTickRadius()
 
 	centerX, centerZ := p.GetPosition().FloorX()>>4, p.GetPosition().FloorZ()>>4
 	radius := 0
@@ -105,12 +109,12 @@ func (p *Player) OrderChunks() {
 func (p *Player) updateTickingChunkRegistrations(oldTickingChunks, newTickingChunks map[[2]int]bool) {
 	for chunk := range oldTickingChunks {
 		if !newTickingChunks[chunk] && !p.loadQueue[chunk] {
-			p.world.UnregisterTickingChunk(p, chunk[0], chunk[1])
+			p.GetWorld().UnregisterTickingChunk(p, chunk[0], chunk[1])
 		}
 	}
 	for chunk := range newTickingChunks {
 		if !oldTickingChunks[chunk] && !p.loadQueue[chunk] {
-			p.world.RegisterTickingChunk(p, chunk[0], chunk[1])
+			p.GetWorld().RegisterTickingChunk(p, chunk[0], chunk[1])
 		}
 	}
 }
@@ -131,13 +135,13 @@ func (p *Player) RequestChunks() [][2]int {
 		p.usedChunks[chunk] = UsedChunkStatusRequestedGeneration
 		delete(p.loadQueue, chunk)
 
-		p.world.RegisterChunkLoader(p, chunkX, chunkZ)
-		p.world.RegisterChunkListener(p, chunkX, chunkZ)
+		p.GetWorld().RegisterChunkLoader(p, chunkX, chunkZ)
+		p.GetWorld().RegisterChunkListener(p, chunkX, chunkZ)
 		if p.tickingChunks[chunk] {
-			p.world.RegisterTickingChunk(p, chunkX, chunkZ)
+			p.GetWorld().RegisterTickingChunk(p, chunkX, chunkZ)
 		}
 
-		p.world.GetOrLoadChunk(chunkX, chunkZ)
+		p.GetWorld().GetOrLoadChunk(chunkX, chunkZ)
 
 		p.usedChunks[chunk] = UsedChunkStatusRequestedSending
 		readyToSend = append(readyToSend, chunk)
@@ -153,6 +157,28 @@ func (p *Player) MarkChunkSent(chunkX, chunkZ int) {
 	key := [2]int{chunkX, chunkZ}
 	if p.usedChunks[key] == UsedChunkStatusRequestedSending {
 		p.usedChunks[key] = UsedChunkStatusSent
+		if p.spawned {
+			p.spawnEntitiesOnChunk(chunkX, chunkZ)
+		}
+	}
+}
+
+// spawnEntitiesOnAllChunks is a port of Player::spawnEntitiesOnAllChunks.
+func (p *Player) spawnEntitiesOnAllChunks() {
+	for key, status := range p.usedChunks {
+		if status == UsedChunkStatusSent {
+			p.spawnEntitiesOnChunk(key[0], key[1])
+		}
+	}
+}
+
+// spawnEntitiesOnChunk is a port of Player::spawnEntitiesOnChunk: every entity in a chunk the
+// player has just received is spawned to it.
+func (p *Player) spawnEntitiesOnChunk(chunkX, chunkZ int) {
+	for _, e := range p.GetWorld().GetChunkEntities(chunkX, chunkZ) {
+		if e != world.Entity(p) && !e.IsFlaggedForDespawn() {
+			e.SpawnTo(p)
+		}
 	}
 }
 

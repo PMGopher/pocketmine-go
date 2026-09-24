@@ -2,9 +2,6 @@ package block
 
 import (
 	"testing"
-
-	"pocketmine-go/pocketmine/entity"
-	"pocketmine-go/pocketmine/math"
 )
 
 func newTestFire(w World) *Fire {
@@ -46,7 +43,7 @@ func TestBaseFireOnEntityInsideDamagesARealLivingEntity(t *testing.T) {
 	w := &fakeWorld{}
 	f := newTestFire(w)
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	startHealth := living.GetHealth()
 
 	if !f.OnEntityInside(living) {
@@ -101,3 +98,5 @@ func TestFireHasAdjacentFlammableBlocksFalseWithPlainNeighbors(t *testing.T) {
 		t.Error("expected no flammable neighbours (candleWorld's filler blocks have zero flammability)")
 	}
 }
+func (f *fireTrackingEntity) GetID() int     { return 0 }
+func (f *fireTrackingEntity) IsClosed() bool { return false }

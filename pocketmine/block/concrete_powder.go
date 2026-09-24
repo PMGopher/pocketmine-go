@@ -43,12 +43,12 @@ func (c *ConcretePowder) getAdjacentWater() (*Water, bool) {
 	return nil, false
 }
 
-// OnNearbyBlockChange is a port of ConcretePowder::onNearbyBlockChange, minus the "else start
-// falling" branch (FallableTrait::onNearbyBlockChange needs the unported FallingBlock entity type
-// - see FallableComponent's doc comment), so nothing happens when there's no adjacent water yet.
+// OnNearbyBlockChange is a port of ConcretePowder::onNearbyBlockChange.
 func (c *ConcretePowder) OnNearbyBlockChange() {
 	if water, ok := c.getAdjacentWater(); ok {
 		Form(c.self, c.concreteOfMyColor(), water)
+	} else {
+		FallableOnNearbyBlockChange(c.self)
 	}
 }
 

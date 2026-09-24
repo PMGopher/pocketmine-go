@@ -2,7 +2,7 @@ package block
 
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/utils"
 )
@@ -123,8 +123,8 @@ func (f *Farmland) OnRandomTick() {
 // behavior either way, matching the PHP original's `return null;` outcome.
 func (f *Farmland) OnEntityLand(e Entity) (float64, bool) {
 	if living, ok := e.(Living); ok && utils.GetRandomFloat() < living.GetFallDistance()-0.5 {
-		ev := entity.NewEntityTrampleFarmlandEvent(living, f.self)
-		entity.Call(ev)
+		ev := entityevent.NewEntityTrampleFarmlandEvent(living, f.self)
+		entityevent.Call(ev)
 		if !ev.IsCancelled() {
 			if world, err := f.position.GetWorld(); err == nil {
 				_ = world.SetBlock(f.position, VanillaDirt())

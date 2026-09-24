@@ -1,5 +1,7 @@
 package block
 
+import "pocketmine-go/pocketmine/entity/effect"
+
 import "pocketmine-go/pocketmine/math"
 
 // WitherRose is a port of pocketmine\block\WitherRose.
@@ -49,11 +51,20 @@ func (w *WitherRose) OnNearbyBlockChange() {
 
 func (w *WitherRose) HasEntityCollision() bool { return true }
 
-// OnEntityInside should apply the Wither effect to Living entities that don't already have it —
-// needs entity.Living/EffectInstance/VanillaEffects from the unported entity package, so this is
-// currently a no-op (matches the "entity just doesn't take the effect yet" gap already present
-// for other entity-dependent block behaviors like Cobweb.OnEntityInside).
-func (w *WitherRose) OnEntityInside(entity Entity) bool { return true }
+// effectHolder is the surface OnEntityInside needs to recognise a Living (PHP's
+// `$entity instanceof Living` + getEffects()). *entity.Living satisfies it.
+type effectHolder interface {
+	GetEffects() *effect.EffectManager
+}
+
+// OnEntityInside is a port of WitherRose::onEntityInside: withers Living entities that aren't
+// already withering.
+func (w *WitherRose) OnEntityInside(entity Entity) bool {
+	if living, ok := entity.(effectHolder); ok && !living.GetEffects().Has(effect.VanillaWither()) {
+		living.GetEffects().Add(effect.NewEffectInstanceWith(effect.VanillaWither(), 40, 0))
+	}
+	return true
+}
 
 func (w *WitherRose) GetFlameEncouragement() int { return 60 }
 

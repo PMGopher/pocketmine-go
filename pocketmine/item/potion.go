@@ -1,16 +1,14 @@
 package item
 
 import (
+	"pocketmine-go/pocketmine/entity/effect"
+	"pocketmine-go/pocketmine/world/sound"
+
 	runtime "pocketmine-go/pocketmine/data/runtime"
 )
 
-// Potion is a port of pocketmine\item\Potion.
-//
-// GetAdditionalEffects (potionType.GetEffects()), GetResidue (VanillaItems.GLASS_BOTTLE()), and
-// OnConsume/CanStartUsingItem all need pieces that aren't ported (EffectInstance, the item
-// registry, and a real Player/Living respectively - see PotionType's and the Item interface's
-// doc comments), so none of those are ported here; only the PotionType state and its describeState
-// round trip are real.
+// Potion is a port of pocketmine\item\Potion. GetResidue (VanillaItems.GLASS_BOTTLE()) and
+// CanStartUsingItem (needs a real Player) aren't ported - see the Item interface's doc comment.
 type Potion struct {
 	ItemBase
 
@@ -39,4 +37,23 @@ func (p *Potion) describeState(w runtime.DataDescriber) {
 	t := int(p.PotionTypeValue)
 	w.BoundedIntAuto(int(PotionTypeWater), int(PotionTypeStrongSlowness), &t)
 	p.PotionTypeValue = PotionType(t)
+}
+
+// soundBroadcaster is the optional surface OnConsume needs to play a sound from the consumer
+// (Entity::broadcastSound). *entity.Entity satisfies it.
+type soundBroadcaster interface {
+	BroadcastSound(s sound.Sound)
+}
+
+// OnConsume is a port of Potion::onConsume.
+func (p *Potion) OnConsume(consumer effect.Living) {
+	if b, ok := consumer.(soundBroadcaster); ok {
+		b.BroadcastSound(sound.BottleEmptySound{})
+	}
+}
+
+// GetAdditionalEffects is a port of Potion::getAdditionalEffects.
+func (p *Potion) GetAdditionalEffects() []*effect.EffectInstance {
+	//TODO: check CustomPotionEffects NBT
+	return p.PotionTypeValue.GetEffects()
 }

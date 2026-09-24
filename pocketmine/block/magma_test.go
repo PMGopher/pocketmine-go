@@ -2,9 +2,6 @@ package block
 
 import (
 	"testing"
-
-	"pocketmine-go/pocketmine/entity"
-	"pocketmine-go/pocketmine/math"
 )
 
 func newTestMagma(w World) *Magma {
@@ -17,7 +14,7 @@ func TestMagmaOnEntityInsideDamagesNonSneakingLiving(t *testing.T) {
 	w := &fakeWorld{}
 	m := newTestMagma(w)
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	startHealth := living.GetHealth()
 
 	if !m.OnEntityInside(living) {
@@ -32,7 +29,7 @@ func TestMagmaOnEntityInsideSparesASneakingLiving(t *testing.T) {
 	w := &fakeWorld{}
 	m := newTestMagma(w)
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	living.SetSneaking(true)
 	startHealth := living.GetHealth()
 
@@ -47,7 +44,7 @@ func TestMagmaOnEntityInsideIgnoresNonLivingEntities(t *testing.T) {
 	w := &fakeWorld{}
 	m := newTestMagma(w)
 
-	e := entity.NewEntity(math.NewVector3(0, 0, 0), math.OneAABB())
+	e := newTestEntity()
 	startHealth := e.GetHealth()
 
 	m.OnEntityInside(e)

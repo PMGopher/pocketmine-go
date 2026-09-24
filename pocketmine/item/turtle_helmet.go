@@ -1,10 +1,8 @@
 package item
 
-// TurtleHelmet is a port of pocketmine\item\TurtleHelmet. Its only override in PHP is OnTickWorn
-// (granting Water Breathing while worn out of water) - needs a real Living/Human entity, so it's
-// skipped per the Item interface's doc comment on Player/Entity-interaction methods. Everything
-// else (defense points, durability, etc.) comes from the embedded Armor exactly as with any other
-// armor piece.
+import "pocketmine-go/pocketmine/entity/effect"
+
+// TurtleHelmet is a port of pocketmine\item\TurtleHelmet.
 type TurtleHelmet struct {
 	Armor
 }
@@ -20,3 +18,15 @@ func (t *TurtleHelmet) Clone() Item {
 	c.rebind(&c)
 	return &c
 }
+
+// OnTickWorn is a port of TurtleHelmet::onTickWorn: grants Water Breathing to a Human wearing it
+// out of water.
+func (t *TurtleHelmet) OnTickWorn(entity Living) bool {
+	if isHuman(entity) && !entity.IsUnderwater() {
+		entity.GetEffects().Add(effect.NewEffectInstanceFull(effect.VanillaWaterBreathing(), intPtr(200), 0, false, false, nil, false))
+		return true
+	}
+	return false
+}
+
+func intPtr(v int) *int { return &v }

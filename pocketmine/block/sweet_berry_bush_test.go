@@ -2,9 +2,6 @@ package block
 
 import (
 	"testing"
-
-	"pocketmine-go/pocketmine/entity"
-	"pocketmine-go/pocketmine/math"
 )
 
 func newTestSweetBerryBush(w World) *SweetBerryBush {
@@ -18,7 +15,7 @@ func TestSweetBerryBushOnEntityInsideDamagesLivingWhenGrown(t *testing.T) {
 	s := newTestSweetBerryBush(w)
 	s.Age = SweetBerryBushStageBushNoBerries
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	living.SetFallDistance(5)
 	startHealth := living.GetHealth()
 
@@ -38,7 +35,7 @@ func TestSweetBerryBushOnEntityInsideSparesLivingWhileSapling(t *testing.T) {
 	s := newTestSweetBerryBush(w)
 	s.Age = SweetBerryBushStageSapling
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	startHealth := living.GetHealth()
 
 	s.OnEntityInside(living)

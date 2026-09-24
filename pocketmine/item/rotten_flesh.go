@@ -1,7 +1,11 @@
 package item
 
-// RottenFlesh is a port of pocketmine\item\RottenFlesh. GetAdditionalEffects (an 80% chance of a
-// Hunger effect) isn't ported - see GoldenApple's doc comment for why.
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+	"pocketmine-go/pocketmine/utils"
+)
+
+// RottenFlesh is a port of pocketmine\item\RottenFlesh.
 type RottenFlesh struct {
 	Food
 }
@@ -21,3 +25,10 @@ func (r *RottenFlesh) Clone() Item {
 func (r *RottenFlesh) GetFoodRestore() int { return 4 }
 
 func (r *RottenFlesh) GetSaturationRestore() float64 { return 0.8 }
+
+func (r *RottenFlesh) GetAdditionalEffects() []*effect.EffectInstance {
+	if utils.GetRandomFloat() <= 0.8 {
+		return []*effect.EffectInstance{effect.NewEffectInstanceWith(effect.VanillaHunger(), 600, 0)}
+	}
+	return nil
+}

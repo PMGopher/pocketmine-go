@@ -3,8 +3,7 @@ package block
 import (
 	"testing"
 
-	"pocketmine-go/pocketmine/entity"
-	"pocketmine-go/pocketmine/math"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 )
 
 func newTestCactus(w World) *Cactus {
@@ -17,7 +16,7 @@ func TestCactusOnEntityInsideDealsContactDamage(t *testing.T) {
 	w := &fakeWorld{}
 	c := newTestCactus(w)
 
-	e := entity.NewEntity(math.NewVector3(0, 0, 0), math.OneAABB())
+	e := newTestEntity()
 	startHealth := e.GetHealth()
 
 	if !c.OnEntityInside(e) {
@@ -26,7 +25,7 @@ func TestCactusOnEntityInsideDealsContactDamage(t *testing.T) {
 	if e.GetHealth() != startHealth-1 {
 		t.Errorf("GetHealth() = %v, want %v", e.GetHealth(), startHealth-1)
 	}
-	if e.GetLastDamageCause().GetCause() != entity.EntityDamageCauseContact {
+	if e.GetLastDamageCause().GetCause() != entityevent.CauseContact {
 		t.Errorf("GetCause() = %d, want EntityDamageCauseContact", e.GetLastDamageCause().GetCause())
 	}
 }

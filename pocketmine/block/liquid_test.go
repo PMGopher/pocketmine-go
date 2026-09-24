@@ -3,7 +3,7 @@ package block
 import (
 	"testing"
 
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 )
 
 func newTestWater(w World) *Water {
@@ -109,7 +109,7 @@ func TestWaterOnEntityInsideExtinguishesBurningEntity(t *testing.T) {
 	if !e.extinguished {
 		t.Error("expected a burning entity to be extinguished")
 	}
-	if e.extinguishCause != entity.EntityExtinguishCauseWater {
+	if e.extinguishCause != entityevent.ExtinguishCauseWater {
 		t.Errorf("extinguishCause = %d, want EntityExtinguishCauseWater", e.extinguishCause)
 	}
 }
@@ -140,3 +140,5 @@ func TestLavaOnEntityInsideIgnites(t *testing.T) {
 		t.Error("expected fall distance to be reset")
 	}
 }
+func (e *onFireTrackingEntity) GetID() int     { return 0 }
+func (e *onFireTrackingEntity) IsClosed() bool { return false }

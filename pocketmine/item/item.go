@@ -6,6 +6,7 @@ import (
 
 	"pocketmine-go/pocketmine/block"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/nbt"
 )
 
@@ -41,13 +42,12 @@ const (
 // as block.Behavior/block.Block: concrete leaf types embed ItemBase, call Init(self) once their
 // own fields are set to their defaults, and override whichever methods they need.
 //
-// Not ported: enchantment handling (ItemEnchantmentHandlingTrait - needs the unported
-// item/enchantment package), NbtSerialize/NbtDeserialize/SafeNbtDeserialize (need
+// Not ported: NbtSerialize/NbtDeserialize/SafeNbtDeserialize (need
 // GlobalItemDataHandlers, a whole item-data-driven serializer/deserializer registry),
 // legacyJsonDeserialize (deprecated upgrade path, not worth porting), GetPlacementTransaction and
 // GetBlock/CanBePlaced (need a concrete world.BlockTransaction and the block registry). Also not
 // ported: the Player/Entity-interaction methods (OnInteractBlock, OnClickAir, OnReleaseUsing,
-// OnDestroyBlock, OnAttackEntity, OnTickWorn, OnInteractEntity) - these need a real Player/Entity
+// OnDestroyBlock, OnAttackEntity, OnInteractEntity) - these need a real Player/Entity
 // with far more machinery than the block package's minimal local interfaces provide (inventory,
 // hunger, world access), so leaf item types in this port can't meaningfully override them yet;
 // concrete types that would (like FlintSteel.OnInteractBlock) document the gap individually
@@ -79,6 +79,19 @@ type Item interface {
 
 	KeepOnDeath() bool
 	SetKeepOnDeath(keep bool)
+
+	HasEnchantments() bool
+	HasEnchantment(e enchantment.Enchantment, level int) bool
+	GetEnchantment(e enchantment.Enchantment) *enchantment.EnchantmentInstance
+	RemoveEnchantment(e enchantment.Enchantment, level int)
+	RemoveEnchantments()
+	AddEnchantment(instance *enchantment.EnchantmentInstance)
+	GetEnchantments() []*enchantment.EnchantmentInstance
+	GetEnchantmentLevel(e enchantment.Enchantment) int
+
+	// OnTickWorn is a port of Item::onTickWorn: called when this item is being worn by an entity
+	// (armor slots). Returns whether the item was changed (e.g. durability).
+	OnTickWorn(entity Living) bool
 
 	HasNamedTag() bool
 	GetNamedTag() *nbt.CompoundTag
@@ -136,6 +149,8 @@ type ItemBase struct {
 	canDestroy     map[string]string
 	keepOnDeath    bool
 
+	enchantments enchantments
+
 	nbtTag *nbt.CompoundTag
 }
 
@@ -151,8 +166,19 @@ func (b *ItemBase) Init(self Item, identifier ItemIdentifier, name string) {
 }
 
 // rebind repoints b.self after a concrete type has been copied (e.g. in Clone) - same pattern as
-// block.Block.rebind.
-func (b *ItemBase) rebind(self Item) { b.self = self }
+// block.Block.rebind. It is also where Item::__clone's deep copies happen: every concrete Clone is
+// `c := *x; c.rebind(&c)`, so the struct copy shares the NBT/enchantment containers until they're
+// duplicated here.
+func (b *ItemBase) rebind(self Item) {
+	b.self = self
+	if b.nbtTag != nil {
+		b.nbtTag = b.nbtTag.Clone()
+	}
+	if b.blockEntityTag != nil {
+		b.blockEntityTag = b.blockEntityTag.Clone()
+	}
+	b.enchantments = b.enchantments.clone()
+}
 
 func (b *ItemBase) HasCustomBlockData() bool { return b.blockEntityTag != nil }
 
@@ -229,10 +255,7 @@ func (b *ItemBase) ClearNamedTag() {
 	b.self.(compoundTagCodec).deserializeCompoundTag(b.nbtTag)
 }
 
-// deserializeCompoundTag is a port of Item::deserializeCompoundTag, minus the "ench" list round
-// trip - EnchantmentInstance/EnchantmentIdMap (item/enchantment package) aren't ported, so any
-// "ench" tag on loaded NBT is silently ignored rather than populating enchantments (matching every
-// other HasEnchantment-is-always-false assumption already made elsewhere in this port).
+// deserializeCompoundTag is a port of Item::deserializeCompoundTag.
 func (b *ItemBase) deserializeCompoundTag(tag *nbt.CompoundTag) {
 	b.customName = ""
 	b.lore = nil
@@ -275,12 +298,12 @@ func (b *ItemBase) deserializeCompoundTag(tag *nbt.CompoundTag) {
 		}
 	}
 
+	b.deserializeEnchantments(tag)
+
 	b.keepOnDeath = tag.GetByteOr(tagKeepOnDeath, 0) != 0
 }
 
-// serializeCompoundTag is a port of Item::serializeCompoundTag, minus the "ench" list (see
-// deserializeCompoundTag's doc comment - enchantments are always empty here, so that branch is
-// simply never taken).
+// serializeCompoundTag is a port of Item::serializeCompoundTag.
 func (b *ItemBase) serializeCompoundTag(tag *nbt.CompoundTag) {
 	display, hasDisplay, _ := tag.GetCompoundTag(tagDisplay)
 
@@ -323,6 +346,8 @@ func (b *ItemBase) serializeCompoundTag(tag *nbt.CompoundTag) {
 	} else {
 		tag.RemoveTag(tagBlockEntity)
 	}
+
+	b.serializeEnchantments(tag)
 
 	if len(b.canPlaceOn) > 0 {
 		values := make([]nbt.Tag, 0, len(b.canPlaceOn))
@@ -391,6 +416,9 @@ func (b *ItemBase) GetName() string {
 func (b *ItemBase) GetVanillaName() string { return b.name }
 
 func (b *ItemBase) GetEnchantability() int { return 1 }
+
+// OnTickWorn is Item::onTickWorn's default: nothing happens.
+func (b *ItemBase) OnTickWorn(entity Living) bool { return false }
 
 // describeState is a port of Item::describeState's default (NOOP) implementation. Concrete item
 // types with runtime state (e.g. Dye) override this by shadowing the method on their own type -

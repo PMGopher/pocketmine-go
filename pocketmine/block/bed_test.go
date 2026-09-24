@@ -132,3 +132,5 @@ type fallTrackingEntity struct {
 func (f *fallTrackingEntity) GetFallDistance() float64             { return f.fallDistance }
 func (f *fallTrackingEntity) SetFallDistance(fallDistance float64) { f.fallDistance = fallDistance }
 func (f *fallTrackingEntity) GetMotion() math.Vector3              { return math.Vector3{Y: f.motionY} }
+func (f *fallTrackingEntity) GetID() int                           { return 0 }
+func (f *fallTrackingEntity) IsClosed() bool                       { return false }

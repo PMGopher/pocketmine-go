@@ -162,7 +162,7 @@ func TestCakeOnConsumeWritesResidueToWorld(t *testing.T) {
 	c := newTestCake(w)
 	c.Bites = 0
 
-	c.OnConsume(fakeLivingEntity{})
+	c.OnConsume(&testConsumer{})
 
 	residue, ok := w.lastSetBlock.(*Cake)
 	if !ok {
@@ -192,7 +192,7 @@ func TestCakeWithCandleOnConsumeSwapsToResidue(t *testing.T) {
 	c := NewCakeWithCandle(mustBlockIdentifier(1057), "Test Cake With Candle", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
 	c.SetPosition(w, 1, 2, 3)
 
-	c.OnConsume(fakeLivingEntity{})
+	c.OnConsume(&testConsumer{})
 
 	if _, ok := w.lastSetBlock.(*Cake); !ok {
 		t.Fatalf("expected SetBlock to be called with a *Cake, got %T", w.lastSetBlock)
@@ -208,7 +208,7 @@ func TestCakeWithDyedCandleGetResidueInheritsFromCakeWithCandle(t *testing.T) {
 	c := NewCakeWithDyedCandle(mustBlockIdentifier(1058), "Test Cake With Dyed Candle", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
 	c.SetPosition(w, 1, 2, 3)
 
-	c.OnConsume(fakeLivingEntity{})
+	c.OnConsume(&testConsumer{})
 
 	residue, ok := w.lastSetBlock.(*Cake)
 	if !ok {

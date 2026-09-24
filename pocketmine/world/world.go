@@ -111,10 +111,18 @@ type World struct {
 	blockLightUpdate  *light.BlockLightUpdate
 	skyLightReduction int // see GetSkyLightReduction's doc comment
 
-	// entities is this World's entity registry (see AddEntity/RemoveEntity/GetNearbyEntities) -
-	// keyed by registeredEntity.GetID(), a flat map rather than PHP's per-chunk index (see
-	// GetNearbyEntities' own doc comment on why that's a performance detail, not a correctness one).
-	entities map[int]registeredEntity
+	// entities/entitiesByChunk/entityLastKnownPositions/updateEntities are World's entity registry
+	// (see entity.go) - PHP's $entities, $entitiesByChunk, $entityLastKnownPositions and
+	// $updateEntities.
+	entities                 map[int]Entity
+	entitiesByChunk          map[[2]int]map[int]Entity
+	entityLastKnownPositions map[int]math.Vector3
+	updateEntities           orderedEntitySet
+
+	// difficulty is World::getDifficulty's value. PHP reads it through the provider's WorldData
+	// (level.dat); this port's World doesn't own its WorldData (cmd/pocketmine-go does), so the
+	// value is held here and kept in sync by the owner - see SetDifficulty.
+	difficulty int
 
 	// --- tick.go: time/weather, scheduled+neighbour block updates, chunk loading/ticking/unload ---
 
@@ -197,28 +205,31 @@ const unloadGraceTicks = 30 * 20
 // for why.
 func New(gen generator.Generator, translator *convert.BlockTranslator, knownBlocks []block.Behavior) *World {
 	w := &World{
-		generator:              gen,
-		translator:             translator,
-		chunks:                 map[[2]int]*format.Chunk{},
-		populated:              map[[2]int]bool{},
-		stateTemplates:         map[int32]block.Behavior{},
-		stateByBlockKey:        map[string]int32{},
-		lightFilters:           map[int32]int{},
-		lightEmitters:          map[int32]int{},
-		directSkyLightBlockers: map[int32]bool{},
-		blastResistance:        map[int32]float64{},
-		entities:               map[int]registeredEntity{},
-		sunAnglePercentage:     0.5,
-		randomTickBlocks:       map[int32]bool{},
-		scheduledUpdateDelay:   map[[3]int]int{},
-		neighbourUpdateQueued:  map[[3]int]bool{},
-		chunkLoaders:           map[[2]int]map[any]bool{},
-		tickingChunks:          map[[2]int]map[any]bool{},
-		chunkTickRadius:        4,
-		unloadQueue:            map[[2]int]int64{},
-		chunkListeners:         map[[2]int]map[ChunkListener]bool{},
-		biomeRegistry:          biome.NewRegistry(),
-		rng:                    rand.New(rand.NewSource(time.Now().UnixNano())),
+		generator:                gen,
+		translator:               translator,
+		chunks:                   map[[2]int]*format.Chunk{},
+		populated:                map[[2]int]bool{},
+		stateTemplates:           map[int32]block.Behavior{},
+		stateByBlockKey:          map[string]int32{},
+		lightFilters:             map[int32]int{},
+		lightEmitters:            map[int32]int{},
+		directSkyLightBlockers:   map[int32]bool{},
+		blastResistance:          map[int32]float64{},
+		entities:                 map[int]Entity{},
+		entitiesByChunk:          map[[2]int]map[int]Entity{},
+		entityLastKnownPositions: map[int]math.Vector3{},
+		difficulty:               DifficultyNormal,
+		sunAnglePercentage:       0.5,
+		randomTickBlocks:         map[int32]bool{},
+		scheduledUpdateDelay:     map[[3]int]int{},
+		neighbourUpdateQueued:    map[[3]int]bool{},
+		chunkLoaders:             map[[2]int]map[any]bool{},
+		tickingChunks:            map[[2]int]map[any]bool{},
+		chunkTickRadius:          4,
+		unloadQueue:              map[[2]int]int64{},
+		chunkListeners:           map[[2]int]map[ChunkListener]bool{},
+		biomeRegistry:            biome.NewRegistry(),
+		rng:                      rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	w.subChunkExplorer = utils.NewSubChunkExplorer(w)
 	w.skyLightUpdate = light.NewSkyLightUpdate(w.subChunkExplorer, w.lightFilters, w.directSkyLightBlockers)
@@ -335,6 +346,9 @@ func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
 		if c, ok, err := worldio.LoadChunk(w.provider, int32(chunkX), int32(chunkZ), int32(block.VanillaAir().GetStateId()), 0, w.resolveBlockState); err == nil && ok {
 			w.chunks[key] = c
 			w.populated[key] = true // a saved chunk was always fully generated+populated before being saved
+			if entityNBT, err := worldio.LoadEntities(w.provider, int32(chunkX), int32(chunkZ)); err == nil {
+				w.initChunkEntities(entityNBT)
+			}
 			w.fireOnChunkLoaded(chunkX, chunkZ, c)
 			return c
 		}
@@ -394,6 +408,9 @@ func (w *World) SaveAll() error {
 	}
 	for key, chunk := range w.chunks {
 		if err := worldio.SaveChunk(w.provider, int32(key[0]), int32(key[1]), chunk, w.lookupBlockState); err != nil {
+			return err
+		}
+		if err := worldio.SaveEntities(w.provider, int32(key[0]), int32(key[1]), w.saveChunkEntities(key[0], key[1])); err != nil {
 			return err
 		}
 	}
@@ -735,65 +752,6 @@ func (w *World) GetSkyLightReduction() int { return w.skyLightReduction }
 // Recomputed once per tick in DoTick from World.time.
 func (w *World) GetSunAnglePercentage() float64 { return w.sunAnglePercentage }
 
-// registeredEntity is the minimal surface World's entity registry needs beyond block.Entity
-// itself (a unique ID, and whether it's already been closed) - declared locally, matching this
-// port's established forward-compatible-local-interface convention, so a future concrete Entity
-// type (pocketmine/entity only has the Entity/Living markers so far - no concrete spawnable type
-// exists yet to actually register) satisfies it structurally with no import needed here.
-type registeredEntity interface {
-	block.Entity
-	GetID() int
-	IsClosed() bool
-}
-
-// intersectEpsilon matches AxisAlignedBB::intersectsWith's real PHP default parameter
-// ($epsilon = 0.00001).
-const intersectEpsilon = 0.00001
-
-// AddEntity is a port of World::addEntity. Panics for a closed entity or one already registered
-// under a different instance for the same ID, matching the PHP original's InvalidArgumentException
-// (both are programmer errors at the call site).
-func (w *World) AddEntity(e registeredEntity) {
-	if e.IsClosed() {
-		panic("world: attempted to add a closed entity to the world")
-	}
-	if existing, ok := w.entities[e.GetID()]; ok && existing != e {
-		panic("world: attempted to create another entity with the same ID")
-	}
-	w.entities[e.GetID()] = e
-}
-
-// RemoveEntity is a port of World::removeEntity.
-func (w *World) RemoveEntity(e registeredEntity) {
-	delete(w.entities, e.GetID())
-}
-
-// GetEntity is a port of World::getEntity.
-func (w *World) GetEntity(id int) (registeredEntity, bool) {
-	e, ok := w.entities[id]
-	return e, ok
-}
-
-// GetEntities is a port of World::getEntities.
-func (w *World) GetEntities() map[int]registeredEntity { return w.entities }
-
-// GetNearbyEntities is a port of World::getNearbyEntities (minus its $entity exclusion parameter,
-// which block.World's interface doesn't need - nothing in the block package calls this with an
-// entity to exclude). Unlike the PHP original, this doesn't pre-filter by nearby chunks first (a
-// pure performance optimisation over exactly the same correct result set, not a correctness
-// requirement) - this port has no per-chunk entity index (see registeredEntity's own doc comment
-// on why there's nothing to spawn into one yet anyway), so a flat scan of every registered entity
-// produces an identical result, just O(entity count) instead of O(nearby chunks' entity count).
-func (w *World) GetNearbyEntities(bb math.AxisAlignedBB) []block.Entity {
-	var nearby []block.Entity
-	for _, e := range w.entities {
-		if e.GetBoundingBox().IntersectsWith(bb, intersectEpsilon) {
-			nearby = append(nearby, e)
-		}
-	}
-	return nearby
-}
-
 // int32Min/int32Max mirror pocketmine\utils\Limits::INT32_MIN/INT32_MAX - named locally instead
 // of using Go's stdlib math.MinInt32/MaxInt32 since this file already imports this port's own
 // math package under the plain "math" name.
@@ -940,37 +898,3 @@ func (w *World) IsChunkPopulated(chunkX, chunkZ int) bool {
 
 // GetLoadedChunks is a port of World::getLoadedChunks.
 func (w *World) GetLoadedChunks() map[[2]int]*format.Chunk { return w.chunks }
-
-// nearestEntityAliveChecker is the optional surface an entity can implement to participate in
-// GetNearestEntity's alive-only filtering - block.Entity itself doesn't require IsAlive (no
-// concrete entity type needs it there yet outside *entity.Entity, which already has it - matches
-// this port's established optional-capability pattern, e.g. tick.go's nearbyBlockChangeNotifiable).
-type nearestEntityAliveChecker interface {
-	IsAlive() bool
-}
-
-// GetNearestEntity is a port of World::getNearestEntity. filter replaces the real
-// `string $entityType` class-filter parameter (Go has no runtime "instanceof $variableClassName"
-// the way PHP does) - pass nil to match any entity, matching the real method's own
-// `$entityType = Entity::class` default. Also doesn't check isFlaggedForDespawn - no concrete
-// entity type has despawn flagging ported yet either.
-func (w *World) GetNearestEntity(pos math.Vector3, maxDistance float64, includeDead bool, filter func(block.Entity) bool) block.Entity {
-	var current block.Entity
-	currentDistSq := maxDistance * maxDistance
-
-	for _, e := range w.entities {
-		if filter != nil && !filter(e) {
-			continue
-		}
-		if !includeDead {
-			if ac, ok := e.(nearestEntityAliveChecker); ok && !ac.IsAlive() {
-				continue
-			}
-		}
-		if distSq := e.GetPosition().DistanceSquared(pos); distSq < currentDistSq {
-			currentDistSq = distSq
-			current = e
-		}
-	}
-	return current
-}

@@ -2,9 +2,6 @@ package block
 
 import (
 	"testing"
-
-	"pocketmine-go/pocketmine/entity"
-	"pocketmine-go/pocketmine/math"
 )
 
 func newTestFarmland(w World) *Farmland {
@@ -63,7 +60,7 @@ func TestFarmlandOnEntityLandTramplesIntoDirtWithGuaranteedRoll(t *testing.T) {
 	w := &containerTileWorld{tiles: map[[3]int]Tile{}, blocks: map[[3]int]Behavior{}}
 	f := newTestFarmland(w)
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	living.SetFallDistance(100) // guarantees GetRandomFloat() < fallDistance-0.5
 
 	damage, handled := f.OnEntityLand(living)
@@ -82,7 +79,7 @@ func TestFarmlandOnEntityLandIgnoresNonLivingEntities(t *testing.T) {
 	w := &containerTileWorld{tiles: map[[3]int]Tile{}, blocks: map[[3]int]Behavior{}}
 	f := newTestFarmland(w)
 
-	e := entity.NewEntity(math.NewVector3(0, 0, 0), math.OneAABB())
+	e := newTestEntity()
 	e.SetFallDistance(100)
 
 	f.OnEntityLand(e)

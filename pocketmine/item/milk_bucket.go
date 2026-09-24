@@ -1,8 +1,11 @@
 package item
 
-// MilkBucket is a port of pocketmine\item\MilkBucket. GetResidue (VanillaItems.BUCKET()),
-// OnConsume, and CanStartUsingItem aren't ported - see Food's and the Item interface's doc
-// comments.
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
+// MilkBucket is a port of pocketmine\item\MilkBucket. GetResidue (VanillaItems.BUCKET()) and
+// CanStartUsingItem aren't ported - see Food's and the Item interface's doc comments.
 type MilkBucket struct {
 	ItemBase
 }
@@ -21,4 +24,7 @@ func (m *MilkBucket) Clone() Item {
 
 func (m *MilkBucket) GetMaxStackSize() int { return 1 }
 
-func (m *MilkBucket) GetAdditionalEffects() {}
+func (m *MilkBucket) GetAdditionalEffects() []*effect.EffectInstance { return nil }
+
+// OnConsume is a port of MilkBucket::onConsume: clears every effect.
+func (m *MilkBucket) OnConsume(consumer effect.Living) { consumer.GetEffects().Clear() }

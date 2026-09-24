@@ -1,9 +1,10 @@
 package item
 
-// GoldenAppleEnchanted is a port of pocketmine\item\GoldenAppleEnchanted. Its only override in
-// PHP is GetAdditionalEffects (a stronger effect set than GoldenApple's) - not ported, same gap
-// as GoldenApple's doc comment - so this behaves identically to GoldenApple here, existing purely
-// as its own named type (matching the PHP class hierarchy) rather than a functional difference.
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
+// GoldenAppleEnchanted is a port of pocketmine\item\GoldenAppleEnchanted.
 type GoldenAppleEnchanted struct {
 	GoldenApple
 }
@@ -18,4 +19,13 @@ func (g *GoldenAppleEnchanted) Clone() Item {
 	c := *g
 	c.rebind(&c)
 	return &c
+}
+
+func (g *GoldenAppleEnchanted) GetAdditionalEffects() []*effect.EffectInstance {
+	return []*effect.EffectInstance{
+		effect.NewEffectInstanceWith(effect.VanillaRegeneration(), 600, 1),
+		effect.NewEffectInstanceWith(effect.VanillaAbsorption(), 2400, 3),
+		effect.NewEffectInstanceWith(effect.VanillaResistance(), 6000, 0),
+		effect.NewEffectInstanceWith(effect.VanillaFireResistance(), 6000, 0),
+	}
 }

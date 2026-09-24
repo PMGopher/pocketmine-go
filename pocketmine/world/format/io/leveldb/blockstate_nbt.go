@@ -66,3 +66,14 @@ func nbtToBlockState(tag *nbt.CompoundTag) (bedrock.BlockStateData, error) {
 
 	return bedrock.BlockStateData{Name: string(name), States: states, Version: int32(version)}, nil
 }
+
+// BlockStateToNBT is the exported form of blockStateToNBT, for block-state NBT stored outside
+// subchunk palettes (e.g. a FallingBlock entity's saved block).
+func BlockStateToNBT(data bedrock.BlockStateData) (*nbt.CompoundTag, error) {
+	return blockStateToNBT(data)
+}
+
+// NBTToBlockState is the exported form of nbtToBlockState.
+func NBTToBlockState(tag *nbt.CompoundTag) (bedrock.BlockStateData, error) {
+	return nbtToBlockState(tag)
+}

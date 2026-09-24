@@ -3,7 +3,6 @@ package world
 import (
 	"testing"
 
-	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/biome"
 )
@@ -81,11 +80,11 @@ func TestGetNearestEntityFindsTheClosestMatchIgnoringFilteredAndDeadOnes(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	near := newFakeEntity(1, bb)
+	near := newFakeEntity(w, 1, bb)
 	near.pos = math.NewVector3(1, 0, 0)
-	far := newFakeEntity(2, bb)
+	far := newFakeEntity(w, 2, bb)
 	far.pos = math.NewVector3(50, 0, 0)
-	dead := newFakeEntity(3, bb)
+	dead := newFakeEntity(w, 3, bb)
 	dead.pos = math.NewVector3(0.5, 0, 0)
 	dead.alive = false
 
@@ -105,7 +104,7 @@ func TestGetNearestEntityFindsTheClosestMatchIgnoringFilteredAndDeadOnes(t *test
 	}
 
 	// A filter that rejects everything should find nothing.
-	got = w.GetNearestEntity(math.Vector3Zero(), 100, false, func(e block.Entity) bool { return false })
+	got = w.GetNearestEntity(math.Vector3Zero(), 100, false, func(e Entity) bool { return false })
 	if got != nil {
 		t.Errorf("GetNearestEntity with an always-false filter found %v, want nil", got)
 	}

@@ -48,7 +48,7 @@ server.
 | Area (PHP namespace, incl. sub-namespaces) | Ported / total PHP classes |
 |---|---|
 | `block` (incl. tile, inventory, utils) | 341 / 390 |
-| `item` (incl. enchantment) | 111 / 154 |
+| `item` (incl. enchantment) | 133 / 154 |
 | `world` (all sub-namespaces) | 135 / 271 |
 | ↳ `world/particle` | 38 / 38 |
 | ↳ `world/sound` | 48 / 113 |
@@ -58,9 +58,9 @@ server.
 | `command` | 9 / 53 (no default commands) |
 | `plugin` | 8 / 22 |
 | `scheduler` | 4 / 15 |
-| `entity` | 9 / 77 |
-| `event` | 19 / 150 (base classes + a few entity damage events) |
-| `inventory` | 4 / 35 |
+| `entity` (incl. effect, object, projectile, animation, attribute) | 77 / 77 |
+| `event` | 43 / 150 (base classes + every `event/entity` event + 2 player events) |
+| `inventory` | 10 / 35 (incl. player, armor, off-hand, ender inventories) |
 | `network` (above the protocol layer) | 6 / 85 |
 | `crafting`, `console`, `crash`, `resourcepacks`, `form` | 0 |
 
@@ -133,8 +133,8 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] 321 item type IDs
 - [x] Item → network ID translation
 - [ ] Vanilla item registry **(partial)**, ~76 items
-- [ ] Bow, arrows, snowball, egg, ender pearl, spawn eggs, and other projectile items
-- [ ] Enchantments
+- [ ] Bow, arrows, snowball, egg, ender pearl, spawn eggs, and other projectile items **(partial)**: the entities exist, but using the items needs the item-use packet handlers
+- [x] Enchantments (all vanilla enchantments, protection/sharpness/knockback/fire aspect logic, armor EPF)
 - [ ] `/give`-style item name parsing (`StringToItemParser`)
 
 ### Player
@@ -145,33 +145,36 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Player data file format (not wired to the server yet)
 - [ ] Held item / hotbar selection (everything acts as a bare hand)
 - [ ] Chat broadcast
-- [ ] Death and respawn
-- [ ] Hunger, saturation, experience, attributes
+- [ ] Death and respawn **(partial)**: death logic, drops and XP drop ported; respawn screen/packet flow isn't
+- [x] Hunger, saturation, experience, attributes (logic ported; attribute packets sent)
 - [ ] Changing game mode in-game
 - [ ] Server-side movement checks / physics
 
 ### Inventory & crafting
 - [x] Base inventory types
 - [x] Initial inventory contents sent to the client
-- [ ] Player inventory, armor, offhand, cursor, ender chest
+- [x] Player inventory, armor, offhand, ender chest (the classes; client sync is via InventoryContent only)
+- [ ] Cursor inventory, inventory network sync (InventoryManager)
 - [ ] Creative inventory
 - [ ] Inventory transactions / item stack requests (moving, dropping, using items)
 - [ ] Crafting, furnace smelting, brewing, smithing, enchanting
 
 ### Entities
-- [x] Entity, Living, Human base classes
-- [ ] Item drops (`ItemEntity`)
-- [ ] Falling blocks, primed TNT, experience orbs, paintings
-- [ ] Projectiles
-- [ ] Effects (speed, poison, regeneration, ...)
-- [ ] Animations
-- [ ] Mobs (zombie, villager, squid)
+All 77 classes under `pocketmine\entity` are ported, with their full logic.
+- [x] Entity, Living, Human (movement/collision physics, fire, air supply, knockback, armor, death)
+- [x] EntityFactory + entity NBT save/load (LevelDB `actorprefix` storage)
+- [x] Item drops (`ItemEntity`) **(partial)**: item NBT serialization isn't ported, so dropped items aren't saved with the chunk
+- [x] Falling blocks, primed TNT, experience orbs, paintings, end crystals, firework rockets, area effect clouds
+- [x] Projectiles (arrow, snowball, egg, ender pearl, XP bottle, ice bomb, splash potion, trident)
+- [x] Effects (all 27 vanilla effects, EffectManager)
+- [x] Animations
+- [x] Mobs (zombie, villager, squid). PocketMine-MP has no AI, so neither does this port
 
 ### Commands, events, permissions, plugins
 - [x] Command base classes and command map (not wired to the server yet)
 - [ ] Default commands (`/stop`, `/help`, `/gamemode`, `/tp`, `/give`, `/time`, `/op`, `/ban`, ... 42 total)
 - [x] Event system base (handlers, priorities, cancellable)
-- [ ] Concrete events (block, entity, player, inventory, world, server, plugin: ~145)
+- [ ] Concrete events (block, entity, player, inventory, world, server, plugin: ~145) **(partial)**: all `event/entity` events are ported and fired
 - [x] Permissions, attachments, ban lists (not wired to players yet)
 - [x] `plugin.yml` parsing, API version checks
 - [ ] Plugin loading and `PluginManager`. **Design undecided**: PHP plugins can't run in Go. See AGENTS.md §6 Phase 4.
@@ -180,7 +183,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 
 1. **Make the world playable:** all block mappings, block placing, held items, chat.
 2. **Real server structure:** `Server`, `NetworkSession`, packet handlers, console, commands, events.
-3. **Gameplay:** inventories, crafting, item drops, entities, hunger/XP/effects, enchantments.
+3. **Gameplay:** inventory transactions, crafting, item NBT, and wiring the ported entities into item use.
 4. **Plugins.**
 5. **Everything else:** resource packs, query, auth, world upgraders, crash dumps.
 

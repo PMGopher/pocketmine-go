@@ -1,7 +1,10 @@
 package item
 
-// Pufferfish is a port of pocketmine\item\Pufferfish. GetAdditionalEffects (Hunger + Poison +
-// Nausea) isn't ported - see GoldenApple's doc comment for why.
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
+// Pufferfish is a port of pocketmine\item\Pufferfish.
 type Pufferfish struct {
 	Food
 }
@@ -21,3 +24,11 @@ func (p *Pufferfish) Clone() Item {
 func (p *Pufferfish) GetFoodRestore() int { return 1 }
 
 func (p *Pufferfish) GetSaturationRestore() float64 { return 0.2 }
+
+func (p *Pufferfish) GetAdditionalEffects() []*effect.EffectInstance {
+	return []*effect.EffectInstance{
+		effect.NewEffectInstanceWith(effect.VanillaHunger(), 300, 2),
+		effect.NewEffectInstanceWith(effect.VanillaPoison(), 1200, 3),
+		effect.NewEffectInstanceWith(effect.VanillaNausea(), 300, 1),
+	}
+}

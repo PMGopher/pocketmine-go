@@ -50,3 +50,6 @@ func (d *DragonEgg) OnAttack(item Item, face math.Facing, player Player) bool {
 	}
 	return false
 }
+
+// OnNearbyBlockChange is FallableTrait::onNearbyBlockChange.
+func (d *DragonEgg) OnNearbyBlockChange() { FallableOnNearbyBlockChange(d.self) }

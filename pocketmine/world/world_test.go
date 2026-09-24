@@ -5,43 +5,72 @@ import (
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/block/tile"
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world/generator"
 )
 
-// fakeEntity is a minimal registeredEntity for exercising World's entity registry in isolation -
-// pocketmine/entity has no concrete spawnable type yet (just the Entity/Living markers), so tests
-// here can't use a real one.
+// fakeEntity is a minimal Entity for exercising World's entity registry and explosions in
+// isolation (pocketmine/entity imports this package, so tests here can't use the real types). It
+// takes damage and motion like a real entity so explosion effects can be asserted.
 type fakeEntity struct {
-	id     int
-	closed bool
-	bb     math.AxisAlignedBB
-	pos    math.Vector3
-	alive  bool
+	id      int
+	world   *World
+	closed  bool
+	flagged bool
+	bb      math.AxisAlignedBB
+	pos     math.Vector3
+	motion  math.Vector3
+	alive   bool
+	health  float64
 }
 
-func newFakeEntity(id int, bb math.AxisAlignedBB) *fakeEntity {
-	return &fakeEntity{id: id, bb: bb, alive: true}
+func newFakeEntity(w *World, id int, bb math.AxisAlignedBB) *fakeEntity {
+	return &fakeEntity{id: id, world: w, bb: bb, alive: true, health: 20}
 }
 
-func (f *fakeEntity) ResetFallDistance()                   {}
-func (f *fakeEntity) GetPosition() math.Vector3            { return f.pos }
-func (f *fakeEntity) SetOnGround(onGround bool)            {}
-func (f *fakeEntity) GetFallDistance() float64             { return 0 }
-func (f *fakeEntity) SetFallDistance(fallDistance float64) {}
-func (f *fakeEntity) GetBoundingBox() math.AxisAlignedBB   { return f.bb }
-func (f *fakeEntity) GetMotion() math.Vector3              { return math.Vector3{} }
-func (f *fakeEntity) SetOnFire(seconds int)                {}
-func (f *fakeEntity) IsOnFire() bool                       { return false }
-func (f *fakeEntity) Extinguish()                          {}
-func (f *fakeEntity) ExtinguishWithCause(cause int)        {}
-func (f *fakeEntity) CanBeMovedByCurrents() bool           { return true }
-func (f *fakeEntity) Attack(source entity.DamageSource)    {}
-func (f *fakeEntity) GetID() int                           { return f.id }
-func (f *fakeEntity) IsClosed() bool                       { return f.closed }
-func (f *fakeEntity) IsAlive() bool                        { return f.alive }
+func (f *fakeEntity) ResetFallDistance()                    {}
+func (f *fakeEntity) GetPosition() math.Vector3             { return f.pos }
+func (f *fakeEntity) SetOnGround(onGround bool)             {}
+func (f *fakeEntity) GetFallDistance() float64              { return 0 }
+func (f *fakeEntity) SetFallDistance(fallDistance float64)  {}
+func (f *fakeEntity) GetBoundingBox() math.AxisAlignedBB    { return f.bb }
+func (f *fakeEntity) GetMotion() math.Vector3               { return f.motion }
+func (f *fakeEntity) SetMotion(motion math.Vector3) bool    { f.motion = motion; return true }
+func (f *fakeEntity) SetOnFire(seconds int)                 {}
+func (f *fakeEntity) IsOnFire() bool                        { return false }
+func (f *fakeEntity) Extinguish()                           {}
+func (f *fakeEntity) ExtinguishWithCause(cause int)         {}
+func (f *fakeEntity) CanBeMovedByCurrents() bool            { return true }
+func (f *fakeEntity) GetID() int                            { return f.id }
+func (f *fakeEntity) IsClosed() bool                        { return f.closed }
+func (f *fakeEntity) IsAlive() bool                         { return f.alive }
+func (f *fakeEntity) GetHealth() float64                    { return f.health }
+func (f *fakeEntity) GetWorld() *World                      { return f.world }
+func (f *fakeEntity) IsFlaggedForDespawn() bool             { return f.flagged }
+func (f *fakeEntity) FlagForDespawn()                       { f.flagged = true }
+func (f *fakeEntity) Close()                                { f.closed = true }
+func (f *fakeEntity) OnUpdate(currentTick int64) bool       { return false }
+func (f *fakeEntity) OnNearbyBlockChange()                  {}
+func (f *fakeEntity) OnRandomUpdate()                       {}
+func (f *fakeEntity) CanBeCollidedWith() bool               { return true }
+func (f *fakeEntity) CanCollideWith(other Entity) bool      { return true }
+func (f *fakeEntity) CanSaveWithChunk() bool                { return false }
+func (f *fakeEntity) SaveNBT() *nbt.CompoundTag             { return nbt.NewCompoundTag() }
+func (f *fakeEntity) SpawnTo(player EntityViewer)           {}
+func (f *fakeEntity) DespawnFrom(p EntityViewer, send bool) {}
+func (f *fakeEntity) GetViewers() []EntityViewer            { return nil }
+
+func (f *fakeEntity) Attack(source entityevent.DamageSource) {
+	source.Call()
+	if !source.IsCancelled() {
+		f.health -= source.GetFinalDamage()
+	}
+}
+
+var _ Entity = (*fakeEntity)(nil)
 
 func newTestWorld() *World {
 	tr := convert.NewBlockTranslator()
@@ -326,7 +355,7 @@ func TestAddGetRemoveEntity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAxisAlignedBB: %v", err)
 	}
-	e := newFakeEntity(1, bb)
+	e := newFakeEntity(w, 1, bb)
 
 	w.AddEntity(e)
 	got, ok := w.GetEntity(1)
@@ -343,7 +372,7 @@ func TestAddGetRemoveEntity(t *testing.T) {
 func TestAddEntityPanicsOnClosedEntity(t *testing.T) {
 	w := newTestWorld()
 	bb, _ := math.NewAxisAlignedBB(0, 0, 0, 1, 1, 1)
-	e := newFakeEntity(1, bb)
+	e := newFakeEntity(w, 1, bb)
 	e.closed = true
 
 	defer func() {
@@ -358,8 +387,8 @@ func TestGetNearbyEntitiesFindsOverlappingBoundingBoxesOnly(t *testing.T) {
 	w := newTestWorld()
 	nearBB, _ := math.NewAxisAlignedBB(0, 0, 0, 1, 1, 1)
 	farBB, _ := math.NewAxisAlignedBB(100, 100, 100, 101, 101, 101)
-	near := newFakeEntity(1, nearBB)
-	far := newFakeEntity(2, farBB)
+	near := newFakeEntity(w, 1, nearBB)
+	far := newFakeEntity(w, 2, farBB)
 	w.AddEntity(near)
 	w.AddEntity(far)
 

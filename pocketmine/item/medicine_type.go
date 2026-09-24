@@ -1,8 +1,10 @@
 package item
 
-// MedicineType is a port of pocketmine\item\MedicineType. GetCuredEffect isn't ported - Effect
-// (entity/effect package) isn't ported, same gap documented throughout this port wherever an
-// Effect/EffectInstance would be constructed. Only GetDisplayName (plain string data) is ported.
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
+// MedicineType is a port of pocketmine\item\MedicineType.
 type MedicineType int
 
 const (
@@ -20,3 +22,17 @@ var medicineTypeDisplayNames = map[MedicineType]string{
 }
 
 func (t MedicineType) GetDisplayName() string { return medicineTypeDisplayNames[t] }
+
+// GetCuredEffect is a port of MedicineType::getCuredEffect.
+func (t MedicineType) GetCuredEffect() effect.Effect {
+	switch t {
+	case MedicineTypeAntidote:
+		return effect.VanillaPoison()
+	case MedicineTypeElixir:
+		return effect.VanillaWeakness()
+	case MedicineTypeEyeDrops:
+		return effect.VanillaBlindness()
+	default:
+		return effect.VanillaNausea()
+	}
+}

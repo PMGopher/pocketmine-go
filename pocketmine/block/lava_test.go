@@ -2,16 +2,13 @@ package block
 
 import (
 	"testing"
-
-	"pocketmine-go/pocketmine/entity"
-	"pocketmine-go/pocketmine/math"
 )
 
 func TestLavaOnEntityInsideDamagesIgnitesAndResetsFallDistance(t *testing.T) {
 	w := &fakeWorld{}
 	l := newTestLava(w)
 
-	e := entity.NewEntity(math.NewVector3(0, 0, 0), math.OneAABB())
+	e := newTestEntity()
 	e.SetFallDistance(10)
 	startHealth := e.GetHealth()
 

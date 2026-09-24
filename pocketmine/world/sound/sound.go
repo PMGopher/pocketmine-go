@@ -478,3 +478,112 @@ func (s EntityLandSound) Encode(pos math.Vector3, translator blockNetworkTransla
 		EntityUniqueID: s.EntityUniqueID,
 	}}
 }
+
+// BurpSound is a port of pocketmine\world\sound\BurpSound.
+type BurpSound struct{}
+
+func (BurpSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBurp, pos, false, -1)
+}
+
+// ItemBreakSound is a port of pocketmine\world\sound\ItemBreakSound.
+type ItemBreakSound struct{}
+
+func (ItemBreakSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBreak, pos, false, -1)
+}
+
+// TotemUseSound is a port of pocketmine\world\sound\TotemUseSound (LevelEvent::SOUND_TOTEM).
+type TotemUseSound struct{}
+
+func (TotemUseSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundTotemUsed, 0, pos)
+}
+
+// XpLevelUpSound is a port of pocketmine\world\sound\XpLevelUpSound.
+type XpLevelUpSound struct{ XpLevel int }
+
+func (s XpLevelUpSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	//No idea why such odd numbers, but this works...
+	//TODO: check arbitrary volume
+	return nonActorSound(packet.SoundEventLevelUp, pos, false, int32(0x10000000*(min(30, s.XpLevel)/5)))
+}
+
+// XpCollectSound is a port of pocketmine\world\sound\XpCollectSound (LevelEvent::SOUND_ORB).
+type XpCollectSound struct{}
+
+func (XpCollectSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundExperienceOrbPickup, 0, pos)
+}
+
+// ArrowHitSound is a port of pocketmine\world\sound\ArrowHitSound.
+type ArrowHitSound struct{}
+
+func (ArrowHitSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBowHit, pos, false, -1)
+}
+
+// TridentHitEntitySound is a port of pocketmine\world\sound\TridentHitEntitySound.
+type TridentHitEntitySound struct{}
+
+func (TridentHitEntitySound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventTridentHit, pos, false, -1)
+}
+
+// TridentHitBlockSound is a port of pocketmine\world\sound\TridentHitBlockSound.
+type TridentHitBlockSound struct{}
+
+func (TridentHitBlockSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventTridentHitGround, pos, false, -1)
+}
+
+// PotionSplashSound is a port of pocketmine\world\sound\PotionSplashSound.
+type PotionSplashSound struct{}
+
+func (PotionSplashSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventGlass, pos, false, -1)
+}
+
+// EndermanTeleportSound is a port of pocketmine\world\sound\EndermanTeleportSound
+// (LevelEvent::SOUND_ENDERMAN_TELEPORT).
+type EndermanTeleportSound struct{}
+
+func (EndermanTeleportSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundEndermanTeleport, 0, pos)
+}
+
+// IceBombHitSound is a port of pocketmine\world\sound\IceBombHitSound.
+type IceBombHitSound struct{}
+
+func (IceBombHitSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventIceBombHit, pos, false, -1)
+}
+
+// FireworkLaunchSound is a port of pocketmine\world\sound\FireworkLaunchSound.
+type FireworkLaunchSound struct{}
+
+func (FireworkLaunchSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventLaunch, pos, false, -1)
+}
+
+// FireworkCrackleSound is a port of pocketmine\world\sound\FireworkCrackleSound.
+type FireworkCrackleSound struct{}
+
+func (FireworkCrackleSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventTwinkle, pos, false, -1)
+}
+
+// BottleEmptySound is a port of pocketmine\world\sound\BottleEmptySound.
+type BottleEmptySound struct{}
+
+func (BottleEmptySound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBottleEmpty, pos, false, -1)
+}
+
+// IgniteSound is a port of pocketmine\world\sound\IgniteSound (LevelEvent::SOUND_IGNITE, which
+// gophertunnel names LevelEventSoundFuse).
+type IgniteSound struct{}
+
+func (IgniteSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundFuse, 0, pos)
+}

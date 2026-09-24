@@ -3,7 +3,7 @@ package block
 import (
 	"fmt"
 
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -54,8 +54,11 @@ type Chunk interface {
 }
 
 type Entity interface {
+	// entityevent.Entity (GetID/GetPosition/IsClosed) is what every entity event this package
+	// constructs needs from its subject.
+	entityevent.Entity
+
 	ResetFallDistance()
-	GetPosition() math.Vector3
 	SetOnGround(onGround bool)
 	GetFallDistance() float64
 	SetFallDistance(fallDistance float64)
@@ -71,9 +74,9 @@ type Entity interface {
 	CanBeMovedByCurrents() bool
 	// Attack is needed by the several OnEntityInside/OnAttack methods across this package that
 	// deal fire/contact/lava damage (BaseFire, Cactus, Lava, Magma, SweetBerryBush, Campfire).
-	// entity.DamageSource (not entity.EntityDamageEvent directly) so an EntityDamageByBlockEvent
+	// entityevent.DamageSource (not entityevent.EntityDamageEvent directly) so an EntityDamageByBlockEvent
 	// can be passed here too - see its doc comment in the entity package.
-	Attack(source entity.DamageSource)
+	Attack(source entityevent.DamageSource)
 }
 
 // Living is a forward-compatible marker for pocketmine\entity\Living — same pattern as

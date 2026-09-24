@@ -4,7 +4,7 @@ import (
 	"math/rand"
 
 	runtime "pocketmine-go/pocketmine/data/runtime"
-	"pocketmine-go/pocketmine/entity"
+	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -113,7 +113,7 @@ func (s *SweetBerryBush) OnEntityInside(e Entity) bool {
 	if s.Age >= SweetBerryBushStageBushNoBerries {
 		if living, ok := e.(Living); ok {
 			living.ResetFallDistance()
-			ev := entity.NewEntityDamageByBlockEvent(s.self, e, entity.EntityDamageCauseContact, 1, nil)
+			ev := entityevent.NewEntityDamageByBlockEvent(s.self, e, entityevent.CauseContact, 1, nil)
 			living.Attack(ev)
 		}
 	}

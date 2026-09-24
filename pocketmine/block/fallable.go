@@ -22,13 +22,32 @@ type Fallable interface {
 }
 
 // FallableComponent is a port of pocketmine\block\utils\FallableTrait's default method bodies.
-//
-// FallableTrait::onNearbyBlockChange (replace self with air and spawn a FallingBlock entity) isn't
-// ported here: it needs both the block registry (VanillaBlocks.AIR()) and the FallingBlock entity
-// type, neither of which exist yet. Concrete Fallable block types should call World.UseBreakOn (or
-// leave OnNearbyBlockChange as Block's default) as a stand-in until entity/src and the block
-// registry are ported — see individual block files for the exact gap noted at their call site.
+// The trait's onNearbyBlockChange is FallableOnNearbyBlockChange below (it needs the concrete
+// block, which a component doesn't have).
 type FallableComponent struct{}
+
+// SpawnFallingBlockFunc creates and spawns a FallingBlock entity for blk (which has just been
+// replaced with air). pocketmine/entity/object, which imports this package, installs it from its
+// init() - the same dependency-inversion hook as NewItemBlockFunc.
+var SpawnFallingBlockFunc func(blk Behavior)
+
+// FallableOnNearbyBlockChange is a port of FallableTrait::onNearbyBlockChange: an unsupported
+// fallable block turns into a FallingBlock entity.
+func FallableOnNearbyBlockChange(blk Behavior) {
+	pos := blk.GetPosition()
+	world, err := pos.GetWorld()
+	if err != nil {
+		return
+	}
+	down := world.GetBlockAt(pos.FloorX(), pos.FloorY()-1, pos.FloorZ())
+	if down.CanBeReplaced() {
+		_ = world.SetBlock(pos, VanillaAir())
+
+		if SpawnFallingBlockFunc != nil {
+			SpawnFallingBlockFunc(blk)
+		}
+	}
+}
 
 func (FallableComponent) TickFalling() (Behavior, bool) { return nil, false }
 

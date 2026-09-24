@@ -1,7 +1,11 @@
 package item
 
-// PoisonousPotato is a port of pocketmine\item\PoisonousPotato. GetAdditionalEffects (a ~60%
-// chance of a Poison effect) isn't ported - see GoldenApple's doc comment for why.
+import (
+	"math/rand/v2"
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
+// PoisonousPotato is a port of pocketmine\item\PoisonousPotato.
 type PoisonousPotato struct {
 	Food
 }
@@ -21,3 +25,11 @@ func (p *PoisonousPotato) Clone() Item {
 func (p *PoisonousPotato) GetFoodRestore() int { return 2 }
 
 func (p *PoisonousPotato) GetSaturationRestore() float64 { return 1.2 }
+
+// GetAdditionalEffects is a port of PoisonousPotato::getAdditionalEffects (mt_rand(0, 100) > 40).
+func (p *PoisonousPotato) GetAdditionalEffects() []*effect.EffectInstance {
+	if rand.IntN(101) > 40 {
+		return []*effect.EffectInstance{effect.NewEffectInstanceWith(effect.VanillaPoison(), 100, 0)}
+	}
+	return nil
+}

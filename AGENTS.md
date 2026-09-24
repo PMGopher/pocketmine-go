@@ -66,7 +66,16 @@ pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP
   data/runtime/        Runtime state bit-packing (describer/reader/writer)
   player/              Player, GameMode, chunk streaming, SurvivalBlockBreakHandler, combat,
                        fall damage, PlayerInfo, OfflinePlayer, DatFilePlayerDataProvider
-  entity/              Entity, Living, Human, Skin, damage events
+  entity/              Entity, Living, Human, HungerManager, ExperienceManager, attributes,
+                       EntityFactory, Skin, mobs (Zombie, Villager, Squid)
+    effect/            All vanilla effects, EffectManager, EffectInstance (+ EntityEffect*Event,
+                       kept here to avoid an import cycle)
+    object/            ItemEntity, FallingBlock, PrimedTNT, ExperienceOrb, Painting, EndCrystal, ...
+    projectile/        Arrow, Snowball, Egg, EnderPearl, SplashPotion, Trident, ...
+    animation/, utils/ Entity animations (network), ExperienceUtils
+  event/entity/        Every pocketmine\event\entity event (damage, death, explode, projectile, ...)
+  event/player/        Only PlayerExhaustEvent + PlayerExperienceChangeEvent so far
+  item/enchantment/    All vanilla enchantments, protection/sharpness/knockback/fire aspect logic
   command/, event/, permission/, plugin/, scheduler/, lang/, timings/, log/, promise/
   math/, nbt/, binaryutils/, color/, utils/   (ports of pmmp's math/nbt/binaryutils/color libs)
 ```
@@ -110,13 +119,14 @@ Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §
 | Area | State |
 |---|---|
 | block (+ tiles, block inventories, utils) | ~87% of classes ported. **Only ~55 vanilla block singletons are registered and ~15 have network serializers**, so only a handful can actually appear in-game. |
-| item | ~72% of classes. ~76 vanilla item singletons. Enchantments not started. |
+| item | 133/154 classes incl. enchantments. ~85 vanilla item singletons. **Item NBT (de)serialization isn't ported** (blocks saving dropped items/tridents and Human inventories). |
 | world core | World, ticking, scheduled/random updates, light, explosions, WorldManager, ChunkListener, level.dat, LevelDB save/load: done. |
 | generators | Flat, Normal (all biomes), Nether done. Trees: only oak/spruce/birch. Generation is synchronous (no async executor). |
-| player/entity | Player, Human, Living, chunk streaming, survival block breaking, PvP, fall damage. No attributes/hunger/XP/effects, no non-player entities. |
-| framework libs | command (base only), event (base only, **no concrete events**), permission, scheduler (sync only), lang, timings, log, promise, plugin (description parsing only). |
+| entity | **All 77 `pocketmine\entity` classes ported with their logic** (physics/collision `Entity::move`, fire, air, attributes, hunger, XP, effects, armor + enchantment damage reduction, knockback, death/drops, objects, projectiles, mobs, EntityFactory + LevelDB entity save/load). Entities are ticked by `World`. Not reachable in-game yet where it depends on item use (bows, throwing, spawn eggs) or packet handlers. |
+| player | Player now embeds `entity.Human` (like PHP). Chunk streaming, survival block breaking, PvP, fall damage via `Entity` physics. Death/respawn flow, most player events, NetworkSession: missing. |
+| framework libs | command (base only), event (base + all `event/entity` events, 2 player events), permission, scheduler (sync only), lang, timings, log, promise, plugin (description parsing only). |
 | **server glue** | **Missing.** No `Server`, `ServerProperties`, `pocketmine.yml`, console, `NetworkSession`, packet handlers. `cmd/pocketmine-go/main.go` is a hand-written stand-in. |
-| not started | crafting, inventory transactions, player/armor/creative inventories, entity effects/animations/projectiles/objects, enchantments, all concrete events, default commands, plugin loading, resource packs, query, crash dumps, region (Anvil/McRegion) world formats, block-state upgrader (old world compatibility). |
+| not started | crafting, inventory transactions, cursor/creative inventories, item NBT serialization, non-entity concrete events (block, player, inventory, world, server, plugin), default commands, plugin loading, resource packs, query, crash dumps, region (Anvil/McRegion) world formats, block-state upgrader (old world compatibility). |
 
 **Important: many ported packages are not used by the running server yet.** `command`, `event`,
 `permission`, `scheduler`, `WorldManager` and `DatFilePlayerDataProvider` all exist and are tested,
@@ -127,12 +137,13 @@ big structural step (Phase 2 below).
 
 Connect (offline mode), spawn in a generated Normal world, walk around with chunks streaming in,
 break blocks (with correct survival break times, bare hand only), see other players and their
-movement, hit other players (damage + knockback), take fall damage. The world saves to LevelDB on
+movement, hit other players (damage + knockback, reduced by armor), take fall damage, regenerate
+health from food and lose hunger. Falling sand/gravel and primed TNT are real entities. The world saves to LevelDB on
 shutdown (Ctrl+C).
 
 ### What a player cannot do yet
 
-Place blocks, use or move items, select a hotbar slot (everything acts as a bare hand), chat (text
+Place blocks, use or move items, select a hotbar slot (the held item is always hotbar slot 0), chat (text
 is received but not broadcast), run commands, craft, open containers, eat, die/respawn properly,
 change game mode.
 
@@ -140,16 +151,25 @@ change game mode.
 
 - **Floating up / flying after spawn.** Reported by a tester (2026-09-24): right after spawning the
   player drifted up into the sky. Commit `697dfa7` fixed a related bug (client-requested flight was
-  never denied, so the swim-up gesture enabled flying). If this still happens on current `main`, it
-  is a separate bug. Not reproduced yet. Things to check: the spawn Y passed to `StartGame`
-  (`computeSpawn` returns surface+1 as a block position) and whether the client is placed inside a
-  block or in a chunk that hasn't arrived yet; that `UpdateAbilities` is received before movement
-  starts; that there's no leftover `MayFly`/`Flying` state. There is no server-side physics or
-  movement validation. The client's `PlayerAuthInput` position is trusted as-is.
+  never denied, so the swim-up gesture enabled flying). **Probable cause found (not yet confirmed
+  in a client):** `StartGame` was sent the *feet* position and `PlayerAuthInput`'s position (the
+  client's *eye* position) was stored as the feet position, so every player was 1.62 blocks too
+  high server-side (and to other players). `main.go` now sends `Human::getOffsetPosition` (feet +
+  1.621) in `StartGame` and subtracts 1.62 from `PlayerAuthInput`, like PHP. If the bug is still
+  seen, check `UpdateAbilities` ordering and leftover `MayFly`/`Flying` state.
+- Movement is still client-authoritative: `Player.HandleMovement` (port of
+  `Player::handleMovement`) only rejects moves > 15 blocks per tick; no anti-fly.
 - Blocks the generator can place but that have no network serializer can't be sent to the client.
   Keep `main.go`'s block list and `convert/vanilla_block_mappings.go` in sync until the full
   mappings are ported.
-- Everything held is treated as a bare hand (`bareHandItem` in `main.go`).
+- `MobEquipment` isn't handled, so the held item is always hotbar slot 0.
+- Item NBT isn't serialized, so dropped items (`ItemEntity`) and tridents don't save with the
+  chunk (`CanSaveWithChunk` returns false), and Human inventories aren't saved in entity NBT.
+- Architecture note for the entity port: `world.Entity` is the polymorphic entity interface;
+  PHP's `$this` virtual calls go through the exported `entity.Hooks`/`LivingHooks`/`HumanHooks`
+  interfaces (same idea as `block.Behavior`). Packages below `entity` get behaviour through small
+  function hooks set in `init()` (e.g. `block.SpawnFallingBlockFunc`, `world.DropItemFunc`,
+  `world.LoadEntityFunc`); grep for `Func =` to find them.
 - Worlds created by vanilla Bedrock or PocketMine-MP (PHP) will mostly fail to load: only the
   block states this port knows are recognised, and there is no block-state upgrader.
 
@@ -192,13 +212,10 @@ something a person can see working in the client.
   shulker box, ender chest) and missing tiles (FlowerPot, Cauldron, furnace variants, TileFactory).
 - Crafting (`crafting/*`: shaped/shapeless, furnace, brewing, smithing, loaded from pmmp's
   BedrockData recipe JSON).
-- Entity systems: attributes (`AttributeMap`), hunger, XP, effects (`entity/effect`), animations,
-  death/respawn, game-mode switching.
-- Entities: `ItemEntity` (drops!), `FallingBlock`, `PrimedTNT`, `ExperienceOrb`, `Painting`,
-  projectiles (arrow, snowball, egg, ender pearl, ...), and the few mobs PMMP has (Zombie,
-  Villager, Squid).
-- Enchantments (`item/enchantment`).
-- Movement: server-side physics/collision checks (PMMP's `Entity::move`), anti-fly basics.
+- ~~Entity systems, entities, enchantments~~: done (see §5). Remaining: item NBT serialization
+  (then turn `CanSaveWithChunk` back on for ItemEntity/Trident and save Human inventories),
+  death/respawn packet flow, game-mode switching, wiring item use (bow, throwables, spawn eggs,
+  buckets) to the ported entities, and the player events PHP fires from `Player`.
 - Missing trees (acacia, jungle, azalea, nether) and `TreeFactory`. Async generation (goroutine
   pool instead of `AsyncGeneratorExecutor`).
 

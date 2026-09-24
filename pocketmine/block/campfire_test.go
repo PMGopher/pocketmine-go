@@ -3,7 +3,6 @@ package block
 import (
 	"testing"
 
-	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -216,7 +215,7 @@ func TestCampfireOnEntityInsideDamagesLivingWhileLit(t *testing.T) {
 	c := newTestCampfire(w)
 	c.Lit = true
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	startHealth := living.GetHealth()
 
 	if !c.OnEntityInside(living) {
@@ -235,7 +234,7 @@ func TestSoulCampfireOnEntityInsideDamagesLivingWithItsOwnAmount(t *testing.T) {
 	s := newTestSoulCampfire(w)
 	s.Lit = true
 
-	living := entity.NewLiving(math.NewVector3(0, 0, 0), math.OneAABB())
+	living := newTestLiving()
 	startHealth := living.GetHealth()
 
 	s.OnEntityInside(living)

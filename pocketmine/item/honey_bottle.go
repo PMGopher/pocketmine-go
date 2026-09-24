@@ -1,7 +1,11 @@
 package item
 
+import (
+	"pocketmine-go/pocketmine/entity/effect"
+)
+
 // HoneyBottle is a port of pocketmine\item\HoneyBottle. GetResidue (VanillaItems.GLASS_BOTTLE())
-// and OnConsume aren't ported - see Food's and the Item interface's doc comments.
+// isn't ported - see Food's doc comment.
 type HoneyBottle struct {
 	Food
 }
@@ -25,3 +29,8 @@ func (h *HoneyBottle) RequiresHunger() bool { return false }
 func (h *HoneyBottle) GetFoodRestore() int { return 6 }
 
 func (h *HoneyBottle) GetSaturationRestore() float64 { return 1.2 }
+
+// OnConsume is a port of HoneyBottle::onConsume: cures poison.
+func (h *HoneyBottle) OnConsume(consumer effect.Living) {
+	consumer.GetEffects().Remove(effect.VanillaPoison())
+}

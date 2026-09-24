@@ -271,7 +271,7 @@ func TestFindEntityAcrossWorlds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ent := newFakeEntity(42, bb)
+	ent := newFakeEntity(b, 42, bb)
 	b.AddEntity(ent)
 
 	if _, ok := m.FindEntity(1); ok {
@@ -281,7 +281,7 @@ func TestFindEntityAcrossWorlds(t *testing.T) {
 	if !ok {
 		t.Fatal("FindEntity(42) = not found, want the entity added to world b")
 	}
-	if found != block.Entity(ent) {
+	if found != Entity(ent) {
 		t.Error("FindEntity(42) returned a different entity than the one added")
 	}
 	_ = a
