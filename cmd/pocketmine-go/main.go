@@ -304,6 +304,40 @@ func sendInventoryContent(conn *minecraft.Conn, p *player.Player) error {
 	})
 }
 
+// sendPreSpawnData is the rest of PreSpawnPacketHandler::setUp after StartGame/ItemRegistry (which
+// gophertunnel's StartGame sends) and the abilities, in PHP's order: actor identifiers, biome
+// definitions, available commands, the player's own actor metadata, the selected hotbar slot and
+// the crafting data. Inventory contents and the player list follow once the terrain is sent (see
+// handleConn). The command list and crafting data are empty until CommandMap/CraftingManager are
+// wired to the network.
+func sendPreSpawnData(conn *minecraft.Conn, p *player.Player) error {
+	for _, pk := range []packet.Packet{
+		bedrock.AvailableActorIdentifiers(),
+		bedrock.BiomeDefinitionList(),
+		&packet.AvailableCommands{},
+	} {
+		if err := conn.WritePacket(pk); err != nil {
+			return err
+		}
+	}
+
+	serverMu.Lock()
+	p.SendData([]world.EntityViewer{p}, nil) // $this->player->sendData([$this->player])
+	serverMu.Unlock()
+
+	for _, pk := range []packet.Packet{
+		// InventoryManager::syncSelectedHotbarSlot
+		&packet.PlayerHotBar{SelectedHotBarSlot: uint32(p.GetInventory().GetHeldItemIndex()), WindowID: byte(protocol.WindowIDInventory), SelectHotBarSlot: true},
+		// CraftingDataCache::getCache with no recipes registered
+		&packet.CraftingData{ClearRecipes: true},
+	} {
+		if err := conn.WritePacket(pk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // itemTable builds the StartGame/ItemRegistry item table from the real vendored Bedrock item list
 // (see itemTableCache's own doc comment on why this is computed once and reused).
 func itemTable() []protocol.ItemEntry {
@@ -440,6 +474,13 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 	// process movement input.
 	if err := conn.WritePacket(survivalAbilities(data.EntityUniqueID)); err != nil {
 		logger.Warning(fmt.Sprintf("%s: failed to send abilities: %v", name, err))
+		serverMu.Lock()
+		p.Close()
+		serverMu.Unlock()
+		return
+	}
+	if err := sendPreSpawnData(conn, p); err != nil {
+		logger.Warning(fmt.Sprintf("%s: failed to send pre-spawn data: %v", name, err))
 		serverMu.Lock()
 		p.Close()
 		serverMu.Unlock()

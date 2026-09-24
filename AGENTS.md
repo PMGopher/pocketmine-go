@@ -56,6 +56,14 @@ go run ./cmd/pocketmine-go -port 19133 -seed 1234 -world-dir world -motd "test" 
   for that (not yet confirmed with a real client at the time of writing).
 - StartGame must set `BaseGameVersion` and server-authoritative block breaking
   (`PlayerMovementSettings(0, true)` like PreSpawnPacketHandler).
+- After StartGame, `sendPreSpawnData` (main.go) sends the rest of PreSpawnPacketHandler's packets:
+  `AvailableActorIdentifiers` (pmmp BedrockData 1.26.30 `entity_identifiers.nbt`),
+  `BiomeDefinitionList` (1.26.50, captured from Dragonfly: `assets/biome_definitions.bin`, see
+  `bedrock.BiomeDefinitionList`), `AvailableCommands` (empty), the player's own `SetActorData`,
+  `PlayerHotBar` and an empty `CraftingData`. These were missing before.
+- The 1.26.50 block palette was cross-checked against pmmp's official 1.26.30 file: Dragonfly's
+  state order matches it on all 676 unchanged multi-state blocks (an altay/BedrockData 1.26.50 dump
+  disagrees on 12, so don't use that one), and the 98 data-driven block definitions match altay's.
 - Xbox Live auth is **disabled** (`AuthenticationDisabled: true` in `main.go`), so any client can join.
 - World data is written to `-world-dir` (LevelDB + `level.dat`). Delete that directory to regenerate.
 
