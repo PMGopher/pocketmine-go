@@ -414,6 +414,10 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		// Without a base game version the client falls back to old vanilla definitions, and its block
 		// palette no longer lines up with the one we send (the client disconnects with "Block").
 		BaseGameVersion: protocol.CurrentVersion,
+		// PreSpawnPacketHandler sends PlayerMovementSettings(0, true): block breaking is server
+		// authoritative, so the client reports it through PlayerAuthInput's BlockActions (which
+		// handleBlockActions processes) instead of PlayerAction packets.
+		PlayerMovementSettings: protocol.PlayerMovementSettings{ServerAuthoritativeBlockBreaking: true},
 		// naturalregeneration/locatorbar are off like in PreSpawnPacketHandler: health regeneration is
 		// server-side (HungerManager), and the client mustn't track nearby players itself.
 		GameRules: []protocol.GameRule{
