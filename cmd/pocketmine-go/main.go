@@ -411,9 +411,18 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, w *world.Wor
 		WorldSpawn:      protocol.BlockPos{spawn.X, spawn.Y, spawn.Z},
 		WorldGameMode:   0,
 		Time:            6000,
-		GameRules:       []protocol.GameRule{{Name: "showcoordinates", Value: true}},
-		Items:           itemTable(),
-		CustomBlocks:    dataDrivenBlockTable(),
+		// Without a base game version the client falls back to old vanilla definitions, and its block
+		// palette no longer lines up with the one we send (the client disconnects with "Block").
+		BaseGameVersion: protocol.CurrentVersion,
+		// naturalregeneration/locatorbar are off like in PreSpawnPacketHandler: health regeneration is
+		// server-side (HungerManager), and the client mustn't track nearby players itself.
+		GameRules: []protocol.GameRule{
+			{Name: "showcoordinates", Value: true},
+			{Name: "naturalregeneration", Value: false},
+			{Name: "locatorbar", Value: false},
+		},
+		Items:        itemTable(),
+		CustomBlocks: dataDrivenBlockTable(),
 	}
 	if err := conn.StartGame(data); err != nil {
 		logger.Warning(fmt.Sprintf("%s failed to start game: %v", name, err))
