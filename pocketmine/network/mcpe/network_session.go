@@ -62,6 +62,8 @@ type NetworkSession struct {
 
 	// blobCache is non-nil when the client enabled the client blob cache (ClientCacheStatus).
 	blobCache *ClientBlobCache
+	// playerListSkin is this client's skin as sent in PlayerList (see playerListSkin).
+	playerListSkin protocol.Skin
 
 	connected      bool
 	disconnectOnce sync.Once
@@ -171,7 +173,11 @@ func (s *NetworkSession) Run() {
 func (s *NetworkSession) onServerLoginSuccess() error {
 	identity := s.conn.IdentityData()
 
-	networkSkin, err := convert.ClientDataToSkinData(s.conn.ClientData())
+	cd := s.conn.ClientData()
+	s.playerListSkin = playerListSkin(cd)
+	s.logger.Debug(fmt.Sprintf("Client skin: persona=%v size=%dx%d geometry=%d bytes cape=%dx%d animations=%d pieces=%d",
+		cd.PersonaSkin, cd.SkinImageWidth, cd.SkinImageHeight, len(s.playerListSkin.SkinGeometry), cd.CapeImageWidth, cd.CapeImageHeight, len(cd.AnimatedImageData), len(cd.PersonaPieces)))
+	networkSkin, err := convert.ClientDataToSkinData(cd)
 	if err != nil {
 		s.Disconnect("disconnectionScreen.invalidSkin")
 		return fmt.Errorf("invalid skin: %w", err)
@@ -391,16 +397,22 @@ func (s *NetworkSession) onClientDisconnect() {
 	})
 }
 
-// playerListEntry is the PlayerListEntry for p (PlayerListPacket::add with
-// TypeConverter::getSkinAdapter()->toSkinData($player->getSkin())).
+// playerListEntry is the PlayerListEntry for p (PlayerListPacket::add). The skin is the one p's
+// client sent at login (see playerListSkin); players without a session (none today) fall back to
+// TypeConverter::getSkinAdapter()->toSkinData($player->getSkin()).
 func playerListEntry(p *player.Player) protocol.PlayerListEntry {
+	skin := entity.SkinToNetwork(p.GetSkin())
+	if session, ok := p.GetNetworkSession().(*NetworkSession); ok {
+		skin = session.playerListSkin
+	}
 	return protocol.PlayerListEntry{
 		ActionType:     protocol.PlayerListActionAdd,
 		UUID:           p.GetUniqueID(),
 		EntityUniqueID: int64(p.GetID()),
 		Username:       p.GetName(),
 		XUID:           p.GetXuid(),
-		Skin:           entity.SkinToNetwork(p.GetSkin()),
+		BuildPlatform:  -1, // DeviceOS::UNKNOWN, PlayerListEntry::createAdditionEntry's default
+		Skin:           skin,
 	}
 }
 

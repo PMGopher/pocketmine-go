@@ -59,6 +59,11 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
   sub-chunks are sent as xxHash64 hashes and `ClientCacheBlobStatus` is answered with
   `ClientCacheMissResponse`. A 1.26.51 Windows client that played fine on Dragonfly disconnected
   with "Block" right after loading when our request-mode chunks came without the cache.
+- The skin sent in `PlayerList` is built like Dragonfly's (`network/mcpe/client_skin.go`): the
+  client's own login skin with persona flag, PlayFab ID and a compact geometry-only resource patch,
+  no persona pieces/tints, `BuildPlatform` -1. PHP sends `LegacySkinAdapter::toSkinData`
+  instead; the 1.26.51 client still left with "Block" right after loading while we did. On join the
+  server logs `Client skin: persona=...` (debug), which also shows which skin the client used.
 - StartGame must set `BaseGameVersion` and server-authoritative block breaking
   (`PlayerMovementSettings(0, true)` like PreSpawnPacketHandler).
 - After StartGame, `PreSpawnPacketHandler.SetUp` sends the rest of PreSpawnPacketHandler's packets:
