@@ -76,7 +76,13 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
   regenerate.
 - gophertunnel's own errors go to the server log (`ErrorLog`, see `server/slog_handler.go`), and a
   client's `PacketViolationWarning` is logged as a warning: check those first when a client
-  disconnects.
+  disconnects. When the client closes the connection by itself (it sends no reason), the session
+  logs its last ~80 sent/received packets (`network/mcpe/packet_trace.go`).
+- Go embedding has no virtual dispatch: a base `Entity`/`Living`/`Human` method that PHP calls as
+  `$this->x()` must call `e.self.x()` / `l.lself.x()` / `h.hself.x()` when a subclass (usually
+  `Player`) overrides `x`. This was missed for `sendData` (a player never got its own metadata
+  updates), `setMotion` (no knockback on the hit player's own client), `broadcastSound`,
+  `broadcastAnimation` and `canEat`. Check this for every new override.
 
 ## 3. Repository layout
 

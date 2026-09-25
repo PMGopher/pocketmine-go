@@ -48,6 +48,7 @@ const (
 type HumanHooks interface {
 	LivingHooks
 	InitHumanData(tag *nbt.CompoundTag)
+	CanEat() bool
 }
 
 // Human is a port of pocketmine\entity\Human (also PHP's ProjectileSource and InventoryHolder).
@@ -171,7 +172,7 @@ func (h *Human) CanEat() bool {
 
 // ConsumeObject is a port of Human::consumeObject.
 func (h *Human) ConsumeObject(consumable Consumable) bool {
-	if food, ok := consumable.(FoodSource); ok && food.RequiresHunger() && !h.CanEat() {
+	if food, ok := consumable.(FoodSource); ok && food.RequiresHunger() && !h.hself.CanEat() {
 		return false
 	}
 
@@ -327,8 +328,8 @@ func (h *Human) ApplyPostDamageEffects(source entityevent.DamageSource) {
 		h.effectManager.Add(effect.NewEffectInstanceWith(effect.VanillaFireResistance(), 40*20, 1))
 		h.effectManager.Add(effect.NewEffectInstanceWith(effect.VanillaAbsorption(), 5*20, 1))
 
-		h.BroadcastAnimation(animation.TotemUseAnimation{Human: h}, nil)
-		h.BroadcastSound(sound.TotemUseSound{})
+		h.hself.BroadcastAnimation(animation.TotemUseAnimation{Human: h}, nil)
+		h.hself.BroadcastSound(sound.TotemUseSound{})
 
 		hand := h.inventory.GetItemInHand()
 		if isTotem(hand) {

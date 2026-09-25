@@ -228,3 +228,40 @@ func TestSetUsingItemUsesTheServerTick(t *testing.T) {
 		t.Error("SetUsingItem(false) didn't stop item use")
 	}
 }
+
+func TestChangedMetadataReachesThePlayerItself(t *testing.T) {
+	// Entity::entityBaseTick calls $this->sendData(null, ...), which Player overrides to include
+	// itself; the base Entity method must dispatch to that override.
+	server := &fakeServer{}
+	p, session := newConnectedPlayer(t, server)
+	p.DoFirstSpawn()
+	p.OnUpdate(p.LastUpdate + 1)
+	session.packets = nil
+
+	p.SetSneaking(true)
+	p.OnUpdate(p.LastUpdate + 1)
+
+	for _, pk := range session.packets {
+		if data, ok := pk.(*packet.SetActorData); ok && data.EntityRuntimeID == uint64(p.GetID()) {
+			return
+		}
+	}
+	t.Error("the player didn't receive its own SetActorData after its metadata changed")
+}
+
+func TestKnockBackIsSentToThePlayerItself(t *testing.T) {
+	// Living::knockBack calls $this->setMotion(), which Player overrides to send SetActorMotion to
+	// its own client.
+	server := &fakeServer{}
+	p, session := newConnectedPlayer(t, server)
+	session.packets = nil
+
+	p.KnockBack(1, 0, 0.4, 0.4)
+
+	for _, pk := range session.packets {
+		if m, ok := pk.(*packet.SetActorMotion); ok && m.EntityRuntimeID == uint64(p.GetID()) {
+			return
+		}
+	}
+	t.Error("the knocked-back player didn't receive SetActorMotion")
+}

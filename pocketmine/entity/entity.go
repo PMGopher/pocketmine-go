@@ -74,6 +74,12 @@ type Hooks interface {
 	InitEntity(tag *nbt.CompoundTag)
 	AddAttributes()
 	RecalculateBoundingBox()
+	// SendData, SetMotion, BroadcastSound and BroadcastAnimation are overridden by Player, which
+	// also sends them to its own client; PHP calls them through $this.
+	SendData(targets []world.EntityViewer, data protocol.EntityMetadata)
+	SetMotion(motion math.Vector3) bool
+	BroadcastSound(s sound.Sound)
+	BroadcastAnimation(anim animation.Animation, targets []world.EntityViewer)
 
 	OnDeath()
 	OnDeathUpdate(tickDiff int) bool
@@ -647,7 +653,7 @@ func (e *Entity) EntityBaseTick(tickDiff int) bool {
 
 	changedProperties := e.GetDirtyNetworkData()
 	if len(changedProperties) > 0 {
-		e.SendData(nil, changedProperties)
+		e.self.SendData(nil, changedProperties) // $this->sendData(null, $changedProperties)
 		e.networkProperties.ClearDirtyProperties()
 	}
 
@@ -1506,7 +1512,7 @@ func (e *Entity) TeleportTo(pos math.Vector3, w *world.World, yaw, pitch *float6
 		newPitch = *pitch
 	}
 
-	e.SetMotion(math.NewVector3(0, 0, 0))
+	e.self.SetMotion(math.NewVector3(0, 0, 0))
 	if e.SetPositionAndRotation(target.Vector3, targetWorld, newYaw, newPitch) {
 		e.ResetFallDistance()
 		e.SetForceMovementUpdate(true)

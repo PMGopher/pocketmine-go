@@ -63,6 +63,9 @@ type NetworkSession struct {
 
 	connected      bool
 	disconnectOnce sync.Once
+
+	// trace is the recent packet history printed when the client disconnects by itself.
+	trace packetTrace
 }
 
 // NewNetworkSession creates the session for a connection gophertunnel has just accepted (login,
@@ -199,6 +202,10 @@ func (s *NetworkSession) onServerLoginSuccess() error {
 	}
 	s.server.Unlock()
 
+	// beginSpawnSequence
+	s.server.Lock()
+	s.player.SetNoClientPredictions(true) //TODO: HACK: fix client-side falling pre-spawn
+	s.server.Unlock()
 	if err := s.SetHandler(NewPreSpawnPacketHandler(s)); err != nil {
 		return fmt.Errorf("pre-spawn: %w", err)
 	}
@@ -218,6 +225,7 @@ func (s *NetworkSession) onServerLoginSuccess() error {
 func (s *NetworkSession) onClientSpawnResponse() error {
 	s.logger.Debug("Received spawn response, entering in-game phase")
 	p := s.player
+	p.SetNoClientPredictions(false) //TODO: HACK: we set this during the spawn sequence to prevent the client sending junk movements
 	p.SetViewDistance(s.server.GetAllowedViewDistance(s.conn.ChunkRadius()))
 	if err := s.SyncViewAreaCenterPoint(); err != nil {
 		return err
@@ -257,7 +265,7 @@ func (s *NetworkSession) doChunkRequests() error {
 		if !ok {
 			continue
 		}
-		if err := s.conn.WritePacket(LevelChunkPacket(c[0], c[1], chunk, s.blobCache)); err != nil {
+		if err := s.writePacket(LevelChunkPacket(c[0], c[1], chunk, s.blobCache)); err != nil {
 			return err
 		}
 		p.MarkChunkSent(c[0], c[1])
@@ -268,7 +276,7 @@ func (s *NetworkSession) doChunkRequests() error {
 // SyncViewAreaCenterPoint is a port of NetworkSession::syncViewAreaCenterPoint.
 func (s *NetworkSession) SyncViewAreaCenterPoint() error {
 	pos := s.player.GetPosition()
-	return s.conn.WritePacket(&packet.NetworkChunkPublisherUpdate{
+	return s.writePacket(&packet.NetworkChunkPublisherUpdate{
 		Position: protocol.BlockPos{int32(pos.FloorX()), int32(pos.FloorY()), int32(pos.FloorZ())},
 		Radius:   uint32(s.player.GetViewDistance() * 16), //blocks, not chunks >.>
 	})
@@ -277,6 +285,7 @@ func (s *NetworkSession) SyncViewAreaCenterPoint() error {
 // handleDataPacket is a port of NetworkSession::handleDataPacket: the packet goes to the current
 // handler; anything it doesn't handle is logged at debug level (PHP's unhandledPacketDebug).
 func (s *NetworkSession) handleDataPacket(pk packet.Packet) {
+	s.trace.record("<-", pk)
 	if violation, ok := pk.(*packet.PacketViolationWarning); ok {
 		// PHP 5.44 only reaches this through the unhandled-packet debug log; it's logged as a
 		// warning here because it's the client telling us which packet of ours it rejected.
@@ -289,11 +298,18 @@ func (s *NetworkSession) handleDataPacket(pk packet.Packet) {
 	}
 }
 
+// writePacket sends pk and records it in the packet trace, returning the write error.
+func (s *NetworkSession) writePacket(pk packet.Packet) error {
+	s.trace.record("->", pk)
+	return s.conn.WritePacket(pk)
+}
+
 // SendDataPacket is a port of NetworkSession::sendDataPacket.
 func (s *NetworkSession) SendDataPacket(pk packet.Packet) {
 	if !s.connected {
 		return
 	}
+	s.trace.record("->", pk)
 	if err := s.conn.WritePacket(pk); err != nil {
 		s.logger.Debug(fmt.Sprintf("Failed to send %T: %v", pk, err))
 	}
@@ -335,6 +351,7 @@ func (s *NetworkSession) onClientDisconnect() {
 	s.server.Lock()
 	defer s.server.Unlock()
 	s.disconnectOnce.Do(func() {
+		s.logger.Info("The client closed the connection. Last packets (-> sent, <- received):" + s.trace.String())
 		s.connected = false
 		_ = s.conn.Close()
 		if s.player != nil {
@@ -461,27 +478,45 @@ func (s *NetworkSession) SyncAllInventories() {
 	p := s.player
 	windows := []struct {
 		windowID  uint32
-		container byte
 		inventory interface {
 			GetSize() int
 			GetItem(int) item.Item
 		}
 	}{
-		{protocol.WindowIDInventory, protocol.ContainerCombinedHotBarAndInventory, p.GetInventory()},
-		{protocol.WindowIDArmour, protocol.ContainerArmor, p.GetArmorInventory()},
-		{protocol.WindowIDOffHand, protocol.ContainerOffhand, p.GetOffHandInventory()},
+		{protocol.WindowIDInventory, p.GetInventory()},
+		{protocol.WindowIDOffHand, p.GetOffHandInventory()},
+		{protocol.WindowIDArmour, p.GetArmorInventory()},
 	}
 	for _, w := range windows {
 		content := make([]protocol.ItemInstance, w.inventory.GetSize())
 		for i := range content {
 			content[i] = convert.ItemStackWrapperLegacy(w.inventory.GetItem(i))
 		}
-		s.SendDataPacket(&packet.InventoryContent{
-			WindowID:  w.windowID,
-			Content:   content,
-			Container: protocol.FullContainerName{ContainerID: w.container},
-		})
+		s.sendInventoryContentPackets(w.windowID, content)
 	}
+}
+
+// sendInventoryContentPackets is a port of InventoryManager::sendInventoryContentPackets.
+func (s *NetworkSession) sendInventoryContentPackets(windowID uint32, contents []protocol.ItemInstance) {
+	/*
+	 * TODO: HACK!
+	 * As of 1.20.12, the client ignores change of itemstackID in some cases when the old item == the new item.
+	 * Notably, this happens with armor, offhand and enchanting tables, but not with main inventory.
+	 * While we could track the items previously sent to the client, that's a waste of memory and would
+	 * cost performance. Instead, clear the slot(s) first, then send the new item(s).
+	 * The network cost of doing this is fortunately minimal, as an air itemstack is only 1 byte.
+	 */
+	s.SendDataPacket(&packet.InventoryContent{
+		WindowID:  windowID,
+		Content:   make([]protocol.ItemInstance, len(contents)),
+		Container: protocol.FullContainerName{ContainerID: 0},
+	})
+	//now send the real contents
+	s.SendDataPacket(&packet.InventoryContent{
+		WindowID:  windowID,
+		Content:   contents,
+		Container: protocol.FullContainerName{ContainerID: 0},
+	})
 }
 
 // SyncSelectedHotbarSlot is a port of InventoryManager::syncSelectedHotbarSlot.

@@ -226,7 +226,7 @@ func (l *Living) SetHealth(amount float64) {
 	l.Entity.SetHealth(amount)
 	l.healthAttr.SetValue(stdmath.Ceil(l.GetHealth()), true, false)
 	if l.IsAlive() && !wasAlive {
-		l.BroadcastAnimation(animation.RespawnAnimation{Entity: l}, nil)
+		l.lself.BroadcastAnimation(animation.RespawnAnimation{Entity: l}, nil)
 	}
 }
 
@@ -356,7 +356,7 @@ func (l *Living) ApplyConsumptionResults(consumable Consumable) {
 		l.effectManager.Add(e)
 	}
 	if _, ok := consumable.(FoodSource); ok {
-		l.BroadcastSound(sound.BurpSound{})
+		l.lself.BroadcastSound(sound.BurpSound{})
 	}
 
 	consumable.OnConsume(l.lself)
@@ -413,12 +413,12 @@ func (l *Living) OnHitGround() *float64 {
 		l.lself.Attack(ev)
 
 		if damage > 4 {
-			l.BroadcastSound(sound.EntityLongFallSound{EntityNetworkTypeID: l.self.GetNetworkTypeID(), EntityUniqueID: int64(l.GetID())})
+			l.lself.BroadcastSound(sound.EntityLongFallSound{EntityNetworkTypeID: l.self.GetNetworkTypeID(), EntityUniqueID: int64(l.GetID())})
 		} else {
-			l.BroadcastSound(sound.EntityShortFallSound{EntityNetworkTypeID: l.self.GetNetworkTypeID()})
+			l.lself.BroadcastSound(sound.EntityShortFallSound{EntityNetworkTypeID: l.self.GetNetworkTypeID()})
 		}
 	} else if fallBlock.GetTypeId() != block.AIR {
-		l.BroadcastSound(sound.EntityLandSound{BlockStateID: fallBlock.GetStateId(), EntityNetworkTypeID: l.self.GetNetworkTypeID(), EntityUniqueID: int64(l.GetID())})
+		l.lself.BroadcastSound(sound.EntityLandSound{BlockStateID: fallBlock.GetStateId(), EntityNetworkTypeID: l.self.GetNetworkTypeID(), EntityUniqueID: int64(l.GetID())})
 	}
 	return newVerticalVelocity
 }
@@ -611,7 +611,7 @@ func (l *Living) DamageArmor(damage float64) {
 func (l *Living) damageItem(it durableItem, durabilityRemoved int) {
 	it.ApplyDamage(durabilityRemoved)
 	if it.IsBroken() {
-		l.BroadcastSound(sound.ItemBreakSound{})
+		l.lself.BroadcastSound(sound.ItemBreakSound{})
 	}
 }
 
@@ -680,7 +680,7 @@ func (l *Living) Attack(source entityevent.DamageSource) {
 
 // DoHitAnimation is a port of Living::doHitAnimation.
 func (l *Living) DoHitAnimation() {
-	l.BroadcastAnimation(animation.HurtAnimation{Entity: l}, nil)
+	l.lself.BroadcastAnimation(animation.HurtAnimation{Entity: l}, nil)
 }
 
 // KnockBack is a port of Living::knockBack. PHP's nullable $verticalLimit (null meaning "use
@@ -704,7 +704,7 @@ func (l *Living) KnockBack(x, z, force, verticalLimit float64) {
 			motionY = verticalLimit
 		}
 
-		l.SetMotion(math.NewVector3(motionX, motionY, motionZ))
+		l.lself.SetMotion(math.NewVector3(motionX, motionY, motionZ))
 	}
 }
 
@@ -743,7 +743,7 @@ func (l *Living) OnDeathUpdate(tickDiff int) bool {
 }
 
 func (l *Living) StartDeathAnimation() {
-	l.BroadcastAnimation(animation.DeathAnimation{Entity: l}, nil)
+	l.lself.BroadcastAnimation(animation.DeathAnimation{Entity: l}, nil)
 }
 
 func (l *Living) EndDeathAnimation() { l.DespawnFromAll() }
