@@ -202,9 +202,37 @@ func (s *Server) startupPrepareWorlds() error {
 		if w, err = s.worldManager.GenerateWorld(name, gen, options); err != nil {
 			return fmt.Errorf("could not generate world %q: %w", name, err)
 		}
+		s.generateSpawnTerrain(w)
 	}
 	s.worldManager.SetDefaultWorld(w)
 	return nil
+}
+
+// spawnTerrainRadius is the chunk radius WorldManager::generateWorld pre-generates around spawn.
+const spawnTerrainRadius = 8
+
+// generateSpawnTerrain is the $backgroundGeneration branch of WorldManager::generateWorld: the
+// chunks around the new world's spawn are generated (and populated) right away, so the first
+// player doesn't wait for them. It lives here rather than in WorldManager because
+// player.SelectChunks (ChunkSelector) can't be imported from the world package (import cycle), and
+// generation is synchronous in this port, so it runs during startup instead of in the background.
+func (s *Server) generateSpawnTerrain(w *world.World) {
+	s.logger.Notice(fmt.Sprintf("Spawn terrain for world %q is being pregenerated in the background", w.GetFolderName()))
+
+	spawn := w.GetSpawnLocation()
+	var selected [][2]int
+	for chunk := range player.SelectChunks(spawnTerrainRadius, spawn.FloorX()>>4, spawn.FloorZ()>>4) {
+		selected = append(selected, chunk)
+	}
+	total := len(selected)
+	for i, chunk := range selected {
+		w.GetOrLoadChunk(chunk[0], chunk[1])
+		done := i + 1
+		oldProgress, newProgress := (done-1)*100/total, done*100/total
+		if oldProgress/10 != newProgress/10 || done == total || done == 1 {
+			s.logger.Info(fmt.Sprintf("[World: %s] Spawn terrain generation progress: %d / %d (%d%%)", w.GetFolderName(), done, total, newProgress))
+		}
+	}
 }
 
 // Start opens the network interface (Server::startupPrepareConnectableNetworkInterfaces with

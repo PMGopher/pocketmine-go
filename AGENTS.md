@@ -78,6 +78,14 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
   client's `PacketViolationWarning` is logged as a warning: check those first when a client
   disconnects. When the client closes the connection by itself (it sends no reason), the session
   logs its last ~80 sent/received packets (`network/mcpe/packet_trace.go`).
+- gophertunnel's `Conn.StartGame` sends `PlayStatus(PLAYER_SPAWN)` as soon as the client asks for
+  its chunk radius, while PocketMine-MP only sends it after `spawnThreshold` chunks are sent. To
+  make up for it, a new world's spawn area is pre-generated at startup (radius 8, like
+  `WorldManager::generateWorld`'s background generation; see `Server.generateSpawnTerrain`) and
+  the spawn-threshold chunks are sent immediately on the spawn response
+  (`NetworkSession.sendSpawnTerrain`). Before this, the first chunk arrived ~1 s after the client
+  had already entered an empty world, and it disconnected ("Block") without ever requesting a
+  sub-chunk (seen in the packet trace).
 - Go embedding has no virtual dispatch: a base `Entity`/`Living`/`Human` method that PHP calls as
   `$this->x()` must call `e.self.x()` / `l.lself.x()` / `h.hself.x()` when a subclass (usually
   `Player`) overrides `x`. This was missed for `sendData` (a player never got its own metadata

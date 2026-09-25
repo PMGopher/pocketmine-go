@@ -7,6 +7,7 @@ package mcpe
 
 import (
 	"fmt"
+	stdmath "math"
 	"net"
 	"strconv"
 	"sync"
@@ -234,7 +235,33 @@ func (s *NetworkSession) onClientSpawnResponse() error {
 		return err
 	}
 	p.DoFirstSpawn()
-	return nil
+	return s.sendSpawnTerrain()
+}
+
+// spawnChunkRadius is pocketmine.yml's chunk-sending.spawn-radius default.
+const spawnChunkRadius = 4
+
+// sendSpawnTerrain sends the chunks around the player right away instead of chunksPerTick per
+// tick. PocketMine-MP sends them before PlayStatus(PLAYER_SPAWN) (Player::$spawnThreshold, then
+// notifyTerrainReady), so the client spawns into loaded terrain; gophertunnel's StartGame sends
+// PLAYER_SPAWN as soon as the client asks for its chunk radius, so they're sent as early as
+// possible instead: as soon as the client has spawned.
+func (s *NetworkSession) sendSpawnTerrain() error {
+	radius := min(s.player.GetViewDistance(), spawnChunkRadius)
+	spawnThreshold := int(float64(radius*radius) * stdmath.Pi)
+	sent := 0
+	for sent < spawnThreshold {
+		s.player.OrderChunks()
+		ready := s.player.RequestChunks()
+		if len(ready) == 0 {
+			break
+		}
+		if err := s.sendChunks(ready); err != nil {
+			return err
+		}
+		sent += len(ready)
+	}
+	return s.SyncViewAreaCenterPoint()
 }
 
 // Tick is the per-tick work for this session (NetworkSession::tick plus Player::doChunkRequests):
@@ -259,6 +286,15 @@ func (s *NetworkSession) doChunkRequests() error {
 	if len(ready) == 0 {
 		return nil
 	}
+	if err := s.sendChunks(ready); err != nil {
+		return err
+	}
+	return s.SyncViewAreaCenterPoint()
+}
+
+// sendChunks sends the given ready chunks (NetworkSession::startUsingChunk) and marks them sent.
+func (s *NetworkSession) sendChunks(ready [][2]int) error {
+	p := s.player
 	w := p.GetWorld()
 	for _, c := range ready {
 		chunk, ok := w.GetChunk(c[0], c[1])
@@ -270,7 +306,7 @@ func (s *NetworkSession) doChunkRequests() error {
 		}
 		p.MarkChunkSent(c[0], c[1])
 	}
-	return s.SyncViewAreaCenterPoint()
+	return nil
 }
 
 // SyncViewAreaCenterPoint is a port of NetworkSession::syncViewAreaCenterPoint.

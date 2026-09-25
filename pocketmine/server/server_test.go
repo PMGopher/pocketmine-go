@@ -119,3 +119,17 @@ func TestShutdownUnloadsWorldsAndSavesConfig(t *testing.T) {
 		t.Error("worlds are still loaded after Shutdown")
 	}
 }
+
+func TestNewWorldPregeneratesSpawnTerrain(t *testing.T) {
+	// WorldManager::generateWorld's background generation: radius 8 around spawn.
+	s := newTestServer(t)
+	w := s.GetWorldManager().GetDefaultWorld()
+	spawn := w.GetSpawnLocation()
+	cx, cz := spawn.FloorX()>>4, spawn.FloorZ()>>4
+	// ChunkSelector reaches +7 on the positive side and -8 on the negative side.
+	for _, c := range [][2]int{{cx, cz}, {cx + 7, cz}, {cx - 8, cz}, {cx, cz - 8}} {
+		if chunk, ok := w.GetChunk(c[0], c[1]); !ok || !chunk.IsPopulated() {
+			t.Errorf("spawn chunk %v isn't generated and populated", c)
+		}
+	}
+}
