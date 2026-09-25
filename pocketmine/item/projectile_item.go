@@ -1,11 +1,8 @@
 package item
 
 // ProjectileItem is a port of the abstract pocketmine\item\ProjectileItem: items thrown as
-// projectile entities (snowballs, eggs, ender pearls, ...).
-//
-// Not ported: onClickAir (throwing the item, which calls createEntity) - it needs the Player
-// item-use flow, which isn't ported (see the Item interface's doc comment on Player/Entity
-// interaction methods). GetThrowForce is ported so that flow can use it once it exists.
+// projectile entities (snowballs, eggs, ender pearls, ...). Throwing (onClickAir) is in
+// item_use.go; the entity is created by the entity/projectile package (ThrowProjectileFunc).
 type ProjectileItem interface {
 	Item
 	GetThrowForce() float64

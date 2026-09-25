@@ -64,3 +64,9 @@ func (e *EntityEffectRemoveEvent) Cancel() {
 	}
 	e.EntityEffectEvent.Cancel()
 }
+
+// EntityEffectEvent isn't abstract in PHP, so its handlers receive both subclasses.
+func init() {
+	event.DeclareParent[EntityEffectAddEvent, EntityEffectEvent]()
+	event.DeclareParent[EntityEffectRemoveEvent, EntityEffectEvent]()
+}

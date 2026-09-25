@@ -2,6 +2,7 @@ package block
 
 import (
 	"math/rand"
+	blockevent "pocketmine-go/pocketmine/event/block"
 
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/event"
@@ -221,7 +222,7 @@ func (c *ChorusFlower) OnRandomTick() {
 
 	if tx != nil {
 		tx.AddBlock(c.position, VanillaChorusPlant())
-		ev := &StructureGrowEvent{Block: c.self, Transaction: tx, Player: nil}
+		ev := blockevent.NewStructureGrowEvent(c.self, tx, nil)
 		event.Call(ev)
 		if !ev.IsCancelled() && tx.Apply() {
 			world.AddSound(c.position.AsVector3().Add(0.5, 0.5, 0.5), sound.ChorusFlowerGrowSound{})

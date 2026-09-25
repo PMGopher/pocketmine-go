@@ -2,30 +2,34 @@ package event
 
 import "sync"
 
-// handlerList is a port of the essential parts of pocketmine\event\HandlerList.
-//
-// PHP's version also maintains a parentList link so that registering for a supertype (e.g.
-// EntityDamageEvent) also receives every subclass (EntityDamageByEntityEvent, etc.), walked via
-// runtime reflection over the class hierarchy (getParentClass()). Go has no class inheritance and
-// no equivalent reflection over "parent type", and no concrete event types exist yet in this port
-// to design that mechanism against — so this is intentionally per-concrete-Go-type only for now.
-// When real event families with a shared supertype get ported, this will need an explicit
-// "declares its supertypes" hook (events opting in, since Go can't discover it automatically).
+// handlerList is a port of the essential parts of pocketmine\event\HandlerList: the listeners
+// registered for exactly one event type. The parentList half (handlers of a parent event class
+// also receiving subclasses) is resolved by Manager.handlersFor from the DeclareParent hierarchy
+// (see parents.go).
 type handlerList struct {
-	mu     sync.Mutex
-	slots  map[Priority][]*registeredListener
-	cached []*registeredListener
+	mu    sync.Mutex
+	slots map[Priority][]*registeredListener
+	// changed is called whenever the list's contents change, so the Manager can drop cached
+	// merged lists that include it (HandlerList::invalidateAffectedCaches).
+	changed func()
 }
 
-func newHandlerList() *handlerList {
-	return &handlerList{slots: map[Priority][]*registeredListener{}}
+func newHandlerList(changed func()) *handlerList {
+	return &handlerList{slots: map[Priority][]*registeredListener{}, changed: changed}
+}
+
+// slotsByPriority returns a copy of the listeners registered at priority.
+func (h *handlerList) slotsByPriority(p Priority) []*registeredListener {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]*registeredListener(nil), h.slots[p]...)
 }
 
 func (h *handlerList) register(l *registeredListener) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.slots[l.priority] = append(h.slots[l.priority], l)
-	h.cached = nil
+	h.changed()
 }
 
 func (h *handlerList) unregisterByID(id int) {
@@ -35,7 +39,7 @@ func (h *handlerList) unregisterByID(id int) {
 		for i, l := range list {
 			if l.id == id {
 				h.slots[p] = append(list[:i:i], list[i+1:]...)
-				h.cached = nil
+				h.changed()
 				return
 			}
 		}
@@ -59,7 +63,7 @@ func (h *handlerList) unregisterMatching(pred func(*registeredListener) bool) {
 		h.slots[p] = kept
 	}
 	if changed {
-		h.cached = nil
+		h.changed()
 	}
 }
 
@@ -67,20 +71,5 @@ func (h *handlerList) clear() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.slots = map[Priority][]*registeredListener{}
-	h.cached = nil
-}
-
-// listeners returns the merged, priority-ordered listener list (Lowest called first, Monitor last).
-func (h *handlerList) listeners() []*registeredListener {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.cached != nil {
-		return h.cached
-	}
-	result := make([]*registeredListener, 0)
-	for _, p := range AllPriorities {
-		result = append(result, h.slots[p]...)
-	}
-	h.cached = result
-	return result
+	h.changed()
 }

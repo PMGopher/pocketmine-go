@@ -80,3 +80,21 @@ func (t *BlockTransactionImpl) Apply() bool {
 	}
 	return changed != 0
 }
+
+// BlockTransactionEntry is one [x, y, z, block] entry of BlockTransaction::getBlocks.
+type BlockTransactionEntry struct {
+	X, Y, Z int
+	Block   Behavior
+}
+
+// GetBlocks is a port of BlockTransaction::getBlocks, in insertion order.
+func (t *BlockTransactionImpl) GetBlocks() []BlockTransactionEntry {
+	entries := make([]BlockTransactionEntry, 0, len(t.order))
+	for _, key := range t.order {
+		entries = append(entries, BlockTransactionEntry{X: key[0], Y: key[1], Z: key[2], Block: t.blocks[key]})
+	}
+	return entries
+}
+
+// GetWorld returns the world the transaction applies to.
+func (t *BlockTransactionImpl) GetWorld() World { return t.world }

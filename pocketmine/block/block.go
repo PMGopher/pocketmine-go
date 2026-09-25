@@ -2,6 +2,7 @@ package block
 
 import (
 	"fmt"
+	"pocketmine-go/pocketmine/item/enchantment"
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
@@ -271,11 +272,19 @@ func (b *Block) GetBreakInfo() *BlockBreakInfo { return b.typeInfo.GetBreakInfo(
 
 func (b *Block) GetEnchantmentTags() []string { return b.typeInfo.GetEnchantmentTags() }
 
-// OnBreak is a simplified port of Block::onBreak(): the real version destroys any tile at this
-// position and replaces the block with air. Tile is currently just a marker interface (see
-// world.go) and there's no ported "air block" registry yet to replace this position's block
-// with, so both of those steps are deferred — this is a placeholder that always succeeds.
+// OnBreak is a port of Block::onBreak: the block's tile is told it's destroyed and the block is
+// replaced with air.
 func (b *Block) OnBreak(item Item, player Player, returnedItems *[]Item) bool {
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return true
+	}
+	if t, ok := world.GetTile(b.position); ok {
+		if destroyed, ok := t.(interface{ OnBlockDestroyed() }); ok {
+			destroyed.OnBlockDestroyed()
+		}
+	}
+	_ = world.SetBlock(b.position, VanillaAir())
 	return true
 }
 
@@ -318,11 +327,34 @@ func (b *Block) CanClimb() bool        { return false }
 // `$item->hasEnchantment(VanillaEnchantments::SILK_TOUCH())` before taking the silk-touch branch;
 // Item doesn't expose enchantment queries yet (the enchantment package isn't ported), so the
 // silk-touch branch is never taken here until that's wired up.
+// enchantedItem is the part of item.Item the silk touch checks need.
+type enchantedItem interface {
+	HasEnchantment(e enchantment.Enchantment, level int) bool
+}
+
+func hasSilkTouch(it Item) bool {
+	e, ok := it.(enchantedItem)
+	return ok && e.HasEnchantment(enchantment.VanillaSilkTouch(), -1)
+}
+
+// GetDrops is a port of Block::getDrops.
 func (b *Block) GetDrops(item Item) []Item {
 	if b.self.GetBreakInfo().IsToolCompatible(item) {
+		if b.self.IsAffectedBySilkTouch() && hasSilkTouch(item) {
+			return b.self.GetSilkTouchDrops(item)
+		}
 		return b.self.GetDropsForCompatibleTool(item)
 	}
 	return b.self.GetDropsForIncompatibleTool(item)
+}
+
+// GetXpDropForTool is a port of Block::getXpDropForTool: the XP dropped when blk is broken with
+// item (none with silk touch or an incompatible tool).
+func GetXpDropForTool(blk Behavior, item Item) int {
+	if hasSilkTouch(item) || !blk.GetBreakInfo().IsToolCompatible(item) {
+		return 0
+	}
+	return blk.GetXpDropAmount()
 }
 
 // GetDropsForCompatibleTool/GetSilkTouchDrops are ports of Block's defaults, both matching PHP's

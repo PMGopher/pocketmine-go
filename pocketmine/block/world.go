@@ -41,6 +41,11 @@ type World interface {
 	UseBreakOn(pos math.Vector3) bool
 }
 
+// GetEntityFunc is World::getEntity for the block package (the world package sets it in its
+// init(), since World's entity type can't be named here): the entity with the given runtime ID
+// in w, if loaded.
+var GetEntityFunc func(w World, id int) (Entity, bool)
+
 type Chunk interface {
 	SetBlockStateID(x, y, z int, stateID int)
 	// GetHighestBlockAt is needed by populator.TallGrass's port of

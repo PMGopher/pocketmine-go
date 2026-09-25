@@ -25,7 +25,8 @@ func fallTo(t *testing.T, p *Player, y float64) {
 	t.Helper()
 	for pos := p.GetPosition(); pos.Y > y; pos = p.GetPosition() {
 		next := max(pos.Y-1, y)
-		if !p.HandleMovement(math.NewVector3(pos.X, next, pos.Z)) {
+		p.HandleMovement(math.NewVector3(pos.X, next, pos.Z))
+		if p.GetPosition().Y != next {
 			t.Fatalf("HandleMovement refused a 1-block move to y=%v", next)
 		}
 	}
@@ -81,9 +82,7 @@ func TestHandleMovementRefusesMovesOfMoreThan15Blocks(t *testing.T) {
 	ground := groundY(t, w)
 	p := newTestPlayerIn(t, w, math.NewVector3(0.5, ground, 0.5))
 
-	if p.HandleMovement(math.NewVector3(0.5, ground, 20.5)) {
-		t.Error("HandleMovement accepted a 20-block move, want it refused")
-	}
+	p.HandleMovement(math.NewVector3(0.5, ground, 20.5))
 	if p.GetPosition().Z != 0.5 {
 		t.Errorf("position Z = %v after a refused move, want unchanged 0.5", p.GetPosition().Z)
 	}

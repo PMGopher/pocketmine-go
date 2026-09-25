@@ -38,10 +38,10 @@ Stop with Ctrl+C or by typing `stop` in the console (players and worlds are save
 
 ## Progress
 
-Roughly **570–700 of PocketMine-MP's 1,498 PHP classes (~40–47%)** have a Go counterpart. The range depends on how classes that were merged or renamed in Go are counted. Most of that is
-blocks, items and world code. Much of the server "glue" (the `Server` class, network sessions,
-events, commands) isn't ported yet, and several ported packages aren't hooked into the running
-server.
+Roughly **750–850 of PocketMine-MP's 1,498 PHP classes (~50–57%)** have a Go counterpart. The range depends on how classes that were merged or renamed in Go are counted. The server
+"glue" is in place: `Server`, network sessions and packet handlers, events, the command map with
+most default commands, the console, query and UPnP. The big remaining gaps are crafting, plugins,
+item NBT and the full block/item network mappings.
 
 | Area (PHP namespace, incl. sub-namespaces) | Ported / total PHP classes |
 |---|---|
@@ -51,16 +51,18 @@ server.
 | ↳ `world/particle` | 38 / 38 |
 | ↳ `world/sound` | 48 / 113 |
 | ↳ `world/format/io` (LevelDB, region, upgraders) | LevelDB + level.dat only |
-| `player` | 14 / 16 |
+| `player` | 16 / 16 |
 | `permission` | 9 / 14 |
-| `command` | 9 / 53 (no default commands) |
+| `command` | 43 / 53 (34 of 41 default commands) |
 | `plugin` | 8 / 22 |
-| `scheduler` | 4 / 15 |
+| `scheduler` | 10 / 15 (sync scheduler + async pool) |
 | `entity` (incl. effect, object, projectile, animation, attribute) | 77 / 77 |
-| `event` | 43 / 150 (base classes + every `event/entity` event + 2 player events) |
-| `inventory` | 10 / 35 (incl. player, armor, off-hand, ender inventories) |
-| `network` (above the protocol layer) | ~10 / 85 (NetworkSession, PreSpawn/InGame handlers, TypeConverter parts) |
-| `crafting`, `console`, `crash`, `resourcepacks`, `form` | 0 |
+| `event` | ~145 / 150 (every concrete event; fired where the ported code fires them) |
+| `inventory` | 27 / 35 (incl. cursor, creative, transactions; no crafting/enchanting transactions) |
+| `network` (above the protocol layer) | ~40 / 85 (most of the rest are protocol-level classes gophertunnel replaces: compression, encryption, JWT/login, RakLib) |
+| `console` | 2 / 5 (the rest is PHP child-process plumbing) |
+| `resourcepacks`, `form` | 4 / 11 (the manifest classes are gophertunnel's) |
+| `crafting`, `crash` | 0 |
 
 _Counts are approximate: a class counts as ported if a Go file with its snake_case name or a Go
 type with its name exists._
@@ -71,29 +73,33 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 
 ### Networking & connection
 - [x] RakNet listener, login, encryption, resource-pack handshake (via gophertunnel)
-- [x] Server list entry (MOTD, player count)
+- [x] Server list entry (MOTD, player count) (`RakLibInterface::setName`)
 - [x] StartGame, item table, abilities, spawn
-- [x] Chunk streaming by view distance as the player moves
+- [x] Chunk streaming by view distance as the player moves (through `ChunkCache`)
 - [x] Multiple players see each other (player list, spawn, movement)
 - [x] Xbox Live authentication (`xbox-auth`, on by default)
-- [x] `NetworkSession`, `PreSpawnPacketHandler`, `InGamePacketHandler` **(partial)**: login-to-spawn sequence, movement and input flags (sneak/sprint/swim/glide/fly/jump), block breaking, attacking, chat, hotbar selection, sub-chunk requests; item use, containers and ItemStackRequest execution aren't ported
+- [x] `RakLibInterface` on gophertunnel: pre-login checks (`PlayerPreLoginEvent`: server full, whitelist, name/IP bans), duplicate-login and XUID checks, IP blocking, raw packet filters, bandwidth stats, ping
+- [x] `NetworkSession` (full port above the wire), `NetworkSessionManager`, `Network`
+- [x] Packet handlers: `PreSpawnPacketHandler`, `InGamePacketHandler` (movement, block breaking/placing, item use, inventory transactions, item stack requests, containers, signs, books, lecterns, forms, skins, commands, emotes), `DeathPacketHandler`
+- [x] `InventoryManager` (window IDs, item stack IDs, predictions, container open/close), `ItemStackRequestExecutor`, creative inventory cache
 - [x] Block changes sent to players (`World::changedBlocks`/`sendBlocks`)
-- [ ] Packet rate limiting, broadcast batching, chunk cache
-- [ ] Query protocol, UPnP
-- [ ] Resource packs
-- [ ] Transfer server, forms
+- [x] Packet rate limiting, broadcasting (`StandardPacketBroadcaster`, `StandardEntityEventBroadcaster`), chunk cache
+- [x] Query protocol (on the game port, or a dedicated interface), UPnP port forwarding
+- [x] Resource packs (`resource_packs.yml`, `PlayerResourcePackOfferEvent`; delivery by gophertunnel)
+- [x] Transfer server, forms, toasts, titles
+- [x] `DataPacketSend/Receive/DecodeEvent`
 
 ### Server core
-- [x] `Server` class **(partial)**: startup, default world, tick loop, online players, broadcast, player data, shutdown; no plugins/commands/query/ban lists yet
-- [x] `server.properties` (`ServerConfigGroup`, `--key=value` overrides) · [ ] `pocketmine.yml`
-- [ ] Console input and console command sender **(partial)**: only `stop`
-- [x] Logger, text formatting, language/translation files (`lang`)
-- [x] Config files (YAML/JSON/properties) via `utils.Config`
-- [x] Sync task scheduler (not wired to the server yet)
-- [ ] Async tasks / worker pool
-- [x] Timings (not wired to the server yet)
+- [x] `Server` class: startup, `pocketmine.yml` + `server.properties`, language, ops/whitelist/ban lists, broadcast channels, player data, tick loop with TPS/load tracking, console title, query info regeneration, shutdown
+- [x] `server.properties` + `pocketmine.yml` (`ServerConfigGroup`, `--key=value` overrides)
+- [x] Console input and console command sender (`ConsoleReader`, `ConsoleCommandSender`, `BroadcastLoggerForwarder`)
+- [x] Logger (`MainLogger` with `server.log` and log archive), text formatting, language/translation files (`lang`)
+- [x] Config files (YAML/JSON/properties/enum) via `utils.Config`
+- [x] Sync task scheduler
+- [x] Async tasks / worker pool (goroutines)
+- [x] Timings, memory manager
 - [ ] Crash dumps
-- [x] Version info
+- [x] Version info, `server.lock` (one server per data folder)
 
 ### World
 - [x] Chunks, sub-chunks, paletted block storage, heightmaps
@@ -102,7 +108,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] World tick: time, weather, scheduled and neighbour updates, random ticks
 - [x] Chunk loading/unloading, chunk loaders, chunk listeners
 - [x] Explosions
-- [x] Multi-world manager (`WorldManager`) (not wired to the server yet)
+- [x] Multi-world manager (`WorldManager`, `worlds:` in pocketmine.yml)
 - [x] Particles (all types) and sounds **(partial)**, 49 of 113 sound types
 - [ ] Block-state / item upgraders (loading worlds from vanilla or older PMMP)
 - [ ] Region formats (Anvil, McRegion, PMAnvil) and world conversion
@@ -132,7 +138,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] 321 item type IDs
 - [x] Item → network ID translation
 - [ ] Vanilla item registry **(partial)**, ~76 items
-- [ ] Bow, arrows, snowball, egg, ender pearl, spawn eggs, and other projectile items **(partial)**: the entities exist, but using the items needs the item-use packet handlers
+- [ ] Bow, arrows, snowball, egg, ender pearl, spawn eggs, and other projectile items **(partial)**: item use is wired through the packet handlers; only items with a network mapping can be held
 - [x] Enchantments (all vanilla enchantments, protection/sharpness/knockback/fire aspect logic, armor EPF)
 - [ ] `/give`-style item name parsing (`StringToItemParser`)
 
@@ -141,22 +147,22 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Health, damage, knockback, PvP
 - [x] Fall damage
 - [x] Chat formatters
-- [x] Player data file format (not wired to the server yet)
+- [x] Player data file format
 - [x] Held item / hotbar selection
-- [x] Chat broadcast (`/commands` answer "unknown command" until the command map is wired)
+- [x] Chat broadcast and commands
 - [x] Player data saved and restored (`players/<name>.dat`: position, health, hunger, XP, game mode)
-- [ ] Death and respawn **(partial)**: death logic, drops and XP drop ported; respawn screen/packet flow isn't
+- [x] Death and respawn (death screen, `DeathPacketHandler`, respawn)
 - [x] Hunger, saturation, experience, attributes (logic ported; attribute packets sent)
-- [ ] Changing game mode in-game
+- [x] Changing game mode in-game (`/gamemode`)
 - [ ] Server-side movement checks / physics
 
 ### Inventory & crafting
 - [x] Base inventory types
 - [x] Initial inventory contents sent to the client
-- [x] Player inventory, armor, offhand, ender chest (the classes; client sync is via InventoryContent only)
-- [ ] Cursor inventory, inventory network sync (InventoryManager)
-- [ ] Creative inventory
-- [ ] Inventory transactions / item stack requests (moving, dropping, using items)
+- [x] Player inventory, armor, offhand, ender chest
+- [x] Cursor inventory, inventory network sync (InventoryManager)
+- [x] Creative inventory (only items with a network mapping so far)
+- [x] Inventory transactions / item stack requests (moving, dropping, using items; crafting requests fail until crafting is ported)
 - [ ] Crafting, furnace smelting, brewing, smithing, enchanting
 
 ### Entities
@@ -171,21 +177,21 @@ All 77 classes under `pocketmine\entity` are ported, with their full logic.
 - [x] Mobs (zombie, villager, squid). PocketMine-MP has no AI, so neither does this port
 
 ### Commands, events, permissions, plugins
-- [x] Command base classes and command map (not wired to the server yet)
-- [ ] Default commands (`/stop`, `/help`, `/gamemode`, `/tp`, `/give`, `/time`, `/op`, `/ban`, ... 42 total)
-- [x] Event system base (handlers, priorities, cancellable)
-- [ ] Concrete events (block, entity, player, inventory, world, server, plugin: ~145) **(partial)**: all `event/entity` events are ported and fired
-- [x] Permissions, attachments, ban lists (not wired to players yet)
+- [x] Command base classes and command map
+- [ ] Default commands **(partial)**: 34 of 41 (`/give`, `/clear`, `/enchant`, `/effect`, `/particle`, `/timings`, `/dumpmemory` are missing)
+- [x] Event system base (handlers, priorities, cancellable, parent events)
+- [x] Concrete events (block, entity, player, inventory, world, server, plugin)
+- [x] Permissions, attachments, ban lists, ops
 - [x] `plugin.yml` parsing, API version checks
 - [ ] Plugin loading and `PluginManager`. **Design undecided**: PHP plugins can't run in Go. See AGENTS.md §6 Phase 4.
 
 ## Roadmap
 
-1. **Make the world playable:** all block mappings, block placing, held items, chat.
-2. **Real server structure:** `Server`, `NetworkSession` and packet handlers are in; console commands, the command map, events and permissions remain.
-3. **Gameplay:** inventory transactions, crafting, item NBT, and wiring the ported entities into item use.
-4. **Plugins.**
-5. **Everything else:** resource packs, query, auth, world upgraders, crash dumps.
+1. **Make the world playable:** all block and item network mappings (blocks without one can't be placed or shown).
+2. **Real server structure:** done (`Server`, network sessions and handlers, console, command map, events, permissions, query, UPnP, resource packs). Remaining: the 7 missing default commands.
+3. **Gameplay:** crafting, item NBT, enchanting.
+4. **Plugins** (design decision pending, see AGENTS.md §6 Phase 4).
+5. **Everything else:** world upgraders, crash dumps.
 
 Details in [AGENTS.md](AGENTS.md#6-plan--roadmap).
 

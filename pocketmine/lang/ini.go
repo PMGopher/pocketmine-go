@@ -2,7 +2,7 @@ package lang
 
 import (
 	"bufio"
-	"os"
+	"io/fs"
 	"strings"
 )
 
@@ -11,8 +11,8 @@ import (
 // PocketMine's language files are flat `key = value` pairs with no sections, so this only
 // handles that shape — not general INI (sections, arrays, typed scanning) — which is all real
 // translation files ever use.
-func parseIniFile(path string) (map[string]string, error) {
-	f, err := os.Open(path)
+func parseIniFile(fsys fs.FS, path string) (map[string]string, error) {
+	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, err
 	}

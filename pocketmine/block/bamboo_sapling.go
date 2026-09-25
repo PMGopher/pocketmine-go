@@ -3,6 +3,7 @@ package block
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -74,7 +75,7 @@ func (b *BambooSapling) grow() bool {
 	tx.AddBlock(b.position, bamboo)
 	tx.AddBlock(b.position.GetSide(math.Up, 1), above)
 
-	ev := &StructureGrowEvent{Block: b.self, Transaction: tx, Player: nil}
+	ev := blockevent.NewStructureGrowEvent(b.self, tx, nil)
 	event.Call(ev)
 	if ev.IsCancelled() {
 		return false

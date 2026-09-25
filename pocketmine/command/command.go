@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"pocketmine-go/pocketmine/utils"
 	"strings"
 
 	"pocketmine-go/pocketmine/lang"
@@ -99,17 +100,13 @@ func (c *Command) SetPermission(perm *string) {
 
 // TestPermission mirrors Command::testPermission(): checks the permission and, if denied, sends
 // the configured permission-denial message.
-//
-// PHP's version formats the default denial message via KnownTranslationFactory — the generated
-// translation-factory package isn't ported yet (see the lang package's doc comment), so this
-// falls back to a plain English message until that's wired up.
 func (c *Command) TestPermission(target Sender, perm *string) bool {
 	if c.TestPermissionSilent(target, perm) {
 		return true
 	}
 
 	if c.permissionMessage == nil {
-		target.SendMessage(fmt.Sprintf("You do not have permission to use this command (%s)", c.name))
+		target.SendMessage(lang.KnownTranslationFactory.PocketmineCommandErrorPermission(c.name).Prefix(utils.Red))
 	} else if *c.permissionMessage != "" {
 		permStr := ""
 		if perm != nil {
@@ -197,22 +194,20 @@ func (c *Command) SetPermissionMessage(permissionMessage string) {
 func (c *Command) SetUsage(usage any) { c.usageMessage = usage }
 
 // BroadcastCommandMessage is a port of Command::broadcastCommandMessage().
-//
-// PHP formats the broadcast via KnownTranslationFactory::chat_type_admin(); deferred the same way
-// as TestPermission's denial message, pending the generated translation factory.
 func BroadcastCommandMessage(source Sender, message any, sendToSource bool) {
 	users := source.GetServer().GetBroadcastChannelSubscribers(BroadcastChannelAdministrative)
-
-	messageStr := stringifyMessage(message)
-	adminBroadcast := fmt.Sprintf("[%s: %s]", source.GetName(), messageStr)
+	result := lang.KnownTranslationFactory.ChatTypeAdmin(source.GetName(), message)
+	colored := result.Prefix(utils.Gray + utils.Italic)
 
 	if sendToSource {
 		source.SendMessage(message)
 	}
 
 	for _, user := range users {
-		if user != source {
-			user.SendMessage(adminBroadcast)
+		if _, ok := user.(*BroadcastLoggerForwarder); ok {
+			user.SendMessage(result)
+		} else if user != source {
+			user.SendMessage(colored)
 		}
 	}
 }

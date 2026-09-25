@@ -1,9 +1,10 @@
 package lang
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -21,7 +22,24 @@ type Language struct {
 	fallbackLang map[string]string
 }
 
-// NewLanguage loads langCode.ini (and fallback.ini) from path.
+// localeData is the pmmp/Language translation files (PHP's LOCALE_DATA_PATH), vendored in
+// locale/.
+//
+//go:embed locale/*.ini
+var localeData embed.FS
+
+// localeFS returns the file system holding the language files: the vendored ones for an empty
+// path (PHP's default \pocketmine\LOCALE_DATA_PATH), otherwise the directory at path.
+func localeFS(path string) fs.FS {
+	if path == "" {
+		sub, _ := fs.Sub(localeData, "locale")
+		return sub
+	}
+	return os.DirFS(path)
+}
+
+// NewLanguage loads langCode.ini (and fallback.ini) from path; an empty path means the
+// vendored language files.
 func NewLanguage(langCode string, path string, fallback string) (*Language, error) {
 	if fallback == "" {
 		fallback = FallbackLanguage
@@ -46,11 +64,8 @@ func NewLanguage(langCode string, path string, fallback string) (*Language, erro
 // GetLanguageList scans path for `<code>.ini` files and returns code -> display name, using each
 // file's own LanguageNameKey entry.
 func GetLanguageList(path string) (map[string]string, error) {
-	info, err := os.Stat(path)
-	if err != nil || !info.IsDir() {
-		return nil, &LanguageNotFoundException{Message: fmt.Sprintf("Language directory %s does not exist or is not a directory", path)}
-	}
-	entries, err := os.ReadDir(path)
+	fsys := localeFS(path)
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, &LanguageNotFoundException{Message: fmt.Sprintf("Language directory %s does not exist or is not a directory", path)}
 	}
@@ -74,9 +89,10 @@ func GetLanguageList(path string) (map[string]string, error) {
 }
 
 func loadLang(path string, languageCode string) (map[string]string, error) {
-	file := filepath.Join(path, languageCode+".ini")
-	if _, err := os.Stat(file); err == nil {
-		raw, err := parseIniFile(file)
+	fsys := localeFS(path)
+	file := languageCode + ".ini"
+	if _, err := fs.Stat(fsys, file); err == nil {
+		raw, err := parseIniFile(fsys, file)
 		if err == nil && len(raw) > 0 {
 			result := make(map[string]string, len(raw))
 			for k, v := range raw {
@@ -151,6 +167,28 @@ func (l *Language) TranslateString(str string, params []any, onlyPrefix *string)
 	return baseText, untranslatedParameterCount
 }
 
+// TranslateStringKeyed is TranslateString for parameters with explicit keys (a Translatable's
+// named parameters): keys[i] is the placeholder name of params[i].
+func (l *Language) TranslateStringKeyed(str string, keys []string, params []any, onlyPrefix *string) (result string, untranslatedParameterCount int) {
+	baseText, found := l.internalGet(str)
+	parameterCount := len(params)
+
+	if found {
+		if onlyPrefix != nil && !strings.HasPrefix(str, *onlyPrefix) {
+			return str, l.getUsedParameterCount(baseText, parameterCount)
+		}
+	} else {
+		baseText, parameterCount = l.parseTranslation(str, onlyPrefix, parameterCount)
+		untranslatedParameterCount = parameterCount
+	}
+
+	for i, p := range params {
+		baseText = strings.ReplaceAll(baseText, "{%"+keys[i]+"}", stringifyParam(l, p))
+	}
+
+	return baseText, untranslatedParameterCount
+}
+
 // Translate is a port of Language::translate(): fully resolves a Translatable (and its nested
 // Translatable parameters) into a plain string.
 func (l *Language) Translate(t *Translatable) string {
@@ -160,7 +198,7 @@ func (l *Language) Translate(t *Translatable) string {
 	}
 
 	for i, p := range t.Parameters() {
-		baseText = strings.ReplaceAll(baseText, fmt.Sprintf("{%%%d}", i), stringifyParam(l, p))
+		baseText = strings.ReplaceAll(baseText, "{%"+t.ParameterKey(i)+"}", stringifyParam(l, p))
 	}
 
 	return baseText

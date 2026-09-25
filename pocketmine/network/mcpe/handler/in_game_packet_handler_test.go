@@ -5,6 +5,8 @@ import (
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+
+	"pocketmine-go/pocketmine/network/mcpe"
 )
 
 func flags(set ...int) protocol.InputFlags {
@@ -37,13 +39,50 @@ func TestInputFlagsEqual(t *testing.T) {
 	}
 }
 
-func TestValidFacing(t *testing.T) {
+func TestValidateFacing(t *testing.T) {
 	for face := int32(0); face <= 5; face++ {
-		if !validFacing(face) {
-			t.Errorf("face %d rejected", face)
+		if err := validateFacing(face); err != nil {
+			t.Errorf("face %d rejected: %v", face, err)
 		}
 	}
-	if validFacing(-1) || validFacing(6) {
+	if validateFacing(-1) == nil || validateFacing(6) == nil {
 		t.Error("an invalid face was accepted")
+	}
+}
+
+func TestTranslateItemStackContainerID(t *testing.T) {
+	tests := []struct {
+		container      byte
+		slot           int
+		window, wantSl int
+	}{
+		{protocol.ContainerArmor, 2, mcpe.ContainerIDArmor, 2},
+		{protocol.ContainerHotBar, 3, mcpe.ContainerIDInventory, 3},
+		{protocol.ContainerCombinedHotBarAndInventory, 20, mcpe.ContainerIDInventory, 20},
+		{protocol.ContainerOffhand, 1, mcpe.ContainerIDOffhand, 0},
+		{protocol.ContainerCursor, 0, mcpe.ContainerIDUI, 0},
+		{protocol.ContainerCraftingInput, 28, mcpe.ContainerIDUI, 28},
+		{protocol.ContainerLevelEntity, 5, 7, 5},
+	}
+	for _, tt := range tests {
+		window, slot, err := TranslateItemStackContainerID(tt.container, 7, tt.slot)
+		if err != nil || window != tt.window || slot != tt.wantSl {
+			t.Errorf("container %d slot %d: got (%d, %d, %v), want (%d, %d)", tt.container, tt.slot, window, slot, err, tt.window, tt.wantSl)
+		}
+	}
+	if _, _, err := TranslateItemStackContainerID(protocol.ContainerCraftingOutputPreview, 7, 0); err == nil {
+		t.Error("preview containers should be rejected")
+	}
+}
+
+func TestJSONDepth(t *testing.T) {
+	if d := jsonDepth(true); d != 0 {
+		t.Errorf("scalar depth = %d", d)
+	}
+	if d := jsonDepth([]any{"a", 1.0}); d != 1 {
+		t.Errorf("flat array depth = %d", d)
+	}
+	if d := jsonDepth([]any{[]any{1.0}}); d != 2 {
+		t.Errorf("nested array depth = %d", d)
 	}
 }

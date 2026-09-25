@@ -3,49 +3,9 @@ package player
 import (
 	"testing"
 
-	"github.com/google/uuid"
-
-	"pocketmine-go/pocketmine/block"
-	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/math"
-	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world"
-	"pocketmine-go/pocketmine/world/generator"
 )
-
-func newTestWorld(t *testing.T) *world.World {
-	t.Helper()
-	tr := convert.NewBlockTranslator()
-	gen := generator.NewFlat(0, generator.VanillaFlatLayers(), generator.VanillaFlatBiomeID, int32(block.VanillaAir().GetStateId()), nil)
-	return world.New(gen, tr, []block.Behavior{
-		block.VanillaAir(),
-		block.VanillaBedrock(),
-		block.VanillaStone(),
-		block.VanillaDirt(),
-		block.VanillaGrass(),
-	})
-}
-
-func newTestSkin(t *testing.T) *entity.Skin {
-	t.Helper()
-	skin, err := entity.NewSkin("Standard_Custom", make([]byte, 64*64*4), nil, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return skin
-}
-
-// newTestPlayer creates a player in a fresh world. id is unused (entity IDs are allocated by the
-// entity package, like PHP's Entity::nextRuntimeId) but kept so call sites stay readable.
-func newTestPlayer(t *testing.T, id int, pos math.Vector3) *Player {
-	t.Helper()
-	return newTestPlayerIn(t, newTestWorld(t), pos)
-}
-
-func newTestPlayerIn(t *testing.T, w *world.World, pos math.Vector3) *Player {
-	t.Helper()
-	return NewPlayer("Steve", uuid.New(), "xuid-1", w, pos, GameModeSurvival, newTestSkin(t))
-}
 
 func TestNewPlayerSetsIdentityFields(t *testing.T) {
 	p := newTestPlayer(t, 1, math.NewVector3(5, 70, 5))
@@ -104,13 +64,13 @@ func TestGetSpawnFallsBackToWorldSpawnWhenUnset(t *testing.T) {
 	worldSpawn := math.NewVector3(100, 65, 100)
 	p.GetWorld().SetSpawnLocation(worldSpawn)
 
-	if got := p.GetSpawn(); got != worldSpawn {
+	if got := p.GetSpawn(); got.Vector3 != worldSpawn {
 		t.Errorf("GetSpawn() with no player-specific spawn set = %v, want the world spawn %v", got, worldSpawn)
 	}
 
 	own := math.NewVector3(5, 80, 5)
-	p.SetSpawn(own)
-	if got := p.GetSpawn(); got != own {
+	p.SetSpawn(&own, nil)
+	if got := p.GetSpawn(); got.Vector3 != own {
 		t.Errorf("GetSpawn() after SetSpawn = %v, want %v", got, own)
 	}
 }

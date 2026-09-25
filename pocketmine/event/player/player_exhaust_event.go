@@ -1,8 +1,3 @@
-// Package player is a port of the parts of pocketmine\event\player the entity package fires
-// (PlayerExhaustEvent, PlayerExperienceChangeEvent). Both extend EntityEvent in PHP (they're
-// fired for any Human, not just players), so they embed entityevent.EntityEvent here too.
-//
-// Importers conventionally alias this package as playerevent.
 package player
 
 import (

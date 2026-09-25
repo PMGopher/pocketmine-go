@@ -2,6 +2,9 @@ package command
 
 import (
 	"fmt"
+	"pocketmine-go/pocketmine/lang"
+	"pocketmine-go/pocketmine/timings"
+	"pocketmine-go/pocketmine/utils"
 	"strings"
 	"sync"
 
@@ -110,30 +113,29 @@ func (m *SimpleCommandMap) Unregister(cmd CommandLike) bool {
 }
 
 // Dispatch is a port of SimpleCommandMap::dispatch().
-//
-// PHP formats the "command not found" and usage messages via KnownTranslationFactory; deferred
-// the same way as Command.TestPermission, pending the generated translation factory.
 func (m *SimpleCommandMap) Dispatch(sender Sender, cmdLine string) bool {
 	args := ParseQuoteAware(cmdLine)
-	if len(args) == 0 {
-		sender.SendMessage(`Unknown command. Type "/help" for help.`)
-		return false
-	}
 
-	sentLabel, args := args[0], args[1:]
-	target := m.GetCommand(sentLabel)
-	if target == nil {
-		sender.SendMessage(fmt.Sprintf("Unknown command: %q. Type \"/help\" for help.", sentLabel))
-		return false
-	}
+	sentLabel := ""
+	if len(args) > 0 {
+		sentLabel, args = args[0], args[1:]
+		if target := m.GetCommand(sentLabel); target != nil {
+			t := timings.GetCommandDispatchTimings(target.Label())
+			t.StartTiming()
+			defer t.StopTiming()
 
-	if target.TestPermission(sender, nil) {
-		_, err := target.Execute(sender, sentLabel, args)
-		if _, ok := err.(*InvalidCommandSyntaxException); ok {
-			sender.SendMessage(fmt.Sprintf("Usage: %s", stringifyMessage(target.Usage())))
+			if target.TestPermission(sender, nil) {
+				_, err := target.Execute(sender, sentLabel, args)
+				if _, ok := err.(*InvalidCommandSyntaxException); ok {
+					sender.SendMessage(sender.GetLanguage().Translate(lang.KnownTranslationFactory.CommandsGenericUsage(target.Usage())))
+				}
+			}
+			return true
 		}
 	}
-	return true
+
+	sender.SendMessage(lang.KnownTranslationFactory.PocketmineCommandNotFound(sentLabel, "/help").Prefix(utils.Red))
+	return false
 }
 
 func (m *SimpleCommandMap) ClearCommands() {

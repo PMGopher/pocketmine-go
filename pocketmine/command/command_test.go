@@ -17,7 +17,16 @@ func newFakeSender(name string, basePerms map[string]bool) *fakeSender {
 	return &fakeSender{Permissible: permission.NewPermissible(basePerms), name: name}
 }
 
-func (s *fakeSender) GetLanguage() *lang.Language { return nil }
+func (s *fakeSender) GetLanguage() *lang.Language { return testLanguage }
+
+var testLanguage = func() *lang.Language {
+	l, err := lang.NewLanguage("eng", "", "")
+	if err != nil {
+		panic(err)
+	}
+	return l
+}()
+
 func (s *fakeSender) SendMessage(message any) {
 	s.messages = append(s.messages, stringifyMessage(message))
 }

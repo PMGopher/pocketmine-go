@@ -3,43 +3,27 @@ package player
 import (
 	stdmath "math"
 
+	"github.com/go-gl/mathgl/mgl32"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/entity/animation"
+	"pocketmine-go/pocketmine/entity/effect"
+	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/particle"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
-// DefaultFxIntervalTicks mirrors SurvivalBlockBreakHandler::DEFAULT_FX_INTERVAL_TICKS.
+// DefaultFxIntervalTicks is SurvivalBlockBreakHandler::DEFAULT_FX_INTERVAL_TICKS.
 const DefaultFxIntervalTicks = 5
 
-// blockStartBreak/blockStopBreak/blockBreakSpeed mirror pocketmine\network\mcpe\protocol\types\
-// LevelEvent::BLOCK_START_BREAK/BLOCK_STOP_BREAK/BLOCK_BREAK_SPEED - not otherwise exposed by
-// gophertunnel's own (differently-named but numerically identical) LevelEventStartBlockCracking/
-// StopBlockCracking/UpdateBlockCracking constants, kept as their real PHP names here for clarity
-// at the call sites below.
-const (
-	blockStartBreak = packet.LevelEventStartBlockCracking
-	blockStopBreak  = packet.LevelEventStopBlockCracking
-	blockBreakSpeed = packet.LevelEventUpdateBlockCracking
-)
-
-// SurvivalBlockBreakHandler is a port of a slice of pocketmine\player\SurvivalBlockBreakHandler:
-// the real break-time/break-progress state machine driving a held-down break action, tracked
-// per-tick via Update. The BLOCK_START_BREAK/BLOCK_BREAK_SPEED/BLOCK_STOP_BREAK network broadcasts
-// that drive the client's break-progress crack overlay are real (see World.BroadcastPacketToViewers),
-// as is the punch particle/sound broadcast on every fx tick (World.AddParticle/AddSound).
+// SurvivalBlockBreakHandler is a port of pocketmine\player\SurvivalBlockBreakHandler: the break
+// progress of a block a survival player is holding left click on. The client shows the crack
+// overlay from the BLOCK_START_BREAK/BLOCK_BREAK_SPEED/BLOCK_STOP_BREAK level events.
 //
-// Not ported (each needs a real subsystem this port doesn't have yet, so each modifier below is
-// simply never applied - documented, not guessed):
-//   - Haste/Mining Fatigue effect modifiers on break speed: no EffectManager exists.
-//   - Aqua Affinity underwater break-speed penalty removal: no ArmorInventory/enchantments exist.
-//   - The ArmSwingAnimation broadcast in Update: no entity-animation packet plumbing exists yet
-//     (a separate, smaller gap from the broadcast infrastructure itself, which now exists).
-//   - The PHP destructor's BLOCK_STOP_BREAK broadcast: Go has no deterministic destructors: call
-//     Close() explicitly when done with a handler instead (matching this port's tile.Close()-style
-//     convention elsewhere).
+// PHP sends BLOCK_STOP_BREAK from __destruct when the handler is dropped; Go has no destructors,
+// so the player calls Close when it drops the handler.
 type SurvivalBlockBreakHandler struct {
 	player            *Player
 	blockPos          math.Vector3
@@ -53,103 +37,111 @@ type SurvivalBlockBreakHandler struct {
 	breakProgress float64
 }
 
-// NewSurvivalBlockBreakHandler is a port of SurvivalBlockBreakHandler::__construct. heldItem is
-// the item the player is holding right now (real PHP reads this from the player's inventory
-// itself; this port's Player has no "selected hotbar slot" concept yet, so the caller supplies it
-// directly instead - see Player's own doc comment on inventory windows not being fully ported).
-func NewSurvivalBlockBreakHandler(p *Player, blockPos math.Vector3, blk block.Behavior, targetedFace math.Facing, maxPlayerDistance int, heldItem block.Item) *SurvivalBlockBreakHandler {
+// NewSurvivalBlockBreakHandler is a port of SurvivalBlockBreakHandler::__construct.
+func NewSurvivalBlockBreakHandler(p *Player, blockPos math.Vector3, blk block.Behavior, targetedFace math.Facing, maxPlayerDistance int, fxTickInterval int) *SurvivalBlockBreakHandler {
 	h := &SurvivalBlockBreakHandler{
 		player:            p,
 		blockPos:          blockPos,
 		block:             blk,
 		targetedFace:      targetedFace,
 		maxPlayerDistance: maxPlayerDistance,
-		fxTickInterval:    DefaultFxIntervalTicks,
+		fxTickInterval:    fxTickInterval,
 	}
-	h.breakSpeed = h.calculateBreakProgressPerTick(heldItem)
+	h.breakSpeed = h.calculateBreakProgressPerTick()
 	if h.breakSpeed > 0 {
-		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(blockStartBreak, int32(65535*h.breakSpeed), h.blockPos))
+		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(packet.LevelEventStartBlockCracking, int32(65535*h.breakSpeed), h.blockPos))
 	}
 	return h
 }
 
-// calculateBreakProgressPerTick is a port of SurvivalBlockBreakHandler::calculateBreakProgressPerTick -
-// see the type's own doc comment for the effect/enchantment modifiers deliberately left unapplied.
-func (h *SurvivalBlockBreakHandler) calculateBreakProgressPerTick(heldItem block.Item) float64 {
+// calculateBreakProgressPerTick is a port of
+// SurvivalBlockBreakHandler::calculateBreakProgressPerTick: the percentage of the block's break
+// time that one tick of breaking takes.
+func (h *SurvivalBlockBreakHandler) calculateBreakProgressPerTick() float64 {
 	if !h.block.GetBreakInfo().IsBreakable() {
-		return 0
+		return 0.0
 	}
-
-	breakTime, err := h.block.GetBreakInfo().GetBreakTime(heldItem)
+	breakTime, err := h.block.GetBreakInfo().GetBreakTime(h.player.GetInventory().GetItemInHand())
 	if err != nil {
-		return 0
+		return 0.0
 	}
 	breakTimePerTick := breakTime * 20
-
 	if !h.player.IsOnGround() && !h.player.IsFlying() {
 		breakTimePerTick *= 5
 	}
-
+	if h.player.IsUnderwater() && !h.player.GetArmorInventory().GetHelmet().HasEnchantment(enchantment.VanillaAquaAffinity(), -1) {
+		breakTimePerTick *= 5
+	}
 	if breakTimePerTick > 0 {
-		return 1 / breakTimePerTick
+		progressPerTick := 1 / breakTimePerTick
+
+		if haste := h.player.GetEffects().Get(effect.VanillaHaste()); haste != nil {
+			hasteLevel := float64(haste.GetEffectLevel())
+			progressPerTick *= (1 + 0.2*hasteLevel) * stdmath.Pow(1.2, hasteLevel)
+		}
+
+		if miningFatigue := h.player.GetEffects().Get(effect.VanillaMiningFatigue()); miningFatigue != nil {
+			miningFatigueLevel := float64(miningFatigue.GetEffectLevel())
+			progressPerTick *= stdmath.Pow(0.21, miningFatigueLevel)
+		}
+
+		return progressPerTick
 	}
 	return 1
 }
 
-// Update is a port of SurvivalBlockBreakHandler::update - returns false once the player has moved
-// too far from the block (the caller should cancel the break), true otherwise (including when
-// breakProgress has reached 1 and the block should now actually break - matching the real method's
-// own return value, which real PHP's own caller checks separately from breakProgress itself).
-func (h *SurvivalBlockBreakHandler) Update(heldItem block.Item) bool {
-	center := h.blockPos.Add(0.5, 0.5, 0.5)
-	maxDistSq := float64(h.maxPlayerDistance * h.maxPlayerDistance)
-	if h.player.GetPosition().DistanceSquared(center) > maxDistSq {
+// Update is a port of SurvivalBlockBreakHandler::update: false once the player is too far away
+// or the block is broken.
+func (h *SurvivalBlockBreakHandler) Update() bool {
+	if h.player.GetPosition().DistanceSquared(h.blockPos.Add(0.5, 0.5, 0.5)) > float64(h.maxPlayerDistance*h.maxPlayerDistance) {
 		return false
 	}
 
-	newBreakSpeed := h.calculateBreakProgressPerTick(heldItem)
+	newBreakSpeed := h.calculateBreakProgressPerTick()
 	if stdmath.Abs(newBreakSpeed-h.breakSpeed) > 0.0001 {
 		h.breakSpeed = newBreakSpeed
-		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(blockBreakSpeed, int32(65535*h.breakSpeed), h.blockPos))
+		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(packet.LevelEventUpdateBlockCracking, int32(65535*h.breakSpeed), h.blockPos))
 	}
 
 	h.breakProgress += h.breakSpeed
 
-	if h.fxTicker%h.fxTickInterval == 0 && h.breakProgress < 1 {
+	fx := h.fxTicker % h.fxTickInterval
+	h.fxTicker++
+	if fx == 0 && h.breakProgress < 1 {
 		w := h.player.GetWorld()
 		w.AddParticle(h.blockPos, particle.BlockPunchParticle{BlockStateID: h.block.GetStateId(), Face: h.targetedFace})
 		w.AddSound(h.blockPos, sound.BlockPunchSound{BlockStateID: h.block.GetStateId()})
+		h.player.BroadcastAnimation(animation.ArmSwingAnimation{Entity: h.player}, h.player.GetViewers())
 	}
-	h.fxTicker++
 
 	return h.breakProgress < 1
 }
 
-// GetBlockPos is a port of SurvivalBlockBreakHandler::getBlockPos.
 func (h *SurvivalBlockBreakHandler) GetBlockPos() math.Vector3 { return h.blockPos }
 
-// GetTargetedFace is a port of SurvivalBlockBreakHandler::getTargetedFace.
 func (h *SurvivalBlockBreakHandler) GetTargetedFace() math.Facing { return h.targetedFace }
 
-// SetTargetedFace is a port of SurvivalBlockBreakHandler::setTargetedFace.
 func (h *SurvivalBlockBreakHandler) SetTargetedFace(face math.Facing) {
 	math.ValidateFacing(face)
 	h.targetedFace = face
 }
 
-// GetBreakSpeed is a port of SurvivalBlockBreakHandler::getBreakSpeed.
 func (h *SurvivalBlockBreakHandler) GetBreakSpeed() float64 { return h.breakSpeed }
 
-// GetBreakProgress is a port of SurvivalBlockBreakHandler::getBreakProgress.
 func (h *SurvivalBlockBreakHandler) GetBreakProgress() float64 { return h.breakProgress }
 
-// Close is a Go-idiomatic stand-in for SurvivalBlockBreakHandler::__destruct (Go has no
-// deterministic destructors) - broadcasts the real BLOCK_STOP_BREAK event that stops the client's
-// break-progress crack overlay, guarded by the same isInLoadedTerrain check real PHP's destructor
-// makes (a terrain-unloaded block has no viewers left to broadcast to anyway, but real PHP's check
-// specifically guards against firing during shutdown/unload sequences).
+// Close is SurvivalBlockBreakHandler::__destruct: the client's crack overlay is stopped.
 func (h *SurvivalBlockBreakHandler) Close() {
-	if h.player.GetWorld().IsChunkLoaded(h.blockPos.FloorX()>>4, h.blockPos.FloorZ()>>4) {
-		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(blockStopBreak, 0, h.blockPos))
+	if h.player.GetWorld().IsInLoadedTerrain(h.blockPos) {
+		h.player.GetWorld().BroadcastPacketToViewers(h.blockPos, levelEvent(packet.LevelEventStopBlockCracking, 0, h.blockPos))
+	}
+}
+
+// levelEvent is LevelEventPacket::create.
+func levelEvent(eventType int32, eventData int32, pos math.Vector3) packet.Packet {
+	return &packet.LevelEvent{
+		EventType: eventType,
+		Position:  mgl32.Vec3{float32(pos.X), float32(pos.Y), float32(pos.Z)},
+		EventData: eventData,
 	}
 }

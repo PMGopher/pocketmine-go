@@ -2,8 +2,7 @@ package item
 
 import "pocketmine-go/pocketmine/block"
 
-// Pickaxe is a port of pocketmine\item\Pickaxe. See Axe's doc comment for why
-// OnDestroyBlock/OnAttackEntity aren't ported.
+// Pickaxe is a port of pocketmine\item\Pickaxe.
 type Pickaxe struct {
 	TieredTool
 }

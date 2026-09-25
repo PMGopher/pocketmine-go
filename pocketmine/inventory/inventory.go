@@ -369,10 +369,23 @@ func (b *BaseInventory) Swap(slot1, slot2 int) {
 
 func (b *BaseInventory) GetViewers() []Player { return b.viewers }
 
-// RemoveAllViewers is a port of BaseInventory::removeAllViewers, minus the
-// viewer.getCurrentWindow()/removeCurrentWindow() calls - Player is a marker-only interface here
-// (see its doc comment), so it doesn't expose a "current window" concept to check against yet.
-func (b *BaseInventory) RemoveAllViewers() { b.viewers = nil }
+// windowOwner is the part of Player RemoveAllViewers needs.
+type windowOwner interface {
+	GetCurrentWindow() Inventory
+	RemoveCurrentWindow()
+}
+
+// RemoveAllViewers is a port of BaseInventory::removeAllViewers: every viewer that has this
+// inventory open as its current window closes it.
+func (b *BaseInventory) RemoveAllViewers() {
+	self, _ := b.self.(Inventory)
+	for _, viewer := range append([]Player(nil), b.viewers...) {
+		if w, ok := viewer.(windowOwner); ok && self != nil && w.GetCurrentWindow() == self {
+			w.RemoveCurrentWindow()
+		}
+	}
+	b.viewers = nil
+}
 
 func (b *BaseInventory) OnOpen(who Player) {
 	for _, v := range b.viewers {
@@ -392,18 +405,59 @@ func (b *BaseInventory) OnClose(who Player) {
 	}
 }
 
-// onSlotChange is a port of BaseInventory::onSlotChange, minus the viewer network-sync loop (see
-// the Inventory interface's doc comment).
+// InventorySyncer is what inventories need from pocketmine\network\mcpe\InventoryManager to keep
+// their viewers' clients in sync.
+type InventorySyncer interface {
+	OnSlotChange(inv Inventory, slot int)
+	SyncContents(inv Inventory)
+}
+
+// NetworkViewer is a viewer (Player) whose client is kept in sync with the inventory:
+// $viewer->getNetworkSession()->getInvManager(). The syncer is nil while the player has no
+// inventory manager (not spawned yet, or disconnected).
+type NetworkViewer interface {
+	GetInvManager() InventorySyncer
+}
+
+// changeReporter lets an inventory suppress its own change notifications (DelegateInventory's
+// onSlotChange/onContentChange overrides).
+type changeReporter interface {
+	reportsChanges() bool
+}
+
+// onSlotChange is a port of BaseInventory::onSlotChange.
 func (b *BaseInventory) onSlotChange(index int, before item.Item) {
+	if r, ok := b.self.(changeReporter); ok && !r.reportsChanges() {
+		return
+	}
+	self := b.self.(Inventory)
 	for l := range b.listeners.All() {
-		l.OnSlotChange(b.self.(Inventory), index, before)
+		l.OnSlotChange(self, index, before)
+	}
+	for _, viewer := range b.viewers {
+		if v, ok := viewer.(NetworkViewer); ok {
+			if invManager := v.GetInvManager(); invManager != nil {
+				invManager.OnSlotChange(self, index)
+			}
+		}
 	}
 }
 
-// onContentChange is a port of BaseInventory::onContentChange, minus the viewer network-sync loop.
+// onContentChange is a port of BaseInventory::onContentChange.
 func (b *BaseInventory) onContentChange(itemsBefore map[int]item.Item) {
+	if r, ok := b.self.(changeReporter); ok && !r.reportsChanges() {
+		return
+	}
+	self := b.self.(Inventory)
 	for l := range b.listeners.All() {
-		l.OnContentChange(b.self.(Inventory), itemsBefore)
+		l.OnContentChange(self, itemsBefore)
+	}
+	for _, viewer := range b.viewers {
+		if v, ok := viewer.(NetworkViewer); ok {
+			if invManager := v.GetInvManager(); invManager != nil {
+				invManager.SyncContents(self)
+			}
+		}
 	}
 }
 
@@ -445,3 +499,6 @@ func (b *BaseInventory) setItem(index int, it item.Item) {
 	}
 	b.SetItem(index, it)
 }
+
+// Air returns an empty item, standing in for VanillaItems::AIR() (see newEmptyItem).
+func Air() item.Item { return newEmptyItem() }

@@ -11,7 +11,6 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine/data/bedrock"
-	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/network/mcpe"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/player"
@@ -19,88 +18,97 @@ import (
 )
 
 func init() {
-	mcpe.NewPreSpawnPacketHandler = func(session *mcpe.NetworkSession) mcpe.PacketHandler {
-		return NewPreSpawnPacketHandler(session)
+	mcpe.NewPreSpawnPacketHandler = func(server mcpe.Server, p *player.Player, session *mcpe.NetworkSession, invManager *mcpe.InventoryManager) mcpe.PacketHandler {
+		return NewPreSpawnPacketHandler(server, p, session, invManager)
 	}
-	mcpe.NewInGamePacketHandler = func(session *mcpe.NetworkSession) mcpe.PacketHandler {
-		return NewInGamePacketHandler(session)
+	mcpe.NewInGamePacketHandler = func(p *player.Player, session *mcpe.NetworkSession, invManager *mcpe.InventoryManager) mcpe.PacketHandler {
+		return NewInGamePacketHandler(p, session, invManager)
+	}
+	mcpe.NewDeathPacketHandler = func(p *player.Player, session *mcpe.NetworkSession, invManager *mcpe.InventoryManager, deathMessage any) mcpe.PacketHandler {
+		return NewDeathPacketHandler(p, session, invManager, deathMessage)
 	}
 }
 
 // PreSpawnPacketHandler is a port of pocketmine\network\mcpe\handler\PreSpawnPacketHandler: sends
 // StartGame and everything else the client needs before it can spawn.
 //
-// handleRequestChunkRadius isn't needed: gophertunnel's Conn.StartGame answers RequestChunkRadius
-// itself and waits for the client to finish spawning (see NetworkSession.onClientSpawnResponse,
-// which applies the requested view distance).
+// StartGame goes through gophertunnel's Conn.StartGame, which also sends ItemRegistry, answers the
+// client's RequestChunkRadius itself and blocks until the client has spawned; the session then
+// applies the requested radius (NetworkSession.OnClientRequestChunkRadius, the port of
+// handleRequestChunkRadius).
 type PreSpawnPacketHandler struct {
-	session *mcpe.NetworkSession
-	server  mcpe.Server
-	player  *player.Player
+	server           mcpe.Server
+	player           *player.Player
+	session          *mcpe.NetworkSession
+	inventoryManager *mcpe.InventoryManager
 }
 
-func NewPreSpawnPacketHandler(session *mcpe.NetworkSession) *PreSpawnPacketHandler {
-	return &PreSpawnPacketHandler{session: session, server: session.GetServer(), player: session.GetPlayer()}
+func NewPreSpawnPacketHandler(server mcpe.Server, p *player.Player, session *mcpe.NetworkSession, inventoryManager *mcpe.InventoryManager) *PreSpawnPacketHandler {
+	return &PreSpawnPacketHandler{server: server, player: p, session: session, inventoryManager: inventoryManager}
 }
 
-// SetUp is a port of PreSpawnPacketHandler::setUp.
-func (h *PreSpawnPacketHandler) SetUp() error {
-	h.server.Lock()
+// SetUp is a port of PreSpawnPacketHandler::setUp. It's called with the server lock held, which
+// is released while gophertunnel waits for the client, so the world keeps ticking meanwhile.
+func (h *PreSpawnPacketHandler) SetUp() {
+	session, p := h.session, h.player
+	logger := session.GetLogger()
+
+	logger.Debug("Preparing StartGamePacket")
 	data := h.startGameData()
-	h.server.Unlock()
-
-	h.session.GetLogger().Debug("Sending start game packet")
-	// StartGame + ItemRegistry, then blocks until the client has spawned. The server lock isn't
-	// held meanwhile, so the world keeps ticking.
-	if err := h.session.GetConn().StartGame(data); err != nil {
-		return err
+	if conn := session.GetConn(); conn != nil {
+		logger.Debug("Sending items")
+		h.server.Unlock()
+		err := conn.StartGame(data)
+		h.server.Lock()
+		if err != nil {
+			if session.IsConnected() {
+				session.DisconnectWithError("Failed to start game: "+err.Error(), nil)
+			}
+			return
+		}
+		if !session.IsConnected() {
+			return
+		}
 	}
 
-	h.server.Lock()
-	defer h.server.Unlock()
-	session, p := h.session, h.player
-
-	session.GetLogger().Debug("Sending actor identifiers")
+	logger.Debug("Sending actor identifiers")
 	session.SendDataPacket(bedrock.AvailableActorIdentifiers())
 
-	session.GetLogger().Debug("Sending biome definitions")
+	logger.Debug("Sending biome definitions")
 	session.SendDataPacket(bedrock.BiomeDefinitionList())
 
-	session.GetLogger().Debug("Sending attributes")
-	session.SendDataPacket(entity.SyncAttributesPacket(p.GetID(), p.GetAttributeMap().GetAll()))
+	logger.Debug("Sending attributes")
+	session.GetEntityEventBroadcaster().SyncAttributes([]*mcpe.NetworkSession{session}, p, p.GetAttributeMap().GetAll())
 
-	session.GetLogger().Debug("Sending available commands")
-	// syncAvailableCommands: the command map isn't wired to players yet, so the list is empty.
-	session.SendDataPacket(&packet.AvailableCommands{})
+	logger.Debug("Sending available commands")
+	session.SyncAvailableCommands()
 
-	session.GetLogger().Debug("Sending abilities")
+	logger.Debug("Sending abilities")
 	session.SyncAbilities(p)
 	session.SyncAdventureSettings()
 
-	session.GetLogger().Debug("Sending effects")
+	logger.Debug("Sending effects")
 	for _, effect := range p.GetEffects().All() {
-		session.SendDataPacket(entity.EntityEffectAddedPacket(p.GetID(), effect, false))
+		session.GetEntityEventBroadcaster().OnEntityEffectAdded([]*mcpe.NetworkSession{session}, p, effect, false)
 	}
 
-	session.GetLogger().Debug("Sending actor metadata")
+	logger.Debug("Sending actor metadata")
 	p.SendData([]world.EntityViewer{p}, nil)
 
-	session.GetLogger().Debug("Sending inventory")
-	session.SyncAllInventories()
-	session.SyncSelectedHotbarSlot()
+	logger.Debug("Sending inventory")
+	h.inventoryManager.SyncAll()
+	h.inventoryManager.SyncSelectedHotbarSlot()
 
-	session.GetLogger().Debug("Sending creative inventory data")
-	// InventoryManager::syncCreative: the 1.26.50 creative inventory (see bedrock.CreativeContent).
-	session.SendDataPacket(bedrock.CreativeContent())
+	logger.Debug("Sending creative inventory data")
+	h.inventoryManager.SyncCreative()
 
-	session.GetLogger().Debug("Sending crafting data")
-	// CraftingDataCache::getCache: the 1.26.50 recipes (see bedrock.CraftingData). CraftingManager
-	// isn't ported, so crafting itself doesn't work yet.
+	logger.Debug("Sending crafting data")
+	// CraftingDataCache::getCache: CraftingManager isn't ported, so this is the vendored 1.26.50
+	// recipe list (see bedrock.CraftingData); crafting itself doesn't work yet.
 	session.SendDataPacket(bedrock.CraftingData())
 
-	session.GetLogger().Debug("Sending player list")
+	logger.Debug("Sending player list")
 	session.SyncPlayerList(h.server.GetOnlinePlayers())
-	return nil
 }
 
 // startGameData is the StartGamePacket PreSpawnPacketHandler::setUp builds, as gophertunnel's
@@ -124,7 +132,7 @@ func (h *PreSpawnPacketHandler) startGameData() minecraft.GameData {
 		Pitch:           float32(location.Pitch),
 		Yaw:             float32(location.Yaw),
 		WorldSpawn:      protocol.BlockPos{int32(spawn.FloorX()), int32(spawn.FloorY()), int32(spawn.FloorZ())},
-		WorldGameMode:   h.server.GetDefaultGameMode(),
+		WorldGameMode:   convert.CoreGameModeToProtocol(int(h.server.GetGamemode())),
 		Time:            int64(w.GetTime()),
 		GameRules: []protocol.GameRule{
 			{Name: "naturalregeneration", Value: false}, //Hack for client side regeneration
@@ -144,8 +152,25 @@ func (h *PreSpawnPacketHandler) startGameData() minecraft.GameData {
 	}
 }
 
-// HandleDataPacket handles nothing: see PreSpawnPacketHandler's doc comment.
-func (h *PreSpawnPacketHandler) HandleDataPacket(pk packet.Packet) bool { return false }
+// CanHandle reports the packets PreSpawnPacketHandler handles (PacketHandlerInspector).
+func (h *PreSpawnPacketHandler) CanHandle(pk packet.Packet) bool {
+	_, ok := pk.(*packet.RequestChunkRadius)
+	return ok
+}
+
+// HandleDataPacket dispatches pk to handleRequestChunkRadius.
+func (h *PreSpawnPacketHandler) HandleDataPacket(pk packet.Packet) (bool, error) {
+	if pk, ok := pk.(*packet.RequestChunkRadius); ok {
+		return h.handleRequestChunkRadius(pk), nil
+	}
+	return false, nil
+}
+
+// handleRequestChunkRadius is a port of PreSpawnPacketHandler::handleRequestChunkRadius.
+func (h *PreSpawnPacketHandler) handleRequestChunkRadius(pk *packet.RequestChunkRadius) bool {
+	h.player.SetViewDistance(int(pk.ChunkRadius))
+	return true
+}
 
 var (
 	itemRegistryOnce  sync.Once

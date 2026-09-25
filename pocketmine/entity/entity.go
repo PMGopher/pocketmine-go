@@ -1423,6 +1423,12 @@ func (e *Entity) SetPositionAndRotation(pos math.Vector3, w *world.World, yaw, p
 	return false
 }
 
+// ResetLastMovements is Entity::resetLastMovements (Player::teleport needs it).
+func (e *Entity) ResetLastMovements() { e.resetLastMovements() }
+
+// SetYSize sets Entity::$ySize (Player::sendPosition resets it).
+func (e *Entity) SetYSize(ySize float64) { e.ySize = ySize }
+
 func (e *Entity) resetLastMovements() {
 	e.lastLocation = e.location.AsLocation()
 	e.lastMotion = e.motion

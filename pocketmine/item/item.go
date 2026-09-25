@@ -42,17 +42,13 @@ const (
 // as block.Behavior/block.Block: concrete leaf types embed ItemBase, call Init(self) once their
 // own fields are set to their defaults, and override whichever methods they need.
 //
-// Not ported: NbtSerialize/NbtDeserialize/SafeNbtDeserialize (need
-// GlobalItemDataHandlers, a whole item-data-driven serializer/deserializer registry),
-// legacyJsonDeserialize (deprecated upgrade path, not worth porting), GetPlacementTransaction and
-// GetBlock/CanBePlaced (need a concrete world.BlockTransaction and the block registry). Also not
-// ported: the Player/Entity-interaction methods (OnInteractBlock, OnClickAir, OnReleaseUsing,
-// OnDestroyBlock, OnAttackEntity, OnInteractEntity) - these need a real Player/Entity
-// with far more machinery than the block package's minimal local interfaces provide (inventory,
-// hunger, world access), so leaf item types in this port can't meaningfully override them yet;
-// concrete types that would (like FlintSteel.OnInteractBlock) document the gap individually
-// instead.
+// Not ported: NbtSerialize/NbtDeserialize/SafeNbtDeserialize (need GlobalItemDataHandlers, a
+// whole item-data-driven serializer/deserializer registry) and legacyJsonDeserialize (deprecated
+// upgrade path). The Player/Entity interaction methods (OnInteractBlock, OnClickAir, ...) are in
+// item_interaction.go; items that override them do so with the small player interfaces they need.
 type Item interface {
+	interactions
+
 	Clone() Item
 
 	GetTypeId() int

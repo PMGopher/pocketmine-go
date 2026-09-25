@@ -2,6 +2,8 @@ package block
 
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -105,8 +107,20 @@ func (p *PressurePlate) OnScheduledUpdate() {
 
 	newState, pressedChange := self.calculatePlateState(activatingEntities)
 
-	// PressurePlateUpdateEvent isn't fired (deferred concrete event subclass - see the project
-	// todo list), so newState/pressedChange are always taken as-is (never cancelled).
+	//always call this, in case there are new entities on the plate
+	if event.HasHandlers[blockevent.PressurePlateUpdateEvent]() {
+		entities := make([]blockevent.Entity, len(activatingEntities))
+		for i, e := range activatingEntities {
+			entities[i] = e
+		}
+		ev := blockevent.NewPressurePlateUpdateEvent(p.self, newState, entities)
+		event.Call(ev)
+		if ev.IsCancelled() {
+			newState = nil
+		} else if ns, ok := ev.GetNewState().(Behavior); ok {
+			newState = ns
+		}
+	}
 
 	if newState != nil {
 		if err := world.SetBlock(p.position, newState); err != nil {

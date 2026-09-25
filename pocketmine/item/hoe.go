@@ -2,8 +2,7 @@ package item
 
 import "pocketmine-go/pocketmine/block"
 
-// Hoe is a port of pocketmine\item\Hoe. See Axe's doc comment for why
-// OnDestroyBlock/OnAttackEntity aren't ported.
+// Hoe is a port of pocketmine\item\Hoe.
 type Hoe struct {
 	TieredTool
 }

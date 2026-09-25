@@ -7,9 +7,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+
 	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/lang"
 	"pocketmine-go/pocketmine/log"
+	"pocketmine-go/pocketmine/network/mcpe"
 	"pocketmine-go/pocketmine/player"
 )
 
@@ -25,6 +28,29 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// recordingSender is an mcpe.PacketSender that keeps the packets instead of sending them.
+type recordingSender struct {
+	packets []packet.Packet
+	closed  bool
+}
+
+func (r *recordingSender) WritePacket(pk packet.Packet) error {
+	r.packets = append(r.packets, pk)
+	return nil
+}
+
+func (r *recordingSender) Close() error {
+	r.closed = true
+	return nil
+}
+
+func newTestSession(s *Server, port int) (*mcpe.NetworkSession, *recordingSender) {
+	sender := &recordingSender{}
+	broadcaster := mcpe.NewStandardPacketBroadcaster()
+	session := mcpe.NewNetworkSession(s, s.GetNetwork().GetSessionManager(), sender, nil, broadcaster, mcpe.NewStandardEntityEventBroadcaster(broadcaster), "127.0.0.1", port)
+	return session, sender
 }
 
 func newTestPlayerInfo(t *testing.T, name string) *player.XboxLivePlayerInfo {
@@ -58,8 +84,9 @@ func TestNewPreparesDataFolderAndDefaultWorld(t *testing.T) {
 func TestCreatePlayerNewAndReturning(t *testing.T) {
 	s := newTestServer(t)
 	w := s.GetWorldManager().GetDefaultWorld()
+	session, _ := newTestSession(s, 1)
 
-	p, err := s.CreatePlayer(nil, newTestPlayerInfo(t, "Alex"))
+	p, err := s.CreatePlayer(session, newTestPlayerInfo(t, "Alex"), false, s.GetOfflinePlayerData("Alex"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +103,7 @@ func TestCreatePlayerNewAndReturning(t *testing.T) {
 	p.Save()
 	p.Close()
 
-	again, err := s.CreatePlayer(nil, newTestPlayerInfo(t, "Alex"))
+	again, err := s.CreatePlayer(session, newTestPlayerInfo(t, "Alex"), false, s.GetOfflinePlayerData("Alex"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,10 +114,14 @@ func TestCreatePlayerNewAndReturning(t *testing.T) {
 
 func TestOnlinePlayersAndBroadcast(t *testing.T) {
 	s := newTestServer(t)
-	a, _ := s.CreatePlayer(nil, newTestPlayerInfo(t, "A"))
-	b, _ := s.CreatePlayer(nil, newTestPlayerInfo(t, "B"))
-	s.AddOnlinePlayer(a)
-	s.AddOnlinePlayer(b)
+	sessionA, _ := newTestSession(s, 1)
+	sessionB, _ := newTestSession(s, 2)
+	// Login adds them to the online players (NetworkSession::onPlayerCreated).
+	sessionA.Login(newTestPlayerInfo(t, "A").WithoutXboxData(), false, false)
+	sessionB.Login(newTestPlayerInfo(t, "B").WithoutXboxData(), false, false)
+	a, b := sessionA.GetPlayer(), sessionB.GetPlayer()
+	s.SubscribeToBroadcastChannel(BroadcastChannelUsers, a)
+	s.SubscribeToBroadcastChannel(BroadcastChannelUsers, b)
 	if got := s.GetOnlinePlayers(); len(got) != 2 || got[0] != a || got[1] != b {
 		t.Fatalf("online players = %v, want [A B] in join order", got)
 	}
@@ -115,6 +146,7 @@ func TestGetAllowedViewDistance(t *testing.T) {
 func TestShutdownUnloadsWorldsAndSavesConfig(t *testing.T) {
 	s := newTestServer(t)
 	s.Shutdown()
+	s.ForceShutdown()
 	if len(s.GetWorldManager().GetWorlds()) != 0 {
 		t.Error("worlds are still loaded after Shutdown")
 	}
@@ -131,5 +163,73 @@ func TestNewWorldPregeneratesSpawnTerrain(t *testing.T) {
 		if chunk, ok := w.GetChunk(c[0], c[1]); !ok || !chunk.IsPopulated() {
 			t.Errorf("spawn chunk %v isn't generated and populated", c)
 		}
+	}
+}
+
+func TestLoginToSpawn(t *testing.T) {
+	// NetworkSession's login phase (setAuthenticationStatus -> createPlayer -> onPlayerCreated ->
+	// PreSpawnPacketHandler) without a gophertunnel connection: the spawn chunks are then sent
+	// by the tick, like PHP.
+	s := newTestServer(t)
+	s.Lock()
+	defer s.Unlock()
+	session, sender := newTestSession(s, 1)
+	session.Login(newTestPlayerInfo(t, "Steve").WithoutXboxData(), false, false)
+	p := session.GetPlayer()
+	if p == nil || !session.IsConnected() {
+		t.Fatal("player wasn't created")
+	}
+	if got := s.GetOnlinePlayers(); len(got) != 1 || got[0] != p {
+		t.Fatalf("online players = %v", got)
+	}
+	if session.GetInvManager() == nil {
+		t.Fatal("no InventoryManager")
+	}
+	var sawCreative, sawAbilities bool
+	for _, pk := range sender.packets {
+		switch pk.(type) {
+		case *packet.CreativeContent:
+			sawCreative = true
+		case *packet.UpdateAbilities:
+			sawAbilities = true
+		}
+	}
+	if !sawCreative || !sawAbilities {
+		t.Errorf("pre-spawn packets missing: creative=%v abilities=%v", sawCreative, sawAbilities)
+	}
+
+	session.OnClientRequestChunkRadius(4)
+	if !p.IsSpawned() {
+		t.Fatal("player didn't spawn after its spawn chunks were sent")
+	}
+
+	// Duplicate login: the existing session is kicked (PlayerDuplicateLoginEvent not cancelled).
+	session2, _ := newTestSession(s, 2)
+	session2.Login(newTestPlayerInfo(t, "steve").WithoutXboxData(), false, false)
+	if session.IsConnected() || !sender.closed {
+		t.Error("the existing session should have been disconnected by the duplicate login")
+	}
+	if !session2.IsConnected() {
+		t.Error("the new session should have been accepted")
+	}
+}
+
+func TestWhitelistAndOps(t *testing.T) {
+	s := newTestServer(t)
+	s.GetConfigGroup().SetConfigBool(PropertyWhitelist, true)
+	if s.IsWhitelisted("Alex") {
+		t.Error("Alex shouldn't be whitelisted yet")
+	}
+	s.AddWhitelist("Alex")
+	if !s.IsWhitelisted("alex") {
+		t.Error("whitelist should be case-insensitive")
+	}
+	s.AddOp("Bob")
+	if !s.IsOp("bob") || !s.IsWhitelisted("Bob") {
+		t.Error("ops are always whitelisted")
+	}
+	s.RemoveOp("BOB")
+	if s.IsOp("Bob") {
+		t.Error("RemoveOp didn't remove the op")
 	}
 }

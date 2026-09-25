@@ -1,7 +1,11 @@
 package block
 
 import (
+	"fmt"
 	stdmath "math"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
+	"pocketmine-go/pocketmine/utils"
 
 	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
@@ -96,23 +100,43 @@ func (b *BaseSign) Place(tx BlockTransaction, item Item, blockReplace Behavior, 
 	return b.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnPostPlace should open a sign editor GUI for the placing player - needs World.GetEntity and
-// the network layer (Player.OpenSignEditor), neither ported yet, so this is a documented no-op
-// for now.
+// signEditor is the surface of pocketmine\player\Player the sign editor needs.
+type signEditor interface {
+	IsConnected() bool
+	OpenSignEditor(position math.Vector3, frontFace bool)
+}
+
+// OnPostPlace is a port of BaseSign::onPostPlace: the placing player gets the sign editor.
+func (b *BaseSign) OnPostPlace() {
+	if !b.HasEditor || GetEntityFunc == nil {
+		return
+	}
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return
+	}
+	//TODO: HACK! We really shouldn't be keeping disconnected players (and generally flagged-for-despawn entities)
+	//in the world's entity table, but changing that is too risky for a hotfix. This workaround will do for now.
+	if e, ok := GetEntityFunc(world, b.EditorEntityRuntimeID); ok {
+		if p, ok := e.(signEditor); ok && p.IsConnected() {
+			p.OpenSignEditor(b.position.AsVector3(), true)
+		}
+	}
+}
 
 func (b *BaseSign) getHitboxCenter() math.Vector3 {
 	pos := b.position.AsVector3()
 	return pos.Add(0.5, 0.5, 0.5)
 }
 
-// doSignChange is a port of BaseSign::doSignChange. SignChangeEvent is treated as always
-// uncancelled, matching every other deferred concrete event in this port.
-func (b *BaseSign) doSignChange(newText blockutils.SignText, item Item, frontFace bool) bool {
-	if frontFace {
-		b.Text = newText
-	} else {
-		b.BackText = newText
+// doSignChange is a port of BaseSign::doSignChange.
+func (b *BaseSign) doSignChange(newText blockutils.SignText, player Player, item Item, frontFace bool) bool {
+	ev := blockevent.NewSignChangeEvent(b.self, player, b.getFaceText(frontFace), newText, frontFace)
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
 	}
+	b.setFaceText(frontFace, ev.GetNewText().(blockutils.SignText))
 	world, err := b.position.GetWorld()
 	if err != nil {
 		return false
@@ -124,6 +148,14 @@ func (b *BaseSign) doSignChange(newText blockutils.SignText, item Item, frontFac
 	return true
 }
 
+func (b *BaseSign) setFaceText(frontFace bool, text blockutils.SignText) {
+	if frontFace {
+		b.Text = text
+	} else {
+		b.BackText = text
+	}
+}
+
 func (b *BaseSign) getFaceText(frontFace bool) blockutils.SignText {
 	if frontFace {
 		return b.Text
@@ -131,13 +163,13 @@ func (b *BaseSign) getFaceText(frontFace bool) blockutils.SignText {
 	return b.BackText
 }
 
-func (b *BaseSign) changeSignGlowingState(glowing bool, item Item, frontFace bool) bool {
+func (b *BaseSign) changeSignGlowingState(glowing bool, player Player, item Item, frontFace bool) bool {
 	text := b.getFaceText(frontFace)
 	if text.IsGlowing() == glowing {
 		return false
 	}
 	baseColor := text.GetBaseColor()
-	if !b.doSignChange(blockutils.NewSignText(sliceOfSignTextLines(text), &baseColor, glowing), item, frontFace) {
+	if !b.doSignChange(blockutils.NewSignText(sliceOfSignTextLines(text), &baseColor, glowing), player, item, frontFace) {
 		return false
 	}
 	if world, err := b.position.GetWorld(); err == nil {
@@ -178,9 +210,7 @@ func (b *BaseSign) interactsFront(hitboxCenter, playerPosition math.Vector3, sig
 	return stdmath.Abs(rotation) <= 90.0
 }
 
-// OnInteract is a port of BaseSign::onInteract, minus the final openSignEditor call (needs the
-// network layer, not ported yet - documented below). The dye-colouring/glow-toggle/waxing logic
-// is fully functional.
+// OnInteract is a port of BaseSign::onInteract.
 func (b *BaseSign) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return false
@@ -212,7 +242,7 @@ func (b *BaseSign) OnInteract(item Item, face math.Facing, clickVector math.Vect
 		rgb := dyeColor.GetRgbValue()
 		text := b.getFaceText(frontFace)
 		if rgb.ToARGB() != text.GetBaseColor().ToARGB() {
-			if b.doSignChange(blockutils.NewSignText(sliceOfSignTextLines(text), &rgb, text.IsGlowing()), item, frontFace) {
+			if b.doSignChange(blockutils.NewSignText(sliceOfSignTextLines(text), &rgb, text.IsGlowing()), player, item, frontFace) {
 				if world, err := b.position.GetWorld(); err == nil {
 					world.AddSound(b.position.AsVector3(), sound.DyeUseSound{})
 				}
@@ -223,9 +253,9 @@ func (b *BaseSign) OnInteract(item Item, face math.Facing, clickVector math.Vect
 		handled := false
 		switch item.GetTypeId() {
 		case itemTypeIDsInkSac:
-			handled = b.changeSignGlowingState(false, item, frontFace)
+			handled = b.changeSignGlowingState(false, player, item, frontFace)
 		case itemTypeIDsGlowInkSac:
-			handled = b.changeSignGlowingState(true, item, frontFace)
+			handled = b.changeSignGlowingState(true, player, item, frontFace)
 		case itemTypeIDsHoneycomb:
 			handled = b.wax(item)
 		}
@@ -234,8 +264,9 @@ func (b *BaseSign) OnInteract(item Item, face math.Facing, clickVector math.Vect
 		}
 	}
 
-	// PHP falls through to player.openSignEditor(...) here and returns true - needs the network
-	// layer, not ported yet.
+	if editor, ok := player.(signEditor); ok {
+		editor.OpenSignEditor(b.position.AsVector3(), frontFace)
+	}
 	return true
 }
 
@@ -271,4 +302,42 @@ func (b *BaseSign) GetFuelTime() int {
 		return 200
 	}
 	return 0
+}
+
+// UpdateFaceText is a port of BaseSign::updateFaceText: called by the player controller (network
+// session) to update the sign text, firing events as appropriate. It reports whether the sign
+// update was successful, and returns an error if the text payload is too large.
+func (b *BaseSign) UpdateFaceText(author Player, authorName string, frontFace bool, text blockutils.SignText) (bool, error) {
+	size := 0
+	for _, line := range text.GetLines() {
+		size += len(line)
+	}
+	if size > 1000 {
+		return false, fmt.Errorf("%s tried to write %d bytes of text onto a sign (bigger than max 1000)", authorName, size)
+	}
+	oldText := b.getFaceText(frontFace)
+	lines := text.GetLines()
+	cleaned := make([]string, len(lines))
+	for i, line := range lines {
+		cleaned[i] = utils.Clean(line, false)
+	}
+	baseColor := oldText.GetBaseColor()
+	ev := blockevent.NewSignChangeEvent(b.self, author, oldText, blockutils.NewSignText(cleaned, &baseColor, oldText.IsGlowing()), frontFace)
+	if b.Waxed || !b.HasEditor || b.EditorEntityRuntimeID != author.GetID() {
+		ev.Cancel()
+	}
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false, nil
+	}
+	b.setFaceText(frontFace, ev.GetNewText().(blockutils.SignText))
+	b.SetEditorEntityRuntimeID(0, false)
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return false, nil
+	}
+	if err := world.SetBlock(b.position, b.self); err != nil {
+		return false, err
+	}
+	return true, nil
 }

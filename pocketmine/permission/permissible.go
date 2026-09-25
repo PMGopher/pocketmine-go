@@ -2,6 +2,8 @@ package permission
 
 import (
 	"sync"
+
+	"pocketmine-go/pocketmine/utils"
 )
 
 // Permissible is a port of pocketmine\permission\PermissibleInternal, combined with what
@@ -21,8 +23,12 @@ type Permissible struct {
 	rootPermissions        map[string]bool
 	attachments            map[*PermissionAttachment]struct{}
 	permissions            map[string]*AttachmentInfo
-	recalculationCallbacks []func(changedPermissionsOldValues map[string]bool)
+	recalculationCallbacks *utils.ObjectSet[*PermissionRecalculationCallback]
 }
+
+// PermissionRecalculationCallback is called with the old values of the permissions that changed
+// whenever the permissions are recalculated.
+type PermissionRecalculationCallback func(changedPermissionsOldValues map[string]bool)
 
 func NewPermissible(basePermissions map[string]bool) *Permissible {
 	root := make(map[string]bool, len(basePermissions))
@@ -33,6 +39,8 @@ func NewPermissible(basePermissions map[string]bool) *Permissible {
 		rootPermissions: root,
 		attachments:     map[*PermissionAttachment]struct{}{},
 		permissions:     map[string]*AttachmentInfo{},
+
+		recalculationCallbacks: utils.NewObjectSet[*PermissionRecalculationCallback](),
 	}
 	p.RecalculatePermissions()
 	return p
@@ -146,7 +154,10 @@ func (p *Permissible) RecalculatePermissions() map[string]bool {
 		diff[name] = oldInfo.Value()
 	}
 
-	callbacks := append([]func(map[string]bool){}, p.recalculationCallbacks...)
+	var callbacks []func(map[string]bool)
+	for cb := range p.recalculationCallbacks.All() {
+		callbacks = append(callbacks, *cb)
+	}
 	p.mu.Unlock()
 
 	if len(diff) > 0 {
@@ -187,7 +198,14 @@ func (p *Permissible) calculateChildPermissionsLocked(children []NamedPermission
 func (p *Permissible) AddPermissionRecalculationCallback(cb func(changedPermissionsOldValues map[string]bool)) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.recalculationCallbacks = append(p.recalculationCallbacks, cb)
+	f := PermissionRecalculationCallback(cb)
+	p.recalculationCallbacks.Add(&f)
+}
+
+// GetPermissionRecalculationCallbacks is a port of
+// PermissibleInternal::getPermissionRecalculationCallbacks.
+func (p *Permissible) GetPermissionRecalculationCallbacks() *utils.ObjectSet[*PermissionRecalculationCallback] {
+	return p.recalculationCallbacks
 }
 
 func (p *Permissible) GetEffectivePermissions() map[string]*AttachmentInfo {
@@ -212,7 +230,7 @@ func (p *Permissible) Close() {
 		attachments = append(attachments, a)
 	}
 	p.attachments = map[*PermissionAttachment]struct{}{}
-	p.recalculationCallbacks = nil
+	p.recalculationCallbacks.Clear()
 	p.mu.Unlock()
 
 	for _, a := range attachments {

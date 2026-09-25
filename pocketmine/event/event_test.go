@@ -108,3 +108,64 @@ func TestRecursiveEventCallPanics(t *testing.T) {
 	})
 	CallOn(m, &testEvent{})
 }
+
+type parentTestEvent struct {
+	CancellableTrait
+	Damage float64
+}
+
+type childTestEvent struct {
+	parentTestEvent
+	Damager string
+}
+
+type grandchildTestEvent struct {
+	childTestEvent
+}
+
+func init() {
+	DeclareParent[childTestEvent, parentTestEvent]()
+	DeclareParent[grandchildTestEvent, childTestEvent]()
+}
+
+func TestParentHandlersReceiveChildEvents(t *testing.T) {
+	m := NewManager()
+	var order []string
+
+	RegisterListener[parentTestEvent](m, "p", Normal, false, func(e *parentTestEvent) {
+		order = append(order, "parent")
+		e.Damage = 5
+	})
+	RegisterListener[childTestEvent](m, "p", Normal, false, func(e *childTestEvent) { order = append(order, "child") })
+	RegisterListener[childTestEvent](m, "p", Monitor, false, func(e *childTestEvent) { order = append(order, "child-monitor") })
+
+	ev := &grandchildTestEvent{}
+	CallOn(m, ev)
+	if want := []string{"child", "parent", "child-monitor"}; len(order) != 3 || order[0] != want[0] || order[1] != want[1] || order[2] != want[2] {
+		t.Fatalf("order = %v, want %v", order, want)
+	}
+	if ev.Damage != 5 {
+		t.Fatalf("parent handler's change wasn't applied to the child event")
+	}
+
+	order = nil
+	CallOn(m, &parentTestEvent{})
+	if len(order) != 1 || order[0] != "parent" {
+		t.Fatalf("child handlers received a parent event: %v", order)
+	}
+	if !HasHandlersOn[grandchildTestEvent](m) {
+		t.Fatalf("HasHandlers should count parent handlers")
+	}
+}
+
+func TestParentHandlerCancelsChild(t *testing.T) {
+	m := NewManager()
+	RegisterListener[parentTestEvent](m, "p", Lowest, false, func(e *parentTestEvent) { e.Cancel() })
+	called := false
+	RegisterListener[childTestEvent](m, "p", Normal, false, func(e *childTestEvent) { called = true })
+	ev := &childTestEvent{}
+	CallOn(m, ev)
+	if !ev.IsCancelled() || called {
+		t.Fatalf("cancelled=%v called=%v", ev.IsCancelled(), called)
+	}
+}

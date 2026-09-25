@@ -587,3 +587,37 @@ type IgniteSound struct{}
 func (IgniteSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
 	return levelEventSound(packet.LevelEventSoundFuse, 0, pos)
 }
+
+// ThrowSound is a port of pocketmine\world\sound\ThrowSound.
+type ThrowSound struct{}
+
+func (ThrowSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return []packet.Packet{&packet.LevelSoundEvent{
+		SoundType:      packet.SoundEventThrow,
+		Position:       vec3(pos),
+		ExtraData:      -1,
+		EntityType:     "minecraft:player",
+		EntityUniqueID: -1,
+	}}
+}
+
+// BowShootSound is a port of pocketmine\world\sound\BowShootSound.
+type BowShootSound struct{}
+
+func (BowShootSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBow, pos, false, -1)
+}
+
+// TridentThrowSound is a port of pocketmine\world\sound\TridentThrowSound.
+type TridentThrowSound struct{}
+
+func (TridentThrowSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventTridentThrow, pos, false, -1)
+}
+
+// RespawnAnchorDepleteSound is a port of pocketmine\world\sound\RespawnAnchorDepleteSound.
+type RespawnAnchorDepleteSound struct{}
+
+func (RespawnAnchorDepleteSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventRespawnAnchorDeplete, pos, false, -1)
+}

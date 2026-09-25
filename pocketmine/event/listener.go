@@ -17,3 +17,12 @@ type PluginRef = any
 // no way to exist here. Registration is explicit and type-safe instead, via RegisterListener,
 // which takes priority/handleCancelled as ordinary arguments instead of parsed annotations.
 type Listener interface{}
+
+// ListenerMethodTags is a port of pocketmine\event\ListenerMethodTags: the doc-comment tags PHP
+// listeners use. RegisterListener takes them as arguments instead (see Listener), but the names
+// are kept for plugin descriptions and messages that refer to them.
+const (
+	ListenerTagHandleCancelled = "handleCancelled"
+	ListenerTagNotHandler      = "notHandler"
+	ListenerTagPriority        = "priority"
+)

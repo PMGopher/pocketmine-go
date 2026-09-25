@@ -3,6 +3,9 @@ package world
 import (
 	"fmt"
 	stdmath "math"
+	"pocketmine-go/pocketmine/event"
+	worldevent "pocketmine-go/pocketmine/event/world"
+	"strings"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
@@ -11,8 +14,6 @@ import (
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/nbt"
 	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
-	"pocketmine-go/pocketmine/world/particle"
-	"pocketmine-go/pocketmine/world/sound"
 )
 
 // Difficulty constants, a port of World::DIFFICULTY_*.
@@ -388,34 +389,6 @@ func (w *World) GetViewersForPosition(pos math.Vector3) []EntityViewer {
 	return viewers
 }
 
-// AddSoundFor is a port of World::addSound with an explicit $players list (nil means everyone
-// viewing pos, like PHP's null).
-func (w *World) AddSoundFor(pos math.Vector3, s sound.Sound, targets []EntityViewer) {
-	if targets == nil {
-		w.AddSound(pos, s)
-		return
-	}
-	for _, pk := range s.Encode(pos, w.translator) {
-		for _, t := range targets {
-			t.SendPacket(pk)
-		}
-	}
-}
-
-// AddParticleFor is a port of World::addParticle with an explicit $players list (nil means
-// everyone viewing pos).
-func (w *World) AddParticleFor(pos math.Vector3, p particle.Particle, targets []EntityViewer) {
-	if targets == nil {
-		w.AddParticle(pos, p)
-		return
-	}
-	for _, pk := range p.Encode(pos, w.translator) {
-		for _, t := range targets {
-			t.SendPacket(pk)
-		}
-	}
-}
-
 // DropItem is a port of World::dropItem: spawns an item entity (nil for an empty item). motion nil
 // means a small random motion; PHP's default delay is 10 ticks.
 func (w *World) DropItem(source math.Vector3, it item.Item, motion *math.Vector3, delay int) Entity {
@@ -437,13 +410,19 @@ func (w *World) DropExperience(pos math.Vector3, amount int) []Entity {
 func (w *World) GetDifficulty() int { return w.difficulty }
 
 // SetDifficulty is a port of World::setDifficulty (panicking on an invalid level, like PHP's
-// InvalidArgumentException). Not ported: WorldDifficultyChangeEvent (world events aren't ported)
-// and syncing the difficulty to players' network sessions.
+// InvalidArgumentException): fires WorldDifficultyChangeEvent and syncs the difficulty to every
+// player in the world (NetworkSession::syncWorldDifficulty).
 func (w *World) SetDifficulty(difficulty int) {
 	if difficulty < 0 || difficulty > 3 {
 		panic(fmt.Sprintf("Invalid difficulty level %d", difficulty))
 	}
+	event.Call(worldevent.NewWorldDifficultyChangeEvent(w, w.difficulty, difficulty))
 	w.difficulty = difficulty
+
+	pk := &packet.SetDifficulty{Difficulty: uint32(difficulty)}
+	for _, p := range w.GetPlayers() {
+		p.SendPacket(pk)
+	}
 }
 
 // IsInLoadedTerrain is a port of World::isInLoadedTerrain.
@@ -592,4 +571,30 @@ func (w *World) GetCollisionBlocks(bb math.AxisAlignedBB, targetFirst bool) []bl
 	}
 
 	return collides
+}
+
+func init() {
+	block.GetEntityFunc = func(w block.World, id int) (block.Entity, bool) {
+		if world, ok := w.(*World); ok {
+			if e, ok := world.GetEntity(id); ok {
+				return e, true
+			}
+		}
+		return nil, false
+	}
+}
+
+// GetDifficultyFromString is a port of World::getDifficultyFromString: -1 for an unknown name.
+func GetDifficultyFromString(str string) int {
+	switch strings.ToLower(strings.TrimSpace(str)) {
+	case "0", "peaceful", "p":
+		return DifficultyPeaceful
+	case "1", "easy", "e":
+		return DifficultyEasy
+	case "2", "normal", "n":
+		return DifficultyNormal
+	case "3", "hard", "h":
+		return DifficultyHard
+	}
+	return -1
 }

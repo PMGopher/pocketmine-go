@@ -2,8 +2,7 @@ package item
 
 import "pocketmine-go/pocketmine/block"
 
-// Shears is a port of pocketmine\item\Shears. OnDestroyBlock (applyDamage(1) after breaking a
-// non-instant block) isn't ported - see Axe's doc comment for why.
+// Shears is a port of pocketmine\item\Shears..
 type Shears struct {
 	Tool
 }

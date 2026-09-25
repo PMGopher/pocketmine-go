@@ -8,89 +8,25 @@ import (
 
 	"pocketmine-go/pocketmine/lang"
 	"pocketmine-go/pocketmine/math"
-	"pocketmine-go/pocketmine/nbt"
 )
-
-// fakeServer records what Player asks of the server.
-type fakeServer struct {
-	online    []*Player
-	broadcast []any
-	commands  []string
-	saved     map[string]*nbt.CompoundTag
-	removed   []*Player
-	tick      int64
-}
-
-func (s *fakeServer) BroadcastMessage(message any, recipients []*Player) int {
-	s.broadcast = append(s.broadcast, message)
-	if recipients == nil {
-		recipients = s.online
-	}
-	for _, p := range recipients {
-		p.SendMessage(message)
-	}
-	return len(recipients)
-}
-func (s *fakeServer) DispatchCommand(sender *Player, commandLine string) bool {
-	s.commands = append(s.commands, commandLine)
-	return true
-}
-func (s *fakeServer) GetTick() int64              { return s.tick }
-func (s *fakeServer) GetOnlinePlayers() []*Player { return s.online }
-func (s *fakeServer) RemoveOnlinePlayer(p *Player) {
-	s.removed = append(s.removed, p)
-	for i, o := range s.online {
-		if o == p {
-			s.online = append(s.online[:i], s.online[i+1:]...)
-		}
-	}
-}
-func (s *fakeServer) SaveOfflinePlayerData(name string, data *nbt.CompoundTag) {
-	if s.saved == nil {
-		s.saved = map[string]*nbt.CompoundTag{}
-	}
-	s.saved[name] = data
-}
-
-// fakeSession records the packets and chat messages sent to a player.
-type fakeSession struct {
-	packets       []packet.Packet
-	messages      []any
-	viewAreaSyncs int
-}
-
-func (s *fakeSession) SendDataPacket(pk packet.Packet) { s.packets = append(s.packets, pk) }
-func (s *fakeSession) OnChatMessage(message any)       { s.messages = append(s.messages, message) }
-func (s *fakeSession) SyncViewAreaCenterPoint(pos math.Vector3, viewDistance int) {
-	s.viewAreaSyncs++
-}
-
-func newConnectedPlayer(t *testing.T, server *fakeServer) (*Player, *fakeSession) {
-	t.Helper()
-	p := newTestPlayer(t, 1, math.NewVector3(0.5, 70, 0.5))
-	session := &fakeSession{}
-	p.SetServer(server)
-	p.SetNetworkSession(session)
-	server.online = append(server.online, p)
-	return p, session
-}
 
 func TestChatBroadcastsWithTheStandardFormatter(t *testing.T) {
 	server := &fakeServer{}
 	p, session := newConnectedPlayer(t, server)
+	p.DoFirstSpawn()
 
 	if !p.Chat("hello") {
 		t.Fatal("Chat returned false")
 	}
-	if len(server.broadcast) != 1 {
-		t.Fatalf("broadcast %d messages, want 1", len(server.broadcast))
+	if len(server.broadcast) != 2 { // the join message, then the chat message
+		t.Fatalf("broadcast %d messages, want 2", len(server.broadcast))
 	}
-	tr, ok := server.broadcast[0].(*lang.Translatable)
+	tr, ok := server.broadcast[1].(*lang.Translatable)
 	if !ok || tr.Text() != "chat.type.text" || tr.Parameter(0) != "Steve" || tr.Parameter(1) != "hello" {
 		t.Errorf("broadcast %#v, want chat.type.text [Steve hello]", server.broadcast[0])
 	}
-	if len(session.messages) != 1 {
-		t.Errorf("sender received %d messages, want its own message", len(session.messages))
+	if len(session.messages) != 2 {
+		t.Errorf("sender received %d messages, want its join and its own message", len(session.messages))
 	}
 }
 
@@ -163,7 +99,7 @@ func TestSaveDataRoundTrip(t *testing.T) {
 	w := newTestWorld(t)
 	p := newTestPlayerIn(t, w, math.NewVector3(10.5, 70, -3.5))
 	p.SetGamemode(GameModeCreative)
-	p.SetFirstPlayed(1234)
+	p.firstPlayed = 1234
 	p.SetHealth(7)
 	tag := p.GetSaveData()
 
@@ -171,7 +107,7 @@ func TestSaveDataRoundTrip(t *testing.T) {
 		t.Errorf("Level = %q, want %q", got, w.GetFolderName())
 	}
 
-	loaded := NewPlayerFromData("Steve", p.GetUniqueID(), "xuid-1", p.GetLocation(), GameModeSurvival, false, newTestSkin(t), tag, nil)
+	loaded, _ := newPlayerFor(t, &fakeServer{gamemode: GameModeSurvival}, w, p.GetLocation().Vector3, tag)
 	if loaded.GetGamemode() != GameModeCreative {
 		t.Errorf("game mode = %v, want the saved creative mode", loaded.GetGamemode())
 	}
@@ -182,7 +118,7 @@ func TestSaveDataRoundTrip(t *testing.T) {
 		t.Errorf("health = %v, want 7", loaded.GetHealth())
 	}
 
-	forced := NewPlayerFromData("Steve", p.GetUniqueID(), "xuid-1", p.GetLocation(), GameModeSurvival, true, newTestSkin(t), tag, nil)
+	forced, _ := newPlayerFor(t, &fakeServer{gamemode: GameModeSurvival, force: true}, w, p.GetLocation().Vector3, tag)
 	if forced.GetGamemode() != GameModeSurvival {
 		t.Errorf("with force-gamemode the game mode = %v, want the server's survival", forced.GetGamemode())
 	}
@@ -190,9 +126,9 @@ func TestSaveDataRoundTrip(t *testing.T) {
 
 func TestDoFirstSpawnAndOnPostDisconnect(t *testing.T) {
 	server := &fakeServer{}
-	p, _ := newConnectedPlayer(t, server)
+	p, session := newConnectedPlayer(t, server)
 	other, otherSession := newConnectedPlayer(t, server)
-	_ = other
+	other.DoFirstSpawn()
 
 	p.DoFirstSpawn()
 	if !p.IsSpawned() || p.NoDamageTicks != 60 {
@@ -204,7 +140,8 @@ func TestDoFirstSpawnAndOnPostDisconnect(t *testing.T) {
 	}
 
 	before := len(otherSession.messages)
-	p.OnPostDisconnect()
+	session.disconnected = true
+	p.OnPostDisconnect("client disconnect", nil)
 	if len(otherSession.messages) != before+1 {
 		t.Error("the other player didn't get the leave message")
 	}
@@ -277,7 +214,8 @@ func TestDoChunkRequestsFollowsNextChunkOrderRun(t *testing.T) {
 	p, session := newConnectedPlayer(t, server)
 	p.SetViewDistance(4)
 
-	if ready := p.DoChunkRequests(); len(ready) == 0 {
+	p.DoChunkRequests()
+	if len(session.startedChunks) == 0 {
 		t.Fatal("no chunks after setting the view distance")
 	}
 	if session.viewAreaSyncs != 1 {

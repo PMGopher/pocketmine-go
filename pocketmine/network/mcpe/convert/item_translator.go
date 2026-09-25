@@ -49,6 +49,7 @@ var itemTypeNames = map[int]string{
 	item.BLAZE_ROD:              "minecraft:blaze_rod",
 	item.BONE_MEAL:              "minecraft:bone_meal",
 	item.BOOK:                   "minecraft:book",
+	item.BOW:                    "minecraft:bow",
 	item.BOWL:                   "minecraft:bowl",
 	item.BREAD:                  "minecraft:bread",
 	item.BUCKET:                 "minecraft:bucket",
@@ -160,4 +161,11 @@ func (t *ItemTranslator) ToNetworkID(it item.Item) (networkID int32, meta int16,
 		return 0, 0, 0, false
 	}
 	return networkID, 0, noBlockRuntimeID, true
+}
+
+// ItemTypeName is GlobalItemDataHandlers::getSerializer()->serializeType($item)->getName(): the
+// item's saved type name, for the item types that have a serializer so far.
+func ItemTypeName(it item.Item) (string, bool) {
+	name, ok := itemTypeNames[it.GetTypeId()]
+	return name, ok
 }

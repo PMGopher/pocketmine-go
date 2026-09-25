@@ -5,9 +5,14 @@ package world
 import (
 	"fmt"
 	"math/rand"
+	"pocketmine-go/pocketmine/event"
+	entityevent "pocketmine-go/pocketmine/event/entity"
+	worldevent "pocketmine-go/pocketmine/event/world"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	goleveldb "github.com/syndtr/goleveldb/leveldb"
@@ -128,6 +133,11 @@ type World struct {
 	entityLastKnownPositions map[int]math.Vector3
 	updateEntities           orderedEntitySet
 
+	// sleepTicks is World::$sleepTicks: ticks until the sleep check (CheckSleep) runs.
+	sleepTicks int
+	// closed is set once the world is unloaded.
+	closed bool
+
 	// difficulty is World::getDifficulty's value. PHP reads it through the provider's WorldData
 	// (level.dat); this port's World doesn't own its WorldData (cmd/pocketmine-go does), so the
 	// value is held here and kept in sync by the owner - see SetDifficulty.
@@ -177,6 +187,9 @@ type World struct {
 	// identity natively) exactly like PHP's own spl_object_id-keyed inner arrays.
 	chunkLoaders  map[[2]int]map[any]bool
 	tickingChunks map[[2]int]map[any]bool
+
+	// tickRateTime is World::$tickRateTime: how long the last tick took, in milliseconds.
+	tickRateTime float64
 
 	// chunkTickRadius mirrors World::$chunkTickRadius (pocketmine.yml's chunk-ticking.tick-radius,
 	// default 4) - tickChunks() is a no-op while this is <= 0.
@@ -259,8 +272,12 @@ func (w *World) GetFolderName() string { return w.folderName }
 // GetDisplayName is a port of World::getDisplayName.
 func (w *World) GetDisplayName() string { return w.displayName }
 
-// SetDisplayName is a port of World::setDisplayName.
-func (w *World) SetDisplayName(name string) { w.displayName = name }
+// SetDisplayName is a port of World::setDisplayName. The name is written to level.dat by
+// WorldManager when the world is saved (WorldData::setName).
+func (w *World) SetDisplayName(name string) {
+	event.Call(worldevent.NewWorldDisplayNameChangeEvent(w, w.displayName, name))
+	w.displayName = name
+}
 
 // GetChunk is a port of World::getChunk: a non-generating lookup (unlike GetOrLoadChunk/
 // generateChunkOnly, this never creates a chunk that isn't already loaded) - the
@@ -358,6 +375,9 @@ func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
 			if entityNBT, err := worldio.LoadEntities(w.provider, int32(chunkX), int32(chunkZ)); err == nil {
 				w.initChunkEntities(entityNBT)
 			}
+			if event.HasHandlers[worldevent.ChunkLoadEvent]() {
+				event.Call(worldevent.NewChunkLoadEvent(w, chunkX, chunkZ, c, false))
+			}
 			w.fireOnChunkLoaded(chunkX, chunkZ, c)
 			return c
 		}
@@ -365,6 +385,10 @@ func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
 
 	c := w.generator.GenerateChunk(chunkX, chunkZ)
 	w.chunks[key] = c
+	// setChunk's "$oldChunk === null" branch.
+	if event.HasHandlers[worldevent.ChunkLoadEvent]() {
+		event.Call(worldevent.NewChunkLoadEvent(w, chunkX, chunkZ, c, true))
+	}
 	w.fireOnChunkLoaded(chunkX, chunkZ, c)
 	return c
 }
@@ -410,11 +434,13 @@ func (w *World) OpenProvider(path string) error {
 }
 
 // SaveAll writes every currently-loaded chunk back to the open provider (see OpenProvider) - a
-// no-op if no provider is open.
+// no-op if no provider is open. It's the chunk half of World::save(true), which also fires
+// WorldSaveEvent.
 func (w *World) SaveAll() error {
 	if w.provider == nil {
 		return nil
 	}
+	event.Call(worldevent.NewWorldSaveEvent(w))
 	for key, chunk := range w.chunks {
 		if err := worldio.SaveChunk(w.provider, int32(key[0]), int32(key[1]), chunk, w.lookupBlockState); err != nil {
 			return err
@@ -426,8 +452,13 @@ func (w *World) SaveAll() error {
 	return nil
 }
 
+// IsClosed reports whether the world was unloaded (Close was called): a Position in it is no
+// longer valid.
+func (w *World) IsClosed() bool { return w.closed }
+
 // Close saves every loaded chunk (see SaveAll) and closes the on-disk provider, if one is open.
 func (w *World) Close() error {
+	w.closed = true
 	if w.provider == nil {
 		return nil
 	}
@@ -474,6 +505,9 @@ func (w *World) ensurePopulated(chunkX, chunkZ int) {
 	w.populationWrites = nil
 
 	w.chunks[key].SetPopulated(true)
+	if event.HasHandlers[worldevent.ChunkPopulateEvent]() {
+		event.Call(worldevent.NewChunkPopulateEvent(w, chunkX, chunkZ, w.chunks[key]))
+	}
 	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
 		listener.OnChunkPopulated(chunkX, chunkZ, w.chunks[key])
 	}
@@ -664,20 +698,91 @@ func (w *World) BroadcastPacketToViewers(pos math.Vector3, pk packet.Packet) {
 	}
 }
 
-// AddSound is a port of World::addSound (the $players parameter and the cancellable
-// WorldSoundEvent aren't ported - no event bus exists in this port yet, matching its other
-// documented event-bus gaps).
-func (w *World) AddSound(pos math.Vector3, s sound.Sound) {
-	for _, pk := range s.Encode(pos, w.translator) {
-		w.BroadcastPacketToViewers(pos, pk)
+// AddSound is a port of World::addSound for the default recipients (every player viewing pos).
+func (w *World) AddSound(pos math.Vector3, s sound.Sound) { w.AddSoundFor(pos, s, nil) }
+
+// AddSoundFor is a port of World::addSound: players nil means everyone viewing pos; otherwise only
+// those of players who are viewing pos hear it.
+func (w *World) AddSoundFor(pos math.Vector3, s sound.Sound, players []EntityViewer) {
+	defaultRecipients := players == nil
+	if event.HasHandlers[worldevent.WorldSoundEvent]() {
+		ev := worldevent.NewWorldSoundEvent(w, s, pos, w.recipientsForEvent(pos, players))
+		event.Call(ev)
+		if ev.IsCancelled() {
+			return
+		}
+		s = ev.GetSound()
+		players, defaultRecipients = recipientsFromEvent(ev.GetRecipients()), false
 	}
+	w.broadcastEncoded(pos, s.Encode(pos, w.translator), players, defaultRecipients)
 }
 
-// AddParticle is a port of World::addParticle - see AddSound's own doc comment on the same
-// documented event-bus gap.
-func (w *World) AddParticle(pos math.Vector3, p particle.Particle) {
-	for _, pk := range p.Encode(pos, w.translator) {
-		w.BroadcastPacketToViewers(pos, pk)
+// AddParticle is a port of World::addParticle for the default recipients.
+func (w *World) AddParticle(pos math.Vector3, p particle.Particle) { w.AddParticleFor(pos, p, nil) }
+
+// AddParticleFor is a port of World::addParticle with explicit recipients (see AddSoundFor).
+func (w *World) AddParticleFor(pos math.Vector3, p particle.Particle, players []EntityViewer) {
+	defaultRecipients := players == nil
+	if event.HasHandlers[worldevent.WorldParticleEvent]() {
+		ev := worldevent.NewWorldParticleEvent(w, p, pos, w.recipientsForEvent(pos, players))
+		event.Call(ev)
+		if ev.IsCancelled() {
+			return
+		}
+		p = ev.GetParticle()
+		players, defaultRecipients = recipientsFromEvent(ev.GetRecipients()), false
+	}
+	w.broadcastEncoded(pos, p.Encode(pos, w.translator), players, defaultRecipients)
+}
+
+// recipientsForEvent is the `$players ??= $this->getViewersForPosition($pos)` of
+// addSound/addParticle, as the event's recipient list.
+func (w *World) recipientsForEvent(pos math.Vector3, players []EntityViewer) []any {
+	var result []any
+	if players == nil {
+		for _, v := range w.getViewersForPosition(pos) {
+			result = append(result, v)
+		}
+		return result
+	}
+	for _, p := range players {
+		result = append(result, p)
+	}
+	return result
+}
+
+func recipientsFromEvent(recipients []any) []EntityViewer {
+	result := make([]EntityViewer, 0, len(recipients))
+	for _, r := range recipients {
+		if v, ok := r.(EntityViewer); ok {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+// broadcastEncoded sends the encoded packets of a sound or particle: to every viewer of pos, or
+// only to those of players who view pos (World::filterViewersForPosition).
+func (w *World) broadcastEncoded(pos math.Vector3, packets []packet.Packet, players []EntityViewer, defaultRecipients bool) {
+	if len(packets) == 0 {
+		return
+	}
+	if defaultRecipients {
+		for _, pk := range packets {
+			w.BroadcastPacketToViewers(pos, pk)
+		}
+		return
+	}
+	candidates := w.getViewersForPosition(pos)
+	for _, p := range players {
+		for _, c := range candidates {
+			if c == viewer(p) {
+				for _, pk := range packets {
+					p.SendPacket(pk)
+				}
+				break
+			}
+		}
 	}
 }
 
@@ -889,11 +994,52 @@ func (w *World) GetSafeSpawn(spawn math.Vector3) math.Vector3 {
 // have here - see e.g. UseBreakOn's identical reasoning for using math.Vector3 directly).
 func (w *World) GetSpawnLocation() math.Vector3 { return w.spawnLocation }
 
-// SetSpawnLocation is a port of World::setSpawnLocation, minus the cancellable SpawnChangeEvent
-// and syncing the new spawn point to connected players' network sessions - no event bus or
-// Player/session type exists in this package yet (matches this port's other documented
-// AddSound-style gaps).
-func (w *World) SetSpawnLocation(pos math.Vector3) { w.spawnLocation = pos }
+// SetSpawnLocation is a port of World::setSpawnLocation: fires SpawnChangeEvent and syncs the new
+// spawn point to every player in the world (NetworkSession::syncWorldSpawnPoint).
+func (w *World) SetSpawnLocation(pos math.Vector3) {
+	previousSpawn := w.spawnLocation
+	w.spawnLocation = pos
+	event.Call(worldevent.NewSpawnChangeEvent(w, entityevent.Position{Vector3: previousSpawn, World: w}))
+
+	pk := worldSpawnPacket(pos)
+	for _, p := range w.GetPlayers() {
+		p.SendPacket(pk)
+	}
+}
+
+// worldSpawnPacket is SetSpawnPositionPacket::worldSpawn (NetworkSession::syncWorldSpawnPoint).
+func worldSpawnPacket(pos math.Vector3) packet.Packet {
+	const int32Min = -2147483648
+	return &packet.SetSpawnPosition{
+		SpawnType:     packet.SpawnTypeWorld,
+		Position:      protocol.BlockPos{int32(pos.FloorX()), int32(pos.FloorY()), int32(pos.FloorZ())},
+		Dimension:     packet.DimensionOverworld,
+		SpawnPosition: protocol.BlockPos{int32Min, int32Min, int32Min},
+	}
+}
+
+// GetPlayers is a port of World::getPlayers: the players in this world (the entities that are
+// packet viewers).
+func (w *World) GetPlayers() []EntityViewer {
+	var players []EntityViewer
+	for _, id := range w.sortedEntityIDs() {
+		if v, ok := w.entities[id].(EntityViewer); ok {
+			players = append(players, v)
+		}
+	}
+	return players
+}
+
+// sortedEntityIDs is the entity table's keys in ascending order (PHP arrays keep insertion order,
+// and runtime IDs only ever increase).
+func (w *World) sortedEntityIDs() []int {
+	ids := make([]int, 0, len(w.entities))
+	for id := range w.entities {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	return ids
+}
 
 // IsSpawnChunk is a port of World::isSpawnChunk.
 func (w *World) IsSpawnChunk(chunkX, chunkZ int) bool {
@@ -949,3 +1095,15 @@ func (w *World) IsChunkPopulated(chunkX, chunkZ int) bool {
 
 // GetLoadedChunks is a port of World::getLoadedChunks.
 func (w *World) GetLoadedChunks() map[[2]int]*format.Chunk { return w.chunks }
+
+// GetTickRateTime is a port of World::getTickRateTime: how long the last tick took, in ms.
+func (w *World) GetTickRateTime() float64 { return w.tickRateTime }
+
+// GetTickingChunks is a port of World::getTickingChunks: the chunks registered for ticking.
+func (w *World) GetTickingChunks() [][2]int {
+	chunks := make([][2]int, 0, len(w.tickingChunks))
+	for key := range w.tickingChunks {
+		chunks = append(chunks, key)
+	}
+	return chunks
+}

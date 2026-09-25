@@ -2,6 +2,8 @@ package world
 
 import (
 	stdmath "math"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
@@ -121,9 +123,6 @@ func (w *World) NotifyNeighbourBlockUpdate(pos math.Vector3) {
 }
 
 // updateNeighbourBlockUpdates is a port of the "Normal updates" loop in World::actuallyDoTick.
-// Real PHP also fires a cancellable BlockUpdateEvent here - this port has no plugin/event system
-// wired into World yet (matches every other "no event bus yet" gap elsewhere in this port), so
-// every notification always proceeds, as if no plugin ever cancelled it.
 func (w *World) updateNeighbourBlockUpdates() {
 	for len(w.neighbourUpdateQueue) > 0 {
 		pos := w.neighbourUpdateQueue[0]
@@ -135,6 +134,15 @@ func (w *World) updateNeighbourBlockUpdates() {
 			continue
 		}
 
+		blk := w.GetBlockAt(x, y, z)
+		if event.HasHandlers[blockevent.BlockUpdateEvent]() {
+			ev := blockevent.NewBlockUpdateEvent(blk)
+			event.Call(ev)
+			if ev.IsCancelled() {
+				continue
+			}
+		}
+
 		bb := math.AxisAlignedBB{
 			MinX: float64(x), MinY: float64(y), MinZ: float64(z),
 			MaxX: float64(x + 1), MaxY: float64(y + 1), MaxZ: float64(z + 1),
@@ -143,7 +151,7 @@ func (w *World) updateNeighbourBlockUpdates() {
 			e.OnNearbyBlockChange()
 		}
 
-		w.GetBlockAt(x, y, z).OnNearbyBlockChange()
+		blk.OnNearbyBlockChange()
 	}
 }
 
@@ -435,6 +443,45 @@ func (w *World) DoTick(currentTick int64) {
 	w.skyLightUpdate.Execute()
 
 	w.sendChangedBlocks()
+
+	if w.sleepTicks > 0 {
+		w.sleepTicks--
+		if w.sleepTicks <= 0 {
+			w.CheckSleep()
+		}
+	}
+}
+
+// sleeper is the part of Player the sleep check needs.
+type sleeper interface {
+	IsSleeping() bool
+	StopSleep()
+}
+
+// SetSleepTicks is a port of World::setSleepTicks: the sleep check runs after this many ticks.
+func (w *World) SetSleepTicks(ticks int) { w.sleepTicks = ticks }
+
+// CheckSleep is a port of World::checkSleep: when every player is asleep at night, the time skips
+// to the next morning and everyone wakes up.
+func (w *World) CheckSleep() {
+	players := w.GetPlayers()
+	if len(players) == 0 {
+		return
+	}
+
+	for _, p := range players {
+		if s, ok := p.(sleeper); !ok || !s.IsSleeping() {
+			return
+		}
+	}
+
+	time := w.GetTimeOfDay()
+	if time >= TimeNight && time < TimeSunrise {
+		w.SetTime(w.GetTime() + TimeFull - time)
+		for _, p := range players {
+			p.(sleeper).StopSleep()
+		}
+	}
 }
 
 // sendChangedBlocks is the changedBlocks part of World::actuallyDoTick: every block set this tick
@@ -495,6 +542,44 @@ func (w *World) broadcastPacketToPlayersUsingChunk(chunkX, chunkZ int, pk packet
 	for _, l := range w.GetChunkListeners(chunkX, chunkZ) {
 		if v, ok := l.(viewer); ok {
 			v.SendPacket(pk)
+		}
+	}
+}
+
+// UnloadChunkRequest is a port of World::unloadChunkRequest: queues the chunk for unloading unless
+// it's in use (when safe) or a spawn chunk.
+func (w *World) UnloadChunkRequest(chunkX, chunkZ int, safe bool) bool {
+	if (safe && w.IsChunkInUse(chunkX, chunkZ)) || w.IsSpawnChunk(chunkX, chunkZ) {
+		return false
+	}
+	w.unloadQueue[chunkKey(chunkX, chunkZ)] = w.currentTick
+	return true
+}
+
+// DoChunkGarbageCollection is a port of World::doChunkGarbageCollection. The provider's own
+// garbage collection has nothing to do for LevelDB here.
+func (w *World) DoChunkGarbageCollection() {
+	for key, chunk := range w.chunks {
+		if _, queued := w.unloadQueue[key]; !queued {
+			if !w.IsSpawnChunk(key[0], key[1]) {
+				w.UnloadChunkRequest(key[0], key[1], true)
+			}
+		}
+		chunk.CollectGarbage()
+	}
+}
+
+// UnloadChunks is World::unloadChunks($force): with force, every queued chunk that can be unloaded
+// is, without waiting for its grace period.
+func (w *World) UnloadChunks(force bool) {
+	if !force {
+		w.unloadChunks()
+		return
+	}
+	for key := range w.unloadQueue {
+		//If the chunk can't be unloaded, it stays on the queue
+		if w.unloadChunk(key[0], key[1], true) {
+			delete(w.unloadQueue, key)
 		}
 	}
 }

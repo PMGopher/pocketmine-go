@@ -3,6 +3,7 @@ package block
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -84,7 +85,7 @@ func (p *PitcherCrop) grow(player Player) bool {
 		tx.AddBlock(p.position, bottom)
 		tx.AddBlock(p.position.GetSide(math.Up, 1), top)
 
-		ev := &StructureGrowEvent{Block: p.self, Transaction: tx, Player: player}
+		ev := blockevent.NewStructureGrowEvent(p.self, tx, player)
 		event.Call(ev)
 		return !ev.IsCancelled() && tx.Apply()
 	}

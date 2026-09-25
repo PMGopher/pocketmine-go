@@ -4,6 +4,7 @@ import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -198,7 +199,7 @@ func (b *Bamboo) grow(maxHeight int, growAmount int) bool {
 		tx.AddBlockAt(pos.FloorX(), pos.FloorY()-(idx-growAmount), pos.FloorZ(), newBlock)
 	}
 
-	ev := &StructureGrowEvent{Block: b.self, Transaction: tx, Player: nil}
+	ev := blockevent.NewStructureGrowEvent(b.self, tx, nil)
 	event.Call(ev)
 	if ev.IsCancelled() {
 		return false

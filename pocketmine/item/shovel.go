@@ -2,8 +2,7 @@ package item
 
 import "pocketmine-go/pocketmine/block"
 
-// Shovel is a port of pocketmine\item\Shovel. See Axe's doc comment for why
-// OnDestroyBlock/OnAttackEntity aren't ported.
+// Shovel is a port of pocketmine\item\Shovel.
 type Shovel struct {
 	TieredTool
 }

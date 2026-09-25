@@ -2,6 +2,8 @@ package block
 
 import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/utils"
@@ -81,9 +83,7 @@ func (f *Farmland) OnNearbyBlockChange() {
 
 func (f *Farmland) TicksRandomly() bool { return true }
 
-// OnRandomTick doesn't fire FarmlandHydrationChangeEvent (deferred concrete event subclass), so
-// hydration changes are never cancellable yet; the "dry out completely -> become Dirt" step is
-// otherwise real.
+// OnRandomTick is a port of Farmland::onRandomTick.
 func (f *Farmland) OnRandomTick() {
 	world, err := f.position.GetWorld()
 	if err != nil {
@@ -95,21 +95,29 @@ func (f *Farmland) OnRandomTick() {
 
 	if !f.canHydrate() {
 		if f.Wetness > 0 {
-			f.Wetness--
-			if err := setBlockWithoutUpdate(world, f.position, f.self); err != nil {
-				panic(err)
+			ev := blockevent.NewFarmlandHydrationChangeEvent(f.self, f.Wetness, f.Wetness-1)
+			event.Call(ev)
+			if !ev.IsCancelled() {
+				f.Wetness = ev.GetNewHydration()
+				if err := setBlockWithoutUpdate(world, f.position, f.self); err != nil {
+					panic(err)
+				}
+				changed = true
 			}
-			changed = true
 		} else {
 			_ = world.SetBlock(f.position, VanillaDirt())
 			changed = true
 		}
 	} else if f.Wetness < FarmlandMaxWetness {
-		f.Wetness = FarmlandMaxWetness
-		if err := setBlockWithoutUpdate(world, f.position, f.self); err != nil {
-			panic(err)
+		ev := blockevent.NewFarmlandHydrationChangeEvent(f.self, f.Wetness, FarmlandMaxWetness)
+		event.Call(ev)
+		if !ev.IsCancelled() {
+			f.Wetness = ev.GetNewHydration()
+			if err := setBlockWithoutUpdate(world, f.position, f.self); err != nil {
+				panic(err)
+			}
+			changed = true
 		}
-		changed = true
 	}
 
 	if !changed && oldWaterPositionIndex != f.WaterPositionIndex {

@@ -3,6 +3,8 @@ package block
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -90,17 +92,22 @@ func (l *Leaves) OnNearbyBlockChange() {
 
 func (l *Leaves) TicksRandomly() bool { return !l.NoDecay && l.CheckDecay }
 
-// OnRandomTick doesn't fire LeavesDecayEvent (deferred concrete event subclass - see the project
-// todo list), so decay is never cancellable yet; the findLog nearby-log check still applies.
+// OnRandomTick is a port of Leaves::onRandomTick.
 func (l *Leaves) OnRandomTick() {
 	if l.NoDecay || !l.CheckDecay {
 		return
+	}
+	cancelled := false
+	if event.HasHandlers[blockevent.LeavesDecayEvent]() {
+		ev := blockevent.NewLeavesDecayEvent(l.self)
+		event.Call(ev)
+		cancelled = ev.IsCancelled()
 	}
 	world, err := l.position.GetWorld()
 	if err != nil {
 		return
 	}
-	if l.findLog(l.position.AsVector3(), map[[3]int]bool{}, 0) {
+	if cancelled || l.findLog(l.position.AsVector3(), map[[3]int]bool{}, 0) {
 		l.CheckDecay = false
 		if err := setBlockWithoutUpdate(world, l.position, l.self); err != nil {
 			panic(err)

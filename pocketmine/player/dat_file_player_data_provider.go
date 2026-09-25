@@ -56,29 +56,29 @@ func (p *DatFilePlayerDataProvider) LoadData(name string) (*nbt.CompoundTag, err
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("player data: reading player data file %q: %w", path, err)
+		return nil, &PlayerDataLoadError{Message: fmt.Sprintf("player data: reading player data file %q", path), Cause: err}
 	}
 
 	reader, err := gzip.NewReader(bytes.NewReader(contents))
 	if err != nil {
 		p.handleCorruptedPlayerData(name)
-		return nil, fmt.Errorf("player data: failed to decompress raw player data for %q: %w", name, err)
+		return nil, &PlayerDataLoadError{Message: fmt.Sprintf("player data: failed to decompress raw player data for %q", name), Cause: err}
 	}
 	decompressed, err := io.ReadAll(reader)
 	if err != nil {
 		p.handleCorruptedPlayerData(name)
-		return nil, fmt.Errorf("player data: failed to decompress raw player data for %q: %w", name, err)
+		return nil, &PlayerDataLoadError{Message: fmt.Sprintf("player data: failed to decompress raw player data for %q", name), Cause: err}
 	}
 
 	root, _, err := nbt.NewBigEndianSerializer().Read(decompressed, 0, datFileNbtMaxDepth)
 	if err != nil {
 		p.handleCorruptedPlayerData(name)
-		return nil, fmt.Errorf("player data: failed to decode NBT data for %q: %w", name, err)
+		return nil, &PlayerDataLoadError{Message: fmt.Sprintf("player data: failed to decode NBT data for %q", name), Cause: err}
 	}
 	tag, err := root.MustGetCompoundTag()
 	if err != nil {
 		p.handleCorruptedPlayerData(name)
-		return nil, fmt.Errorf("player data: failed to decode NBT data for %q: %w", name, err)
+		return nil, &PlayerDataLoadError{Message: fmt.Sprintf("player data: failed to decode NBT data for %q", name), Cause: err}
 	}
 	return tag, nil
 }
@@ -91,23 +91,23 @@ func (p *DatFilePlayerDataProvider) SaveData(name string, data *nbt.CompoundTag)
 	}
 	encoded, err := nbt.NewBigEndianSerializer().Write(root)
 	if err != nil {
-		return fmt.Errorf("player data: encoding player data for %q: %w", name, err)
+		return &PlayerDataSaveError{Message: fmt.Sprintf("player data: encoding player data for %q", name), Cause: err}
 	}
 
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	if _, err := gz.Write(encoded); err != nil {
-		return fmt.Errorf("player data: compressing player data for %q: %w", name, err)
+		return &PlayerDataSaveError{Message: fmt.Sprintf("player data: compressing player data for %q", name), Cause: err}
 	}
 	if err := gz.Close(); err != nil {
-		return fmt.Errorf("player data: compressing player data for %q: %w", name, err)
+		return &PlayerDataSaveError{Message: fmt.Sprintf("player data: compressing player data for %q", name), Cause: err}
 	}
 
 	if err := os.MkdirAll(p.path, 0o755); err != nil {
-		return fmt.Errorf("player data: creating player data directory %q: %w", p.path, err)
+		return &PlayerDataSaveError{Message: fmt.Sprintf("player data: creating player data directory %q", p.path), Cause: err}
 	}
 	if err := os.WriteFile(p.getPlayerDataPath(name), buf.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("player data: writing player data file: %w", err)
+		return &PlayerDataSaveError{Message: fmt.Sprintf("player data: writing player data file"), Cause: err}
 	}
 	return nil
 }

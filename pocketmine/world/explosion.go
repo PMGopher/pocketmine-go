@@ -4,6 +4,8 @@ import (
 	"fmt"
 	stdmath "math"
 	"math/rand"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 
 	"pocketmine-go/pocketmine/block"
 	blockutils "pocketmine-go/pocketmine/block/utils"
@@ -21,9 +23,7 @@ const explosionRays = 16
 // Explosion is a port of pocketmine\world\Explosion.
 //
 // PHP's `Entity|Block|null $what` is split into two nilable fields - What (a Block source) and
-// WhatEntity (an Entity source, e.g. PrimedTNT); at most one is set. Not ported:
-// BlockExplodeEvent (pocketmine\event\block isn't ported), so block-sourced explosions always
-// proceed with ExplodeA's own affected blocks and yield.
+// WhatEntity (an Entity source, e.g. PrimedTNT); at most one is set.
 type Explosion struct {
 	world      *World
 	Source     math.Vector3
@@ -202,7 +202,7 @@ func (e *Explosion) ExplodeB() bool {
 	sourcePos := math.NewVector3(stdmath.Floor(e.Source.X), stdmath.Floor(e.Source.Y), stdmath.Floor(e.Source.Z))
 	e.Yield = stdmath.Min(100, (1/e.Radius)*100)
 
-	if e.WhatEntity != nil {
+	if e.WhatEntity != nil || e.What != nil {
 		blockList := make([]entityevent.Block, 0, len(e.affectedOrder))
 		for _, key := range e.affectedOrder {
 			blockList = append(blockList, e.AffectedBlocks[key])
@@ -213,15 +213,40 @@ func (e *Explosion) ExplodeB() bool {
 				ignitions = append(ignitions, e.AffectedBlocks[key])
 			}
 		}
-		ev := entityevent.NewEntityExplodeEvent(e.WhatEntity, entityevent.Position{Vector3: e.Source, World: e.world}, blockList, e.Yield, ignitions)
-		ev.Call()
-		if ev.IsCancelled() {
-			return false
+		position := entityevent.Position{Vector3: e.Source, World: e.world}
+		var newBlocks, newIgnitions []entityevent.Block
+		if e.WhatEntity != nil {
+			ev := entityevent.NewEntityExplodeEvent(e.WhatEntity, position, blockList, e.Yield, ignitions)
+			ev.Call()
+			if ev.IsCancelled() {
+				return false
+			}
+			e.Yield, newBlocks, newIgnitions = ev.GetYield(), ev.GetBlockList(), ev.GetIgnitions()
+		} else {
+			affected := make([]blockevent.Block, len(blockList))
+			for i, b := range blockList {
+				affected[i] = b
+			}
+			fire := make([]blockevent.Block, len(ignitions))
+			for i, b := range ignitions {
+				fire[i] = b
+			}
+			ev := blockevent.NewBlockExplodeEvent(e.What, position, affected, e.Yield, fire)
+			event.Call(ev)
+			if ev.IsCancelled() {
+				return false
+			}
+			e.Yield = ev.GetYield()
+			for _, b := range ev.GetAffectedBlocks() {
+				newBlocks = append(newBlocks, b)
+			}
+			for _, b := range ev.GetIgnitions() {
+				newIgnitions = append(newIgnitions, b)
+			}
 		}
-		e.Yield = ev.GetYield()
 		e.AffectedBlocks = map[[3]int]block.Behavior{}
 		e.affectedOrder = nil
-		for _, b := range ev.GetBlockList() {
+		for _, b := range newBlocks {
 			if blk, ok := b.(block.Behavior); ok {
 				key := positionKey(blk)
 				if _, exists := e.AffectedBlocks[key]; !exists {
@@ -231,7 +256,7 @@ func (e *Explosion) ExplodeB() bool {
 			}
 		}
 		e.fireIgnitions = map[[3]int]bool{}
-		for _, b := range ev.GetIgnitions() {
+		for _, b := range newIgnitions {
 			if blk, ok := b.(block.Behavior); ok {
 				e.fireIgnitions[positionKey(blk)] = true
 			}

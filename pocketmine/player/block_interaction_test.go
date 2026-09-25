@@ -33,7 +33,7 @@ func TestCanInteractIsFalseBeyondMaxDistance(t *testing.T) {
 
 func TestAttackBlockOnAFarAwayBlockReturnsFalse(t *testing.T) {
 	p := newTestPlayer(t, 1, math.NewVector3(0, 70, 0))
-	if p.AttackBlock(math.NewVector3(1000, 70, 1000), math.Up, fakeHandItem{}) {
+	if p.AttackBlock(math.NewVector3(1000, 70, 1000), math.Up) {
 		t.Error("AttackBlock() on a block 1000 blocks away = true, want false")
 	}
 }
@@ -46,7 +46,7 @@ func TestAttackBlockOnABreakableBlockStartsABlockBreakHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !p.AttackBlock(pos, math.Up, fakeHandItem{}) {
+	if !p.AttackBlock(pos, math.Up) {
 		t.Fatal("AttackBlock() on a nearby breakable block = false, want true")
 	}
 	if p.GetBlockBreakHandler() == nil {
@@ -62,7 +62,7 @@ func TestAttackBlockInCreativeDoesNotStartABlockBreakHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p.AttackBlock(pos, math.Up, fakeHandItem{})
+	p.AttackBlock(pos, math.Up)
 	if p.GetBlockBreakHandler() != nil {
 		t.Error("GetBlockBreakHandler() != nil after AttackBlock() in creative mode")
 	}
@@ -75,7 +75,7 @@ func TestStopBreakBlockClearsTheHandlerForTheMatchingPosition(t *testing.T) {
 	if err := p.GetWorld().SetBlock(block.NewPosition(pos.X, pos.Y, pos.Z, p.GetWorld()), block.VanillaStone()); err != nil {
 		t.Fatal(err)
 	}
-	p.AttackBlock(pos, math.Up, fakeHandItem{})
+	p.AttackBlock(pos, math.Up)
 	if p.GetBlockBreakHandler() == nil {
 		t.Fatal("precondition failed: no block break handler started")
 	}
@@ -98,11 +98,13 @@ func TestUpdateBreakingBlockClearsTheHandlerOnceBreakCompletes(t *testing.T) {
 	if err := p.GetWorld().SetBlock(block.NewPosition(pos.X, pos.Y, pos.Z, p.GetWorld()), block.VanillaStone()); err != nil {
 		t.Fatal(err)
 	}
-	p.AttackBlock(pos, math.Up, fakeHandItem{})
+	p.AttackBlock(pos, math.Up)
 
 	ticks := 0
 	for p.GetBlockBreakHandler() != nil {
-		p.UpdateBreakingBlock(fakeHandItem{})
+		if !p.GetBlockBreakHandler().Update() {
+			p.setBlockBreakHandler(nil)
+		}
 		ticks++
 		if ticks > 1000 {
 			t.Fatal("block break handler never completed - looks like an infinite loop")

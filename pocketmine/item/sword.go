@@ -2,8 +2,7 @@ package item
 
 import "pocketmine-go/pocketmine/block"
 
-// Sword is a port of pocketmine\item\Sword. See Axe's doc comment for why
-// OnDestroyBlock/OnAttackEntity aren't ported.
+// Sword is a port of pocketmine\item\Sword.
 type Sword struct {
 	TieredTool
 }

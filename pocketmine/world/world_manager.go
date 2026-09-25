@@ -2,8 +2,14 @@ package world
 
 import (
 	"fmt"
+	stdmath "math"
 	"path/filepath"
+	"pocketmine-go/pocketmine/event"
+	worldevent "pocketmine-go/pocketmine/event/world"
+	"pocketmine-go/pocketmine/log"
+	"pocketmine-go/pocketmine/math"
 	"strings"
+	"time"
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
@@ -17,13 +23,10 @@ const ticksPerAutoSave = 300 * 20
 
 // WorldManager is a port of pocketmine\world\WorldManager: the multi-world container that owns
 // every currently-loaded World, tracks which one is the default, and drives all of their ticks and
-// autosave together. Not ported: anything touching Player (unloadWorld's player eviction/
-// teleport, doAutoSave's per-player save) or the plugin event bus (WorldInitEvent/WorldLoadEvent/
-// WorldUnloadEvent) - this port has no Player type reachable from the world package and no
-// event-bus-that-can-cancel-a-world-unload wired up yet, both documented gaps matching this port's
-// established "no player/event infrastructure here yet" pattern elsewhere (see Explosion's own doc
-// comment for the same category of gap).
+// autosave together.
 type WorldManager struct {
+	logger log.Logger
+
 	dataPath    string
 	translator  *convert.BlockTranslator
 	knownBlocks []block.Behavior
@@ -52,6 +55,21 @@ func NewWorldManager(dataPath string, translator *convert.BlockTranslator, known
 		autoSave:      true,
 		autoSaveTicks: ticksPerAutoSave,
 	}
+}
+
+// SetLogger sets the logger unload messages go to (PHP uses the server's logger).
+func (m *WorldManager) SetLogger(logger log.Logger) { m.logger = logger }
+
+// managedPlayer is what WorldManager needs from pocketmine\player\Player: unloadWorld moves
+// players out of the world, and doAutoSave saves them.
+type managedPlayer interface {
+	EntityViewer
+	TeleportTo(pos math.Vector3, w *World, yaw, pitch *float64) bool
+	// Disconnect is Player::disconnect(reason, quitMessage, disconnectScreenMessage); nil means
+	// the default.
+	Disconnect(reason, quitMessage, disconnectScreenMessage any)
+	IsSpawned() bool
+	Save()
 }
 
 // GetWorlds is a port of WorldManager::getWorlds.
@@ -111,8 +129,7 @@ func (m *WorldManager) IsWorldGenerated(name string) bool {
 	return err == nil
 }
 
-// UnloadWorld is a port of WorldManager::unloadWorld. Not ported: player eviction/teleport and the
-// cancellable WorldUnloadEvent (see WorldManager's own doc comment on why).
+// UnloadWorld is a port of WorldManager::unloadWorld.
 func (m *WorldManager) UnloadWorld(w *World, forceUnload bool) (bool, error) {
 	if w == m.defaultWorld && !forceUnload {
 		return false, fmt.Errorf("world manager: the default world cannot be unloaded while running, please switch worlds")
@@ -121,13 +138,40 @@ func (m *WorldManager) UnloadWorld(w *World, forceUnload bool) (bool, error) {
 		return false, fmt.Errorf("world manager: cannot unload a world during its own tick")
 	}
 
+	ev := worldevent.NewWorldUnloadEvent(w)
+	event.Call(ev)
+	if !forceUnload && ev.IsCancelled() {
+		return false, nil
+	}
+
+	if m.logger != nil {
+		m.logger.Info(fmt.Sprintf("Unloading world \"%s\"", w.GetDisplayName())) // pocketmine.level.unloading
+	}
+	if players := w.GetPlayers(); len(players) != 0 {
+		var safeSpawn *math.Vector3
+		if m.defaultWorld != nil && m.defaultWorld != w {
+			spawn := m.defaultWorld.GetSafeSpawn(m.defaultWorld.GetSpawnLocation())
+			safeSpawn = &spawn
+		}
+		for _, v := range players {
+			p, ok := v.(managedPlayer)
+			if !ok {
+				continue
+			}
+			if safeSpawn == nil {
+				p.Disconnect("Forced default world unload", nil, nil)
+			} else {
+				p.TeleportTo(*safeSpawn, m.defaultWorld, nil, nil)
+			}
+		}
+	}
+
 	if w == m.defaultWorld {
 		m.defaultWorld = nil
 	}
 	// World::onUnload -> World::save: level.dat is saved along with the chunks (Close).
 	if wd, ok := m.worldData[w.GetID()]; ok {
-		wd.SetTime(w.GetTime())
-		wd.SetSpawn(w.GetSpawnLocation())
+		m.syncWorldData(w, wd)
 		if err := wd.Save(m.worldPath(w.GetFolderName())); err != nil {
 			return false, fmt.Errorf("world manager: saving %q's level.dat: %w", w.GetFolderName(), err)
 		}
@@ -175,7 +219,8 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 		return nil, fmt.Errorf("world manager: opening %q's world data: %w", name, err)
 	}
 	w.SetTime(wd.GetTime())
-	w.SetSpawnLocation(wd.GetSpawn())
+	w.spawnLocation = wd.GetSpawn()
+	w.difficulty = wd.GetDifficulty()
 
 	m.nextID++
 	w.id = m.nextID
@@ -184,6 +229,8 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 
 	m.worlds[w.id] = w
 	m.worldData[w.id] = wd
+
+	event.Call(worldevent.NewWorldLoadEvent(w))
 	return w, nil
 }
 
@@ -221,7 +268,8 @@ func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, optio
 	if err := wd.Save(path); err != nil {
 		return nil, fmt.Errorf("world manager: writing %q's level.dat: %w", name, err)
 	}
-	w.SetSpawnLocation(options.SpawnPosition)
+	w.spawnLocation = options.SpawnPosition
+	w.difficulty = options.Difficulty
 
 	m.nextID++
 	w.id = m.nextID
@@ -230,6 +278,9 @@ func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, optio
 
 	m.worlds[w.id] = w
 	m.worldData[w.id] = wd
+
+	event.Call(worldevent.NewWorldInitEvent(w))
+	event.Call(worldevent.NewWorldLoadEvent(w))
 	return w, nil
 }
 
@@ -247,7 +298,13 @@ func (m *WorldManager) FindEntity(entityID int) (Entity, bool) {
 // timing instrumentation (a pure diagnostics concern, not behaviour).
 func (m *WorldManager) Tick(currentTick int64) {
 	for _, w := range m.worlds {
+		worldTime := time.Now()
 		w.DoTick(currentTick)
+		tickMs := float64(time.Since(worldTime).Microseconds()) / 1000
+		w.tickRateTime = tickMs
+		if tickMs >= 50 && m.logger != nil {
+			m.logger.Debug(fmt.Sprintf("[World: %s] Tick took too long: %gms (%g ticks)", w.GetFolderName(), tickMs, stdmath.Round(tickMs/50*100)/100))
+		}
 	}
 
 	if m.autoSave {
@@ -259,13 +316,17 @@ func (m *WorldManager) Tick(currentTick int64) {
 	}
 }
 
-// doAutoSave is a port of WorldManager::doAutoSave, minus per-player saving (no Player type - see
-// WorldManager's own doc comment).
+// doAutoSave is a port of WorldManager::doAutoSave.
 func (m *WorldManager) doAutoSave() {
 	for id, w := range m.worlds {
+		for _, v := range w.GetPlayers() {
+			if p, ok := v.(managedPlayer); ok && p.IsSpawned() {
+				p.Save()
+			}
+		}
 		_ = w.SaveAll()
 		if wd, ok := m.worldData[id]; ok {
-			wd.SetTime(w.GetTime())
+			m.syncWorldData(w, wd)
 			_ = wd.Save(m.worldPath(w.GetFolderName()))
 		}
 	}
@@ -286,5 +347,35 @@ func (m *WorldManager) SetAutoSaveInterval(autoSaveTicks int64) error {
 		return fmt.Errorf("world manager: autosave ticks must be positive")
 	}
 	m.autoSaveTicks = autoSaveTicks
+	return nil
+}
+
+// syncWorldData copies the World state PHP keeps directly in its WorldData (time, spawn, display
+// name, difficulty) into wd before it's saved.
+func (m *WorldManager) syncWorldData(w *World, wd *worldio.WorldData) {
+	wd.SetTime(w.GetTime())
+	wd.SetSpawn(w.GetSpawnLocation())
+	wd.SetName(w.GetDisplayName())
+	wd.SetDifficulty(w.GetDifficulty())
+}
+
+// GetSeed is World::getSeed: the seed in the world's level.dat (this port's World doesn't own its
+// WorldData, see syncWorldData).
+func (m *WorldManager) GetSeed(w *World) int64 {
+	if wd, ok := m.worldData[w.GetID()]; ok {
+		return wd.GetSeed()
+	}
+	return 0
+}
+
+// SaveWorld is World::save(true) for a loaded world: its chunks, entities and level.dat.
+func (m *WorldManager) SaveWorld(w *World) error {
+	if err := w.SaveAll(); err != nil {
+		return err
+	}
+	if wd, ok := m.worldData[w.GetID()]; ok {
+		m.syncWorldData(w, wd)
+		return wd.Save(m.worldPath(w.GetFolderName()))
+	}
 	return nil
 }

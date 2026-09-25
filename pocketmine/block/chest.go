@@ -4,6 +4,8 @@ import (
 	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -46,10 +48,7 @@ func (c *Chest) Place(tx BlockTransaction, item Item, blockReplace Behavior, blo
 	return c.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnPostPlace is a port of Chest::onPostPlace, minus firing ChestPairEvent - the event package
-// isn't wired into the block package anywhere yet, so pairing proceeds unconditionally instead of
-// being cancellable (matching the PHP original's behavior in the common case where nothing
-// cancels the event).
+// OnPostPlace is a port of Chest::onPostPlace.
 func (c *Chest) OnPostPlace() {
 	world, err := c.position.GetWorld()
 	if err != nil {
@@ -79,8 +78,16 @@ func (c *Chest) OnPostPlace() {
 		if !ok || pairTile.IsPaired() {
 			continue
 		}
-		pairTile.PairWith(tileChest)
-		break
+		left, right := Behavior(c.self), Behavior(other)
+		if clockwise {
+			left, right = other, c.self
+		}
+		ev := blockevent.NewChestPairEvent(left, right)
+		event.Call(ev)
+		if !ev.IsCancelled() && world.GetBlockAt(c.position.FloorX(), c.position.FloorY(), c.position.FloorZ()).GetTypeId() == c.GetTypeId() && world.GetBlockAt(other.position.FloorX(), other.position.FloorY(), other.position.FloorZ()).GetTypeId() == other.GetTypeId() {
+			pairTile.PairWith(tileChest)
+			break
+		}
 	}
 }
 

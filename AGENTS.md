@@ -5,7 +5,7 @@ changing code. The feature checklist lives in [README.md](README.md#feature-chec
 covers the goal, how the code is organised, the conventions, what state things are in, and what to
 do next.
 
-_Last updated: 2026-09-24. Upstream reference: PocketMine-MP `5.44.4` (commit `6a7cc02`, July 2026)._
+_Last updated: 2026-09-25. Upstream reference: PocketMine-MP `5.44.4` (commit `6a7cc02`, July 2026)._
 
 ---
 
@@ -34,7 +34,8 @@ server written in PHP) in Go, **keeping its game logic faithful to the original*
 go build ./...                      # builds everything
 go test ./...                       # all packages currently pass
 go run ./cmd/pocketmine-go                                   # server on UDP :19132, data in the current directory
-go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # PocketMine.php options + server.properties overrides
+go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # PocketMine.php options + server.properties/pocketmine.yml overrides
+go run ./cmd/pocketmine-go --debug.level=2    # debug log lines (pocketmine.yml debug.level)
 ```
 
 - Go version: see `go.mod` (`go 1.26.1`).
@@ -110,7 +111,8 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
 ## 3. Repository layout
 
 ```
-cmd/pocketmine-go/     Entry point only (port of PocketMine.php): --data/--version, then server.New/Start.
+cmd/pocketmine-go/     Entry point only (port of PocketMine.php): options, server.lock, MainLogger, then
+                       server.New/Start.
 tools/packetproxy/     Debugging proxy that logs a real client's packets (not part of the port).
 pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP/src/.
   server/              Server, ServerProperties, ServerConfigGroup (PHP's root-namespace classes;
@@ -123,8 +125,12 @@ pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP
     generator/         Flat, Normal, hell (Nether), noise, populators, trees/ores, biomeselector
     light/             sky + block light propagation
     biome/, particle/, sound/, utils/
-  network/mcpe/        NetworkSession (on gophertunnel's minecraft.Conn), sub-chunk requests
-  network/mcpe/handler/     PreSpawnPacketHandler, InGamePacketHandler
+  network/             Network, NetworkSessionManager, bandwidth stats; query/, upnp/
+  network/mcpe/        NetworkSession (on gophertunnel's minecraft.Conn), InventoryManager, ChunkCache,
+                       CreativeInventoryCache, broadcasters, rate limiter, sub-chunk requests
+  network/mcpe/raklib/ RakLibInterface: gophertunnel listener + go-raknet socket (login phase, query
+                       packets, IP blocks)
+  network/mcpe/handler/     PreSpawn/InGame/Death packet handlers, ItemStackRequestExecutor
   network/mcpe/convert/     BlockTranslator, BlockStateSerializer, ItemTranslator, TypeConverter parts,
                             ClientDataToSkinDataHelper
   network/mcpe/serializer/  ChunkSerializer (LevelChunk payload)
@@ -141,9 +147,10 @@ pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP
     projectile/        Arrow, Snowball, Egg, EnderPearl, SplashPotion, Trident, ...
     animation/, utils/ Entity animations (network), ExperienceUtils
   event/entity/        Every pocketmine\event\entity event (damage, death, explode, projectile, ...)
-  event/player/        Only PlayerExhaustEvent + PlayerExperienceChangeEvent so far
+  event/block, player, inventory, world, server, plugin/   Every concrete event of those namespaces
   item/enchantment/    All vanilla enchantments, protection/sharpness/knockback/fire aspect logic
-  command/, event/, permission/, plugin/, scheduler/, lang/, timings/, log/, promise/
+  command/ (+ defaults/), console/, event/, permission/, plugin/, scheduler/, lang/, timings/,
+  log/, promise/, resourcepacks/, form/
   math/, nbt/, binaryutils/, color/, utils/   (ports of pmmp's math/nbt/binaryutils/color libs)
 ```
 
@@ -181,36 +188,50 @@ be diffed mechanically (see §7).
 ## 5. Current status (summary)
 
 Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §7):
-**roughly 570–700 of 1,498 PHP classes (~40–47%)** have a Go counterpart (569 by strict filename match, 709 when also matching Go type names). Coverage is very uneven:
+**roughly 750–850 of 1,498 PHP classes (~50–57%)** have a Go counterpart. Coverage is very uneven:
 
 | Area | State |
 |---|---|
 | block (+ tiles, block inventories, utils) | ~87% of classes ported. **Only ~55 vanilla block singletons are registered and ~15 have network serializers**, so only a handful can actually appear in-game. |
 | item | 133/154 classes incl. enchantments. ~85 vanilla item singletons. **Item NBT (de)serialization isn't ported** (blocks saving dropped items/tridents and Human inventories). |
-| world core | World, ticking, scheduled/random updates, light, explosions, WorldManager, ChunkListener, level.dat, LevelDB save/load: done. |
+| world core | World, ticking, scheduled/random updates, light, explosions, WorldManager (incl. `worlds:` from pocketmine.yml), ChunkListener, level.dat, LevelDB save/load: done. |
 | generators | Flat, Normal (all biomes), Nether done. Trees: only oak/spruce/birch. Generation is synchronous (no async executor). |
-| entity | **All 77 `pocketmine\entity` classes ported with their logic** (physics/collision `Entity::move`, fire, air, attributes, hunger, XP, effects, armor + enchantment damage reduction, knockback, death/drops, objects, projectiles, mobs, EntityFactory + LevelDB entity save/load). Entities are ticked by `World`. Not reachable in-game yet where it depends on item use (bows, throwing, spawn eggs) or packet handlers. |
-| player | Player embeds `entity.Human` (like PHP). Chunk streaming (chunksPerTick, nearest first), survival block breaking, PvP, fall damage, chat, hotbar selection, input toggles, join/quit, saved player data. Death/respawn flow and player events: missing. |
-| framework libs | command (base only), event (base + all `event/entity` events, 2 player events), permission, scheduler (sync only), lang, timings, log, promise, plugin (description parsing only). |
-| server glue | **Partly ported.** `Server` (startup, default world via `WorldManager`, tick loop, online players, broadcast, player data via `DatFilePlayerDataProvider`, shutdown), `ServerConfigGroup` + `server.properties`, `NetworkSession`, `PreSpawnPacketHandler`, `InGamePacketHandler`. Missing: `pocketmine.yml`, console commands (only `stop`), command map wiring, permissions/ops, ban/whitelist, plugins, query, `DeathPacketHandler`, `ResourcePacksPacketHandler` (gophertunnel does resource packs). |
-| not started | crafting, inventory transactions, cursor/creative inventories, item NBT serialization, non-entity concrete events (block, player, inventory, world, server, plugin), default commands, plugin loading, resource packs, query, crash dumps, region (Anvil/McRegion) world formats, block-state upgrader (old world compatibility). |
+| entity | **All 77 `pocketmine\entity` classes ported with their logic.** Item use (bows, throwables, spawn eggs) is wired through the packet handlers, limited by which items have network mappings. |
+| player | **Complete** (`Player` with every PHP method that has its dependencies: chunk streaming, block interaction, item use, combat, death/respawn, forms, titles, game modes, permissions, broadcast channels, player data). |
+| event | **Every concrete event** (block, entity, player, inventory, world, server, plugin), fired where the ported code fires them. Event inheritance: `event.DeclareParent` (see `event/parents.go`). |
+| network | **Complete above the wire** except crafting data: `NetworkSession`, `RakLibInterface` (on gophertunnel), `InventoryManager`, `ChunkCache`, `CreativeInventoryCache`, broadcasters, rate limiter, `PreSpawn`/`InGame`/`Death` packet handlers, `ItemStackRequestExecutor`, query, UPnP, resource packs, `DataPacket*Event`. |
+| server core | **Complete except crash dumps**: `Server` (pocketmine.yml, language, ops/whitelist/bans, broadcast channels, TPS, title tick, query regeneration, memory manager, async pool, shutdown), console reader/sender, `MainLogger` + `server.log`, `server.lock`. |
+| command | Command map + **34 of 41 default commands** (`command/defaults`). Missing: give, clear, enchant, effect (need `StringToItemParser`/string-to-enchantment/effect parsers), particle, timings, dumpmemory. |
+| not started | crafting (`crafting/*`, CraftingManager, crafting/enchanting transactions: craft requests fail like unknown recipes), plugin loading, crash dumps, region (Anvil/McRegion) world formats, block-state upgrader (old world compatibility), item NBT serialization. |
 
-**Some ported packages are still not used by the running server:** `command`, `event`,
-`permission` and `scheduler` exist and are tested, but `Server` doesn't use them yet (Phase 2).
+### How gophertunnel changes the login/spawn flow
+
+gophertunnel runs RakNet, login, encryption and resource packs itself, so the PHP handlers for those
+phases (SessionStart, Login, Handshake, ResourcePacks) have no Go counterpart. Their game logic lives
+where gophertunnel calls back into us (`network/mcpe/raklib/rak_lib_interface.go`):
+`ListenConfig.Allow` builds the `PlayerInfo` and fires `PlayerPreLoginEvent` (whitelist, bans,
+server full); `FetchResourcePacks` fires `PlayerResourcePackOfferEvent`; after `Accept`,
+`NetworkSession.Login` runs `setAuthenticationStatus` (duplicate login, XUID checks) and creates
+the player. `PreSpawnPacketHandler.SetUp` calls `Conn.StartGame`, which answers
+`RequestChunkRadius` and sends `PlayStatus(PLAYER_SPAWN)` itself; the session then sends the spawn
+chunks at once (`NetworkSession.OnClientRequestChunkRadius`) and `NotifyTerrainReady` completes the
+spawn. The server lock is released while `StartGame` waits for the client.
+
+With `xbox-auth=false`, gophertunnel doesn't verify identity tokens, so every client is treated as
+unauthenticated and its XUID is discarded (PHP would still keep a verified XUID).
 
 ### What a player can do today
 
-Connect (offline mode), spawn in a generated Normal world, walk around with chunks streaming in,
-break blocks (with correct survival break times, bare hand only), see other players and their
-movement, hit other players (damage + knockback, reduced by armor), take fall damage, regenerate
-health from food and lose hunger. Falling sand/gravel and primed TNT are real entities. The world saves to LevelDB on
-shutdown (Ctrl+C).
+Connect (online or offline mode), spawn in a generated Normal world, walk around with chunks
+streaming in, break and place blocks (those with network mappings), use items, move items in the
+inventory, open containers, use the creative inventory (items with network mappings), chat, run
+commands (op/whitelist/ban/gamemode/tp/time/...), see other players, PvP, take fall damage, die and
+respawn, regenerate health from food, lose hunger. The world and players save on shutdown and on
+autosave; `stop` or Ctrl+C shuts down cleanly.
 
 ### What a player cannot do yet
 
-Place blocks, use or move items, select a hotbar slot (the held item is always hotbar slot 0), chat (text
-is received but not broadcast), run commands, craft, open containers, eat, die/respawn properly,
-change game mode.
+Craft, smelt, brew or enchant; hold or place blocks/items that have no network mapping; use plugins.
 
 ### Known issues
 
@@ -239,6 +260,14 @@ change game mode.
   `world.LoadEntityFunc`); grep for `Func =` to find them.
 - Worlds created by vanilla Bedrock or PocketMine-MP (PHP) will mostly fail to load: only the
   block states this port knows are recognised, and there is no block-state upgrader.
+- The creative inventory is now built from the core `CreativeInventory`
+  (`CreativeInventoryCache`, like PHP) instead of the vendored 1.26.50 packet, so it only shows
+  items with a network mapping until the item/block mappings are complete (the network IDs have to
+  match the core inventory, or creative item requests would create the wrong item).
+- Threading: packet handling and the tick share `Server`'s lock (`mcpe.Server` embeds
+  `sync.Locker`). Code called from a packet handler or the tick already holds it; never call
+  `Server.Lock` from there. `Server.Shutdown` is safe either way (the `stop` command calls it from
+  inside the tick).
 
 ## 6. Plan / roadmap
 
@@ -258,20 +287,12 @@ something a person can see working in the client.
 6. **Investigate the spawn/floating issue** above.
 
 ### Phase 2: Real server structure
-1. ~~Port `Server`, `ServerProperties`, `ServerConfigGroup`~~ (done; `pocketmine.yml` isn't
-   vendored yet, so `GetProperty` only sees command-line values and defaults).
-2. ~~Port `NetworkSession`, `PreSpawnPacketHandler`, `InGamePacketHandler`~~ (done, partial
-   handlers). Remaining: `DeathPacketHandler`, `InventoryManager`, item use in
-   `InGamePacketHandler`.
-3. ~~Move `main.go`'s logic into those types, use `WorldManager`, drive the tick through
-   `Server`~~ (done). Remaining: `scheduler.TaskScheduler` in the tick.
-4. Console reader + `ConsoleCommandSender`, then the default commands (`command/defaults`: start
-   with `stop`, `help`, `list`, `say`, `gamemode`, `tp`, `give`, `time`, `op`/`deop`, `kick`,
-   `ban`, `whitelist`).
-5. Port all concrete **events** (`event/block|entity|inventory|player|plugin|server|world`) and
-   fire them from the places PHP fires them. Required before plugins make sense.
-6. ~~Player data persistence~~ (done). Permissions/ops wired to players, which also makes
-   `Player` a command sender.
+Done: `Server` (pocketmine.yml, ops/whitelist/bans, broadcast channels, async pool, memory
+manager, query, UPnP), `NetworkSession`/`RakLibInterface`/`InventoryManager` and every packet
+handler above the wire, console reader + `ConsoleCommandSender`, all concrete events, permissions
+and ops wired to players, 34 of 41 default commands. Remaining: `give`, `clear`, `enchant`,
+`effect` (need the string-to-item/enchantment/effect parsers), `particle`, `timings` (report
+upload), crash dumps.
 
 ### Phase 3: Gameplay systems
 - Inventories: `PlayerInventory`, armor, offhand, cursor, crafting grid, ender chest, creative

@@ -2,6 +2,7 @@ package block
 
 import (
 	"math/rand"
+	blockevent "pocketmine-go/pocketmine/event/block"
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	"pocketmine-go/pocketmine/event"
@@ -112,7 +113,7 @@ func (n *NetherVines) grow(growthAmount int) bool {
 	}
 
 	if changedBlocks > 0 {
-		ev := &StructureGrowEvent{Block: top.self, Transaction: tx, Player: nil}
+		ev := blockevent.NewStructureGrowEvent(top.self, tx, nil)
 		event.Call(ev)
 		if ev.IsCancelled() {
 			return false

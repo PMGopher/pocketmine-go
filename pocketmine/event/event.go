@@ -65,8 +65,7 @@ func CallOn[E any](m *Manager, e *E) {
 		panic(fmt.Sprintf("Recursive event call detected (reached max depth of %d calls)", maxEventCallDepth))
 	}
 
-	t := reflect.TypeOf(e)
-	handlers := m.listFor(t).listeners()
+	handlers := m.handlersFor(reflect.TypeOf(e))
 
 	eventCallDepth++
 	defer func() { eventCallDepth-- }()
@@ -83,6 +82,14 @@ func HasHandlers[E any]() bool {
 }
 
 func HasHandlersOn[E any](m *Manager) bool {
-	t := reflect.TypeOf((*E)(nil))
-	return len(m.listFor(t).listeners()) > 0
+	return len(m.handlersFor(reflect.TypeOf((*E)(nil)))) > 0
+}
+
+// EventName is a port of Event::getEventName: the event's type name.
+func EventName(e any) string {
+	t := reflect.TypeOf(e)
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t.String()
 }

@@ -19,20 +19,29 @@ import (
 // blob cache (the client enabled it), the biomes are sent as a blob hash and the payload only
 // holds the border block count.
 func LevelChunkPacket(chunkX, chunkZ int, chunk *format.Chunk, cache *ClientBlobCache) *packet.LevelChunk {
+	return levelChunkPacket(chunkX, chunkZ, &cachedChunk{
+		subChunkCount: serializer.GetSubChunkCount(chunk),
+		biomes:        serializer.SerializeBiomes(chunk),
+		payload:       serializer.SerializeBiomesPayload(chunk),
+	}, cache)
+}
+
+// levelChunkPacket builds the LevelChunk packet from a chunk's cached data (see ChunkCache).
+func levelChunkPacket(chunkX, chunkZ int, data *cachedChunk, cache *ClientBlobCache) *packet.LevelChunk {
 	pk := &packet.LevelChunk{
 		Position:      protocol.ChunkPos{int32(chunkX), int32(chunkZ)},
 		SubChunkCount: 0,
-		SubChunkLimit: protocol.Option(int32(serializer.GetSubChunkCount(chunk))),
+		SubChunkLimit: protocol.Option(int32(data.subChunkCount)),
 	}
 	if cache != nil {
-		if hash, ok := cache.Track(serializer.SerializeBiomes(chunk)); ok {
+		if hash, ok := cache.Track(data.biomes); ok {
 			pk.CacheEnabled = true
 			pk.BlobHashes = []uint64{hash}
 			pk.RawPayload = []byte{0} // border block count
 			return pk
 		}
 	}
-	pk.RawPayload = serializer.SerializeBiomesPayload(chunk)
+	pk.RawPayload = data.payload
 	return pk
 }
 

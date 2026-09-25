@@ -1,18 +1,19 @@
 package player
 
 import (
-	"pocketmine-go/pocketmine/entity/animation"
-	"pocketmine-go/pocketmine/world/sound"
+	"pocketmine-go/pocketmine/event"
+	playerevent "pocketmine-go/pocketmine/event/player"
 )
-
-// The Player::toggleX methods the client's input flags go through. Player toggle events aren't
-// ported, so only the event's built-in cancellations remain (toggleSneak's "nothing changed",
-// toggleFlight's "flight not allowed").
 
 // ToggleSprint is a port of Player::toggleSprint.
 func (p *Player) ToggleSprint(sprint bool) bool {
 	if sprint == p.IsSprinting() {
 		return true
+	}
+	ev := playerevent.NewPlayerToggleSprintEvent(p, sprint)
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
 	}
 	p.SetSprinting(sprint)
 	return true
@@ -25,10 +26,33 @@ func (p *Player) ToggleSneak(sneak, sneakPressed bool) bool {
 	}
 	p.SetSneakPressed(sneakPressed)
 
-	if sneak == p.IsSneaking() { // PHP cancels the PlayerToggleSneakEvent here
+	ev := playerevent.NewPlayerToggleSneakEvent(p, sneak, sneakPressed)
+	if sneak == p.IsSneaking() {
+		ev.Cancel()
+	}
+	event.Call(ev)
+
+	if ev.IsCancelled() {
 		return false
 	}
 	p.SetSneaking(sneak)
+	return true
+}
+
+// ToggleFlight is a port of Player::toggleFlight.
+func (p *Player) ToggleFlight(fly bool) bool {
+	if fly == p.flying {
+		return true
+	}
+	ev := playerevent.NewPlayerToggleFlightEvent(p, fly)
+	if !p.allowFlight {
+		ev.Cancel()
+	}
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
+	}
+	p.SetFlying(fly)
 	return true
 }
 
@@ -36,6 +60,11 @@ func (p *Player) ToggleSneak(sneak, sneakPressed bool) bool {
 func (p *Player) ToggleGlide(glide bool) bool {
 	if glide == p.IsGliding() {
 		return true
+	}
+	ev := playerevent.NewPlayerToggleGlideEvent(p, glide)
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return false
 	}
 	p.SetGliding(glide)
 	return true
@@ -46,24 +75,11 @@ func (p *Player) ToggleSwim(swim bool) bool {
 	if swim == p.IsSwimming() {
 		return true
 	}
-	p.SetSwimming(swim)
-	return true
-}
-
-// ToggleFlight is a port of Player::toggleFlight.
-func (p *Player) ToggleFlight(fly bool) bool {
-	if fly == p.flying {
-		return true
-	}
-	if !p.allowFlight { // PHP cancels the PlayerToggleFlightEvent here
+	ev := playerevent.NewPlayerToggleSwimEvent(p, swim)
+	event.Call(ev)
+	if ev.IsCancelled() {
 		return false
 	}
-	p.SetFlying(fly)
+	p.SetSwimming(swim)
 	return true
-}
-
-// MissSwing is a port of Player::missSwing (minus the cancellable PlayerMissSwingEvent).
-func (p *Player) MissSwing() {
-	p.BroadcastSound(sound.EntityAttackNoDamageSound{})
-	p.BroadcastAnimation(animation.ArmSwingAnimation{Entity: p}, p.GetViewers())
 }

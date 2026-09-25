@@ -15,9 +15,7 @@ const tagCustomColor = "customColor"
 // Armor is a port of pocketmine\item\Armor. Unlike Tool's subclasses, Armor itself is directly
 // instantiable in the PHP original (not abstract) - different armor pieces are just Armor
 // instances constructed with different ArmorTypeInfo, so this is both the base and the leaf here.
-//
-// OnClickAir (equipping the armor) needs a real Player - see the Item interface's doc comment on
-// Player/Entity-interaction methods.
+
 type Armor struct {
 	Durable
 
