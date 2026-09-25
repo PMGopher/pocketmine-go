@@ -54,6 +54,11 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
   supports up to 1.26.30. A 1.26.51 client disconnected with "Block" (ClientDisconnection-90)
   while we sent full chunks with v8 sub-chunks; the switch to Dragonfly's proven path is the fix
   for that (not yet confirmed with a real client at the time of writing).
+- Clients that enable the **client blob cache** (`ClientCacheStatus`, e.g. the Windows client) get
+  their chunks through it (`network/mcpe/client_blob_cache.go`, as Dragonfly does): biomes and
+  sub-chunks are sent as xxHash64 hashes and `ClientCacheBlobStatus` is answered with
+  `ClientCacheMissResponse`. A 1.26.51 Windows client that played fine on Dragonfly disconnected
+  with "Block" right after loading when our request-mode chunks came without the cache.
 - StartGame must set `BaseGameVersion` and server-authoritative block breaking
   (`PlayerMovementSettings(0, true)` like PreSpawnPacketHandler).
 - After StartGame, `PreSpawnPacketHandler.SetUp` sends the rest of PreSpawnPacketHandler's packets:

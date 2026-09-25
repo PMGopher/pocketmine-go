@@ -15,23 +15,36 @@ import (
 // PocketMine-MP 5.44.4 still sends whole chunks (sub-chunk format version 8) in LevelChunk, but it
 // only supports clients up to 1.26.30, so there is no PHP code to port for 1.26.50 here.
 
-// LevelChunkPacket builds the request-mode LevelChunk packet for the chunk at chunkX/chunkZ.
-func LevelChunkPacket(chunkX, chunkZ int, chunk *format.Chunk) *packet.LevelChunk {
-	return &packet.LevelChunk{
+// LevelChunkPacket builds the request-mode LevelChunk packet for the chunk at chunkX/chunkZ. With a
+// blob cache (the client enabled it), the biomes are sent as a blob hash and the payload only
+// holds the border block count.
+func LevelChunkPacket(chunkX, chunkZ int, chunk *format.Chunk, cache *ClientBlobCache) *packet.LevelChunk {
+	pk := &packet.LevelChunk{
 		Position:      protocol.ChunkPos{int32(chunkX), int32(chunkZ)},
 		SubChunkCount: 0,
 		SubChunkLimit: protocol.Option(int32(serializer.GetSubChunkCount(chunk))),
-		RawPayload:    serializer.SerializeBiomesPayload(chunk),
 	}
+	if cache != nil {
+		if hash, ok := cache.Track(serializer.SerializeBiomes(chunk)); ok {
+			pk.CacheEnabled = true
+			pk.BlobHashes = []uint64{hash}
+			pk.RawPayload = []byte{0} // border block count
+			return pk
+		}
+	}
+	pk.RawPayload = serializer.SerializeBiomesPayload(chunk)
+	return pk
 }
 
-// HandleSubChunkRequest answers a SubChunkRequest with one entry per requested offset.
-func HandleSubChunkRequest(w *world.World, pk *packet.SubChunkRequest) *packet.SubChunk {
+// HandleSubChunkRequest answers a SubChunkRequest with one entry per requested offset. cache is
+// the session's blob cache, or nil when the client doesn't use one.
+func HandleSubChunkRequest(w *world.World, pk *packet.SubChunkRequest, cache *ClientBlobCache) *packet.SubChunk {
 	entries := make([]protocol.SubChunkEntry, 0, len(pk.Offsets))
 	for _, offset := range pk.Offsets {
-		entries = append(entries, subChunkEntry(w, pk.Position, offset))
+		entries = append(entries, subChunkEntry(w, pk.Position, offset, cache))
 	}
 	return &packet.SubChunk{
+		CacheEnabled:    cache != nil,
 		Dimension:       pk.Dimension,
 		Position:        pk.Position,
 		SubChunkEntries: entries,
@@ -40,7 +53,7 @@ func HandleSubChunkRequest(w *world.World, pk *packet.SubChunkRequest) *packet.S
 
 // subChunkEntry serialises the sub-chunk at centre+offset (centre's Y is an absolute sub-chunk
 // index, format.MinSubChunkIndex..MaxSubChunkIndex for the overworld).
-func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.SubChunkOffset) protocol.SubChunkEntry {
+func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.SubChunkOffset, cache *ClientBlobCache) protocol.SubChunkEntry {
 	subY := int(centre[1]) + int(offset[1])
 	if subY < format.MinSubChunkIndex || subY > format.MaxSubChunkIndex {
 		return protocol.SubChunkEntry{Result: protocol.SubChunkResultIndexOutOfBounds, Offset: offset}
@@ -65,9 +78,18 @@ func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.
 		return entry
 	}
 	entry.Result = protocol.SubChunkResultSuccess
+	serialised := serializer.SerializeSubChunk(sub, subY, w.Translator())
 	// Tiles would follow the sub-chunk data; this port has no tiles in chunks yet (see
 	// serializer.SerializeFullChunk).
-	entry.RawPayload = protocol.Option(serializer.SerializeSubChunk(sub, subY, w.Translator()))
+	var tiles []byte
+	if cache != nil {
+		if hash, ok := cache.Track(serialised); ok {
+			entry.BlobHash = protocol.Option(hash)
+			entry.RawPayload = protocol.Option(tiles)
+			return entry
+		}
+	}
+	entry.RawPayload = protocol.Option(append(serialised, tiles...))
 	return entry
 }
 

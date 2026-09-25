@@ -23,7 +23,7 @@ func newTestWorld() *world.World {
 func TestLevelChunkPacketUsesRequestMode(t *testing.T) {
 	w := newTestWorld()
 	chunk := w.GetOrLoadChunk(2, -3)
-	pk := LevelChunkPacket(2, -3, chunk)
+	pk := LevelChunkPacket(2, -3, chunk, nil)
 	limit, ok := pk.SubChunkLimit.Value()
 	if pk.SubChunkCount != 0 || !ok || limit != int32(serializer.GetSubChunkCount(chunk)) {
 		t.Errorf("LevelChunk count=%d limit=%d(%v), want 0 and the sub-chunk count", pk.SubChunkCount, limit, ok)
@@ -42,7 +42,7 @@ func TestHandleSubChunkRequest(t *testing.T) {
 	resp := HandleSubChunkRequest(w, &packet.SubChunkRequest{
 		Position: protocol.SubChunkPos{0, 3, 0},
 		Offsets:  []protocol.SubChunkOffset{{0, 0, 0}, {0, 1, 0}, {0, -3, 0}, {0, -8, 0}, {5, 0, 5}},
-	})
+	}, nil)
 	if len(resp.SubChunkEntries) != 5 {
 		t.Fatalf("got %d entries, want 5", len(resp.SubChunkEntries))
 	}
@@ -71,5 +71,37 @@ func TestHandleSubChunkRequest(t *testing.T) {
 	}
 	if missing.Result != protocol.SubChunkResultChunkNotFound {
 		t.Errorf("unloaded chunk: result=%d, want chunk not found", missing.Result)
+	}
+}
+
+func TestChunksThroughTheClientBlobCache(t *testing.T) {
+	w := newTestWorld()
+	chunk := w.GetOrLoadChunk(0, 0)
+	cache := NewClientBlobCache()
+
+	lc := LevelChunkPacket(0, 0, chunk, cache)
+	if !lc.CacheEnabled || len(lc.BlobHashes) != 1 || len(lc.RawPayload) != 1 {
+		t.Fatalf("LevelChunk cache=%v hashes=%d payload=%d, want the biomes as one blob and a 1-byte payload", lc.CacheEnabled, len(lc.BlobHashes), len(lc.RawPayload))
+	}
+
+	resp := HandleSubChunkRequest(w, &packet.SubChunkRequest{Position: protocol.SubChunkPos{0, 3, 0}, Offsets: []protocol.SubChunkOffset{{0, 0, 0}}}, cache)
+	entry := resp.SubChunkEntries[0]
+	hash, ok := entry.BlobHash.Value()
+	if !resp.CacheEnabled || !ok {
+		t.Fatalf("SubChunk cache=%v blob hash present=%v, want both", resp.CacheEnabled, ok)
+	}
+	if payload, _ := entry.RawPayload.Value(); len(payload) != 0 {
+		t.Errorf("cached entry payload = %d bytes, want only the (empty) tiles", len(payload))
+	}
+
+	miss := cache.HandleBlobStatus(&packet.ClientCacheBlobStatus{MissHashes: []uint64{hash, lc.BlobHashes[0]}})
+	if miss == nil || len(miss.Blobs) != 2 {
+		t.Fatalf("miss response = %v, want both blobs", miss)
+	}
+	if miss.Blobs[0].Payload[0] != 9 {
+		t.Errorf("sub-chunk blob starts with %d, want sub-chunk version 9", miss.Blobs[0].Payload[0])
+	}
+	if again := cache.HandleBlobStatus(&packet.ClientCacheBlobStatus{MissHashes: []uint64{hash}}); again != nil {
+		t.Error("a blob that was already sent was sent again")
 	}
 }

@@ -47,7 +47,7 @@ func SerializeFullChunk(chunk *format.Chunk, translator *convert.BlockTranslator
 		buf = append(buf, SerializeSubChunk(chunk.GetSubChunk(y), y, translator)...)
 	}
 
-	buf = append(buf, serializeBiomes(chunk)...)
+	buf = append(buf, SerializeBiomes(chunk)...)
 
 	buf = append(buf, 0) // border block array count - always empty (see ChunkSerializer.php's own comment: these crash the regular client)
 
@@ -63,12 +63,12 @@ func SerializeFullChunk(chunk *format.Chunk, translator *convert.BlockTranslator
 // biomes followed by the (always empty) border block count. The blocks themselves are sent later,
 // one SubChunk packet entry per sub-chunk the client asks for.
 func SerializeBiomesPayload(chunk *format.Chunk) []byte {
-	return append(serializeBiomes(chunk), 0)
+	return append(SerializeBiomes(chunk), 0)
 }
 
-// serializeBiomes writes the biome palette of every overworld sub-chunk ("all biomes must always
+// SerializeBiomes writes the biome palette of every overworld sub-chunk ("all biomes must always
 // be written" - PHP's own comment on this loop in serializeFullChunk).
-func serializeBiomes(chunk *format.Chunk) []byte {
+func SerializeBiomes(chunk *format.Chunk) []byte {
 	var buf []byte
 	for y := overworldMinSubChunkIndex; y <= overworldMaxSubChunkIndex; y++ {
 		buf = append(buf, serializeBiomePalette(chunk.GetSubChunk(y).GetBiomeArray())...)

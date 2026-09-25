@@ -48,8 +48,17 @@ func (h *InGamePacketHandler) HandleDataPacket(pk packet.Packet) bool {
 	case *packet.PlayerAuthInput:
 		return h.handlePlayerAuthInput(pk)
 	case *packet.SubChunkRequest:
-		h.session.SendDataPacket(mcpe.HandleSubChunkRequest(h.player.GetWorld(), pk))
+		h.session.SendDataPacket(mcpe.HandleSubChunkRequest(h.player.GetWorld(), pk, h.session.GetBlobCache()))
 		return true
+	case *packet.ClientCacheBlobStatus:
+		// No InGamePacketHandler counterpart: see mcpe.ClientBlobCache.
+		if cache := h.session.GetBlobCache(); cache != nil {
+			if resp := cache.HandleBlobStatus(pk); resp != nil {
+				h.session.SendDataPacket(resp)
+			}
+			return true
+		}
+		return false
 	case *packet.InventoryTransaction:
 		return h.handleInventoryTransaction(pk)
 	case *packet.ItemStackRequest:

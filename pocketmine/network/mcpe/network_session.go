@@ -58,6 +58,9 @@ type NetworkSession struct {
 	player  *player.Player
 	handler PacketHandler
 
+	// blobCache is non-nil when the client enabled the client blob cache (ClientCacheStatus).
+	blobCache *ClientBlobCache
+
 	connected      bool
 	disconnectOnce sync.Once
 }
@@ -66,6 +69,9 @@ type NetworkSession struct {
 // encryption and resource packs already done).
 func NewNetworkSession(server Server, conn *minecraft.Conn) *NetworkSession {
 	s := &NetworkSession{server: server, conn: conn, connected: true}
+	if conn.ClientCacheEnabled() {
+		s.blobCache = NewClientBlobCache()
+	}
 	s.logger = log.NewPrefixedLogger(server.GetLogger(), s.getLogPrefix())
 	return s
 }
@@ -111,6 +117,9 @@ func (s *NetworkSession) GetDisplayName() string {
 	}
 	return s.GetIp() + " " + strconv.Itoa(s.GetPort())
 }
+
+// GetBlobCache returns the session's client blob cache, or nil when the client doesn't use one.
+func (s *NetworkSession) GetBlobCache() *ClientBlobCache { return s.blobCache }
 
 // GetHandler is a port of NetworkSession::getHandler.
 func (s *NetworkSession) GetHandler() PacketHandler { return s.handler }
@@ -248,7 +257,7 @@ func (s *NetworkSession) doChunkRequests() error {
 		if !ok {
 			continue
 		}
-		if err := s.conn.WritePacket(LevelChunkPacket(c[0], c[1], chunk)); err != nil {
+		if err := s.conn.WritePacket(LevelChunkPacket(c[0], c[1], chunk, s.blobCache)); err != nil {
 			return err
 		}
 		p.MarkChunkSent(c[0], c[1])
