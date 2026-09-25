@@ -77,6 +77,7 @@ func NewNetworkSession(server Server, conn *minecraft.Conn) *NetworkSession {
 		s.blobCache = NewClientBlobCache()
 	}
 	s.logger = log.NewPrefixedLogger(server.GetLogger(), s.getLogPrefix())
+	s.logger.Debug(fmt.Sprintf("Client blob cache enabled: %v", conn.ClientCacheEnabled()))
 	return s
 }
 
