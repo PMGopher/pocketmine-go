@@ -82,6 +82,9 @@ type Player struct {
 	// loadQueueOrder is loadQueue's iteration order (PHP arrays keep insertion order): nearest
 	// chunk first, as orderChunks fills it.
 	loadQueueOrder [][2]int
+	// nextChunkOrderRun is Player::$nextChunkOrderRun: ticks until OrderChunks runs again
+	// (noChunkOrderRun when nothing needs reordering).
+	nextChunkOrderRun int
 	// chunksPerTick is Player::$chunksPerTick (pocketmine.yml chunk-sending.per-tick, default 4).
 	chunksPerTick int
 	tickingChunks map[[2]int]bool
@@ -137,6 +140,7 @@ func NewPlayerFromData(username string, playerUUID uuid.UUID, xuid string, locat
 		usedChunks:            map[[2]int]UsedChunkStatus{},
 		loadQueue:             map[[2]int]bool{},
 		chunksPerTick:         4,
+		nextChunkOrderRun:     5,
 		tickingChunks:         map[[2]int]bool{},
 	}
 	p.ConstructHuman(p, location, skin, tag)

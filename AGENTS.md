@@ -86,6 +86,12 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
   (`NetworkSession.sendSpawnTerrain`). Before this, the first chunk arrived ~1 s after the client
   had already entered an empty world, and it disconnected ("Block") without ever requesting a
   sub-chunk (seen in the packet trace).
+- `NetworkChunkPublisherUpdate` (NetworkSession::syncViewAreaCenterPoint) is only sent from
+  `Player.OrderChunks`, which only runs when `nextChunkOrderRun` is due (`Player.DoChunkRequests`,
+  like PHP: after a view distance change, a teleport, a changed chunk, and at most every 20 ticks
+  while moving). It used to be sent after every 4-chunk batch, i.e. every tick; a real 1.26.51
+  client with the blob cache enabled then never answered a single LevelChunk (no
+  ClientCacheBlobStatus, no SubChunkRequest) and left after ~2 s.
 - **Debugging a real client:** `tools/packetproxy` (gophertunnel's proxy example plus logging, not
   part of the port) sits between the game and a server started with `--xbox-auth=false` and
   writes every packet in both directions to `packets.log`. Run the same session through it

@@ -23,6 +23,29 @@ func (p *Player) SetViewDistance(distance int) {
 		return
 	}
 	p.viewDistance = distance
+	p.nextChunkOrderRun = 0
+}
+
+// noChunkOrderRun is PHP_INT_MAX as nextChunkOrderRun: no reordering scheduled.
+const noChunkOrderRun = int(^uint(0) >> 1)
+
+// DoChunkRequests is a port of Player::doChunkRequests: the chunks are reordered when that's due
+// (nextChunkOrderRun), then up to chunksPerTick queued chunks are made ready. The ready chunks are
+// returned for the caller (NetworkSession) to send, then MarkChunkSent.
+func (p *Player) DoChunkRequests() [][2]int {
+	if p.nextChunkOrderRun != noChunkOrderRun {
+		run := p.nextChunkOrderRun
+		p.nextChunkOrderRun--
+		if run <= 0 {
+			p.nextChunkOrderRun = noChunkOrderRun
+			p.OrderChunks()
+		}
+	}
+
+	if len(p.loadQueue) > 0 {
+		return p.RequestChunks()
+	}
+	return nil
 }
 
 // IsUsingChunk is a port of Player::isUsingChunk.
@@ -106,6 +129,10 @@ func (p *Player) OrderChunks() {
 	p.loadQueueOrder = newLoadQueueOrder
 	p.updateTickingChunkRegistrations(p.tickingChunks, newTickingChunks)
 	p.tickingChunks = newTickingChunks
+
+	if (len(p.loadQueue) > 0 || len(unloadChunks) > 0) && p.networkSession != nil {
+		p.networkSession.SyncViewAreaCenterPoint(p.GetPosition(), p.viewDistance)
+	}
 }
 
 // updateTickingChunkRegistrations is a port of Player::updateTickingChunkRegistrations.
@@ -202,6 +229,7 @@ func (p *Player) OnChunkChanged(chunkX, chunkZ int, chunk *format.Chunk) {
 	key := [2]int{chunkX, chunkZ}
 	if p.usedChunks[key] == UsedChunkStatusSent {
 		p.usedChunks[key] = UsedChunkStatusNeeded
+		p.nextChunkOrderRun = 0
 	}
 }
 

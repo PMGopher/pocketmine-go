@@ -21,6 +21,7 @@ import (
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/lang"
 	"pocketmine-go/pocketmine/log"
+	pmmath "pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/player"
 )
@@ -230,9 +231,6 @@ func (s *NetworkSession) onClientSpawnResponse() error {
 	p.SetNoClientPredictions(false) //TODO: HACK: we set this during the spawn sequence to prevent the client sending junk movements
 	p.SetViewDistance(s.server.GetAllowedViewDistance(s.conn.ChunkRadius()))
 	s.OnEnterWorld()
-	if err := s.SyncViewAreaCenterPoint(); err != nil {
-		return err
-	}
 	if err := s.SetHandler(NewInGamePacketHandler(s)); err != nil {
 		return err
 	}
@@ -253,8 +251,9 @@ func (s *NetworkSession) sendSpawnTerrain() error {
 	spawnThreshold := int(float64(radius*radius) * stdmath.Pi)
 	sent := 0
 	for sent < spawnThreshold {
-		s.player.OrderChunks()
-		ready := s.player.RequestChunks()
+		// The view distance was just set, so the first call orders the chunks (and syncs the view
+		// area centre, like Player::orderChunks).
+		ready := s.player.DoChunkRequests()
 		if len(ready) == 0 {
 			break
 		}
@@ -263,7 +262,7 @@ func (s *NetworkSession) sendSpawnTerrain() error {
 		}
 		sent += len(ready)
 	}
-	return s.SyncViewAreaCenterPoint()
+	return nil
 }
 
 // Tick is the per-tick work for this session (NetworkSession::tick plus Player::doChunkRequests):
@@ -278,20 +277,15 @@ func (s *NetworkSession) Tick() {
 	}
 }
 
-// doChunkRequests is a port of Player::doChunkRequests's network half: every chunk that became
-// ready is sent (NetworkSession::startUsingChunk) in sub-chunk request mode (see
-// sub_chunk_request.go), then the view area centre is synced.
+// doChunkRequests runs Player::doChunkRequests and sends every chunk that became ready
+// (NetworkSession::startUsingChunk) in sub-chunk request mode (see sub_chunk_request.go). The view
+// area centre is only synced when the chunks are reordered (Player::orderChunks), not per batch.
 func (s *NetworkSession) doChunkRequests() error {
-	p := s.player
-	p.OrderChunks()
-	ready := p.RequestChunks()
+	ready := s.player.DoChunkRequests()
 	if len(ready) == 0 {
 		return nil
 	}
-	if err := s.sendChunks(ready); err != nil {
-		return err
-	}
-	return s.SyncViewAreaCenterPoint()
+	return s.sendChunks(ready)
 }
 
 // sendChunks sends the given ready chunks (NetworkSession::startUsingChunk) and marks them sent.
@@ -312,11 +306,10 @@ func (s *NetworkSession) sendChunks(ready [][2]int) error {
 }
 
 // SyncViewAreaCenterPoint is a port of NetworkSession::syncViewAreaCenterPoint.
-func (s *NetworkSession) SyncViewAreaCenterPoint() error {
-	pos := s.player.GetPosition()
-	return s.writePacket(&packet.NetworkChunkPublisherUpdate{
+func (s *NetworkSession) SyncViewAreaCenterPoint(pos pmmath.Vector3, viewDistance int) {
+	s.SendDataPacket(&packet.NetworkChunkPublisherUpdate{
 		Position: protocol.BlockPos{int32(pos.FloorX()), int32(pos.FloorY()), int32(pos.FloorZ())},
-		Radius:   uint32(s.player.GetViewDistance() * 16), //blocks, not chunks >.>
+		Radius:   uint32(viewDistance * 16), //blocks, not chunks >.>
 	})
 }
 

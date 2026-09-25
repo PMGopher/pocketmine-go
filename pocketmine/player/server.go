@@ -3,6 +3,7 @@ package player
 import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
+	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/nbt"
 )
 
@@ -32,6 +33,8 @@ type NetworkSession interface {
 	// OnChatMessage is a port of NetworkSession::onChatMessage (message is a string or
 	// *lang.Translatable).
 	OnChatMessage(message any)
+	// SyncViewAreaCenterPoint is a port of NetworkSession::syncViewAreaCenterPoint.
+	SyncViewAreaCenterPoint(pos math.Vector3, viewDistance int)
 }
 
 // SetServer sets the server this player belongs to (the $server constructor argument in PHP).

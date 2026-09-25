@@ -143,7 +143,11 @@ func (p *Player) HandleMovement(newPos math.Vector3) bool {
 	oldPos := p.GetPosition()
 	distanceSquared := newPos.DistanceSquared(oldPos)
 
-	if distanceSquared > maxMoveDistanceSquared || !p.GetWorld().IsInLoadedTerrain(newPos) {
+	if distanceSquared > maxMoveDistanceSquared {
+		return false
+	}
+	if !p.GetWorld().IsInLoadedTerrain(newPos) {
+		p.nextChunkOrderRun = 0
 		return false
 	}
 
@@ -253,6 +257,10 @@ func (p *Player) processMostRecentMovements() {
 				p.GetHungerManager().Exhaust(0.01*horizontalDistanceTravelled, playerevent.ExhaustCauseSprinting)
 			} else {
 				p.GetHungerManager().Exhaust(0.0, playerevent.ExhaustCauseWalking)
+			}
+
+			if p.nextChunkOrderRun > 20 {
+				p.nextChunkOrderRun = 20
 			}
 		}
 	}

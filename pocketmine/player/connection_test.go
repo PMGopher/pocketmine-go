@@ -54,12 +54,16 @@ func (s *fakeServer) SaveOfflinePlayerData(name string, data *nbt.CompoundTag) {
 
 // fakeSession records the packets and chat messages sent to a player.
 type fakeSession struct {
-	packets  []packet.Packet
-	messages []any
+	packets       []packet.Packet
+	messages      []any
+	viewAreaSyncs int
 }
 
 func (s *fakeSession) SendDataPacket(pk packet.Packet) { s.packets = append(s.packets, pk) }
 func (s *fakeSession) OnChatMessage(message any)       { s.messages = append(s.messages, message) }
+func (s *fakeSession) SyncViewAreaCenterPoint(pos math.Vector3, viewDistance int) {
+	s.viewAreaSyncs++
+}
 
 func newConnectedPlayer(t *testing.T, server *fakeServer) (*Player, *fakeSession) {
 	t.Helper()
@@ -264,4 +268,25 @@ func TestKnockBackIsSentToThePlayerItself(t *testing.T) {
 		}
 	}
 	t.Error("the knocked-back player didn't receive SetActorMotion")
+}
+
+func TestDoChunkRequestsFollowsNextChunkOrderRun(t *testing.T) {
+	// Player::doChunkRequests: chunks are reordered (and the view area centre synced) only when
+	// nextChunkOrderRun is due - right after the view distance changes, not on every tick.
+	server := &fakeServer{}
+	p, session := newConnectedPlayer(t, server)
+	p.SetViewDistance(4)
+
+	if ready := p.DoChunkRequests(); len(ready) == 0 {
+		t.Fatal("no chunks after setting the view distance")
+	}
+	if session.viewAreaSyncs != 1 {
+		t.Fatalf("view area synced %d times after the first reorder, want 1", session.viewAreaSyncs)
+	}
+	for range 10 {
+		p.DoChunkRequests()
+	}
+	if session.viewAreaSyncs != 1 {
+		t.Errorf("view area synced %d times while standing still, want still 1", session.viewAreaSyncs)
+	}
 }
