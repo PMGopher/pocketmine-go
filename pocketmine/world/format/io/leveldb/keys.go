@@ -35,10 +35,11 @@ const chunkVersion byte = 42
 // (see subchunk.go).
 const subChunkVersion byte = 8
 
-// finalizationDone is a port of LevelDB::FINALISATION_DONE - every chunk this port saves is always
-// fully generated and populated by the time it exists in World.chunks at all (see World.go's
-// GetOrLoadChunk/ensurePopulated), so FINALISATION_NEEDS_POPULATION is never written.
-const finalizationDone byte = 2
+// LevelDB::FINALISATION_*: whether a saved chunk was populated.
+const (
+	finalizationNeedsPopulation byte = 1
+	finalizationDone            byte = 2
+)
 
 // chunkIndex is a port of LevelDB::chunkIndex - the common key prefix for every tag belonging to
 // one chunk (no dimension suffix - see this package's doc comment on why).

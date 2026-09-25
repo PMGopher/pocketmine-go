@@ -38,7 +38,13 @@ type AsyncTaskBase struct {
 	crash any
 
 	local map[string]any
+
+	// worker is AsyncTask::$worker: the worker running the task (set just before OnRun).
+	worker *AsyncWorker
 }
+
+// GetWorker is AsyncTask's $this->worker: the worker the task is running on (nil before it runs).
+func (b *AsyncTaskBase) GetWorker() *AsyncWorker { return b.worker }
 
 func (b *AsyncTaskBase) AsyncTaskState() *AsyncTaskBase { return b }
 
@@ -126,8 +132,9 @@ func (b *AsyncTaskBase) FetchLocal(key string) any {
 }
 
 // run is a port of AsyncTask::run, on the worker.
-func runAsyncTask(task AsyncTask) {
+func runAsyncTask(task AsyncTask, worker *AsyncWorker) {
 	b := task.AsyncTaskState()
+	b.worker = worker
 	defer func() {
 		if r := recover(); r != nil {
 			b.mu.Lock()

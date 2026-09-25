@@ -404,6 +404,10 @@ func (r *RakLibInterface) onClientConnect(conn *minecraft.Conn) {
 		r.server.Lock()
 		r.onPacketReceive(conn, session, pk)
 		r.server.Unlock()
+		// Send the responses now instead of waiting for gophertunnel's flush timer (up to 50 ms)
+		// or the end of the tick: RakLib sends a session's queued packets as soon as they're
+		// handed over.
+		_ = conn.Flush()
 	}
 }
 

@@ -19,8 +19,11 @@ import (
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/data/bedrock"
+	"pocketmine-go/pocketmine/log"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
+	"pocketmine-go/pocketmine/promise"
+	"pocketmine-go/pocketmine/scheduler"
 	"pocketmine-go/pocketmine/world/biome"
 	"pocketmine-go/pocketmine/world/format"
 	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
@@ -55,9 +58,28 @@ type World struct {
 	changedBlocks map[[2]int]map[[3]int]math.Vector3
 	// sendTimeTicker is World::$sendTimeTicker: the time is sent to players every 200 ticks.
 	sendTimeTicker int
-	// populationWrites is non-nil while a chunk is being populated and collects the chunks the
-	// populators wrote to (see ensurePopulated).
-	populationWrites map[[2]int]bool
+	// logger is World::$logger (nil for worlds made directly with New, e.g. in tests).
+	logger log.Logger
+
+	// Asynchronous population (see world_population.go): World::$generatorExecutor,
+	// $workerPool, $chunkLock, $chunkPopulationRequestMap/Queue/QueueIndex,
+	// $activeChunkPopulationTasks, $maxConcurrentChunkPopulationTasks and
+	// $knownUngeneratedChunks.
+	generatorExecutor                 GeneratorExecutor
+	workerPool                        *scheduler.AsyncPool
+	chunkLock                         map[[2]int]*ChunkLockID
+	chunkPopulationRequestMap         map[[2]int]*promise.Resolver[*format.Chunk]
+	chunkPopulationRequestQueue       [][2]int
+	chunkPopulationRequestQueueIndex  map[[2]int]bool
+	activeChunkPopulationTasks        map[[2]int]bool
+	maxConcurrentChunkPopulationTasks int
+	knownUngeneratedChunks            map[[2]int]bool
+
+	// registryVersion counts changes to the per-state tables; registrySnap is the frozen copy of
+	// them workers use (see registrySnapshot).
+	registryVersion     int
+	registrySnapVersion int
+	registrySnap        *blockStateRegistry
 
 	// id/folderName/displayName are set by WorldManager (LoadWorld/GenerateWorld) - a bare in-
 	// memory World constructed directly via New (as main.go's own single-world setup still does)
@@ -80,10 +102,6 @@ type World struct {
 	biomeRegistry *biome.Registry
 
 	chunks map[[2]int]*format.Chunk
-
-	// populated tracks which chunks have already run PopulateChunk - see ensurePopulated's doc
-	// comment for why this is needed on top of chunks' own presence check.
-	populated map[[2]int]bool
 
 	// stateTemplates lets GetBlockAt reconstruct a block.Behavior from the bare internal state ID
 	// a Chunk stores (Chunk deliberately never keeps live Behavior instances around - see
@@ -227,31 +245,37 @@ const unloadGraceTicks = 30 * 20
 // for why.
 func New(gen generator.Generator, translator *convert.BlockTranslator, knownBlocks []block.Behavior) *World {
 	w := &World{
-		generator:                gen,
-		translator:               translator,
-		chunks:                   map[[2]int]*format.Chunk{},
-		populated:                map[[2]int]bool{},
-		stateTemplates:           map[int32]block.Behavior{},
-		stateByBlockKey:          map[string]int32{},
-		lightFilters:             map[int32]int{},
-		lightEmitters:            map[int32]int{},
-		directSkyLightBlockers:   map[int32]bool{},
-		blastResistance:          map[int32]float64{},
-		entities:                 map[int]Entity{},
-		entitiesByChunk:          map[[2]int]map[int]Entity{},
-		entityLastKnownPositions: map[int]math.Vector3{},
-		difficulty:               DifficultyNormal,
-		sunAnglePercentage:       0.5,
-		randomTickBlocks:         map[int32]bool{},
-		scheduledUpdateDelay:     map[[3]int]int{},
-		neighbourUpdateQueued:    map[[3]int]bool{},
-		chunkLoaders:             map[[2]int]map[any]bool{},
-		tickingChunks:            map[[2]int]map[any]bool{},
-		chunkTickRadius:          4,
-		unloadQueue:              map[[2]int]int64{},
-		chunkListeners:           map[[2]int]map[ChunkListener]bool{},
-		biomeRegistry:            biome.NewRegistry(),
-		rng:                      rand.New(rand.NewSource(time.Now().UnixNano())),
+		generator:  gen,
+		translator: translator,
+		chunks:     map[[2]int]*format.Chunk{},
+
+		chunkLock:                         map[[2]int]*ChunkLockID{},
+		chunkPopulationRequestMap:         map[[2]int]*promise.Resolver[*format.Chunk]{},
+		chunkPopulationRequestQueueIndex:  map[[2]int]bool{},
+		activeChunkPopulationTasks:        map[[2]int]bool{},
+		maxConcurrentChunkPopulationTasks: defaultMaxConcurrentChunkPopulationTasks,
+		knownUngeneratedChunks:            map[[2]int]bool{},
+		stateTemplates:                    map[int32]block.Behavior{},
+		stateByBlockKey:                   map[string]int32{},
+		lightFilters:                      map[int32]int{},
+		lightEmitters:                     map[int32]int{},
+		directSkyLightBlockers:            map[int32]bool{},
+		blastResistance:                   map[int32]float64{},
+		entities:                          map[int]Entity{},
+		entitiesByChunk:                   map[[2]int]map[int]Entity{},
+		entityLastKnownPositions:          map[int]math.Vector3{},
+		difficulty:                        DifficultyNormal,
+		sunAnglePercentage:                0.5,
+		randomTickBlocks:                  map[int32]bool{},
+		scheduledUpdateDelay:              map[[3]int]int{},
+		neighbourUpdateQueued:             map[[3]int]bool{},
+		chunkLoaders:                      map[[2]int]map[any]bool{},
+		tickingChunks:                     map[[2]int]map[any]bool{},
+		chunkTickRadius:                   4,
+		unloadQueue:                       map[[2]int]int64{},
+		chunkListeners:                    map[[2]int]map[ChunkListener]bool{},
+		biomeRegistry:                     biome.NewRegistry(),
+		rng:                               rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	w.subChunkExplorer = utils.NewSubChunkExplorer(w)
 	w.skyLightUpdate = light.NewSkyLightUpdate(w.subChunkExplorer, w.lightFilters, w.directSkyLightBlockers)
@@ -262,6 +286,9 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 	}
 	return w
 }
+
+// SetLogger sets World::$logger.
+func (w *World) SetLogger(logger log.Logger) { w.logger = logger }
 
 // GetID is a port of World::getId.
 func (w *World) GetID() int { return w.id }
@@ -298,6 +325,7 @@ func (w *World) registerTemplate(blk block.Behavior) {
 	stateID := int32(blk.GetStateId())
 	if _, ok := w.stateTemplates[stateID]; !ok {
 		w.stateTemplates[stateID] = blk.Clone()
+		w.registryVersion++
 	}
 	w.translator.InternalIDToNetworkID(blk)
 
@@ -308,6 +336,7 @@ func (w *World) registerTemplate(blk block.Behavior) {
 	}
 
 	if _, ok := w.lightFilters[stateID]; !ok {
+		w.registryVersion++
 		w.lightFilters[stateID] = min(15, blk.GetLightFilter()+light.BaseLightFilter)
 		w.lightEmitters[stateID] = blk.GetLightLevel()
 		w.directSkyLightBlockers[stateID] = blk.BlocksDirectSkyLight()
@@ -344,52 +373,85 @@ func blockStateKey(data bedrock.BlockStateData) string {
 
 func chunkKey(chunkX, chunkZ int) [2]int { return [2]int{chunkX, chunkZ} }
 
-// GetOrLoadChunk returns the chunk at the given chunk coordinates, generating and populating (see
-// Generator.PopulateChunk) it via the configured Generator on first access - this port has no
-// on-disk world storage (no WorldProvider equivalent), so "load" always means "generate". This is
-// the entry point external callers (main.go, tests) should use to get a chunk ready to look at or
-// send to a client; code that runs *during* population itself (GetBlockAt/SetBlock/
-// GetOrLoadChunkAtPosition, used by populators reading/writing across chunk borders) deliberately
-// goes through generateChunkOnly instead - see ensurePopulated's doc comment for why.
+// GetOrLoadChunk generates, populates and lights the chunk right away if it isn't already,
+// running population through a SyncGeneratorExecutor on the calling goroutine. It has no PHP
+// counterpart (PHP always waits for requestChunkPopulation's promise): it's for startup and
+// tests. Players get their chunks through RequestChunkPopulation, which doesn't block the tick.
 func (w *World) GetOrLoadChunk(chunkX, chunkZ int) *format.Chunk {
-	c := w.generateChunkOnly(chunkX, chunkZ)
-	w.ensurePopulated(chunkX, chunkZ)
-	return c
-}
-
-// generateChunkOnly returns the chunk at the given coordinates: from cache if already loaded,
-// else from the on-disk provider if one is open and has this chunk saved (see OpenProvider),
-// else generating (and caching) it via the configured Generator - but never running population,
-// see ensurePopulated's doc comment for why callers reached from inside a populate pass must use
-// this instead of GetOrLoadChunk.
-func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
-	key := chunkKey(chunkX, chunkZ)
-	if c, ok := w.chunks[key]; ok {
-		return c
-	}
-
-	if w.provider != nil {
-		if c, ok, err := worldio.LoadChunk(w.provider, int32(chunkX), int32(chunkZ), int32(block.VanillaAir().GetStateId()), 0, w.resolveBlockState); err == nil && ok {
-			w.chunks[key] = c
-			w.populated[key] = true // a saved chunk was always fully generated+populated before being saved
-			if entityNBT, err := worldio.LoadEntities(w.provider, int32(chunkX), int32(chunkZ)); err == nil {
-				w.initChunkEntities(entityNBT)
+	chunk := w.loadChunk(chunkX, chunkZ)
+	if chunk == nil || !chunk.IsPopulated() {
+		if w.IsChunkLocked(chunkX, chunkZ) {
+			// An async population is in flight: finishing it synchronously breaks its locks, so
+			// its result is discarded when it comes back.
+			for xx := -1; xx <= 1; xx++ {
+				for zz := -1; zz <= 1; zz++ {
+					w.UnlockChunk(chunkX+xx, chunkZ+zz, nil)
+				}
 			}
-			if event.HasHandlers[worldevent.ChunkLoadEvent]() {
-				event.Call(worldevent.NewChunkLoadEvent(w, chunkX, chunkZ, c, false))
+		}
+		var center *format.Chunk
+		if chunk != nil {
+			center = chunk.Clone()
+		}
+		adjacent := w.getAdjacentChunks(chunkX, chunkZ)
+		for relative, c := range adjacent {
+			if c != nil {
+				adjacent[relative] = c.Clone()
 			}
-			w.fireOnChunkLoaded(chunkX, chunkZ, c)
-			return c
+		}
+		result := runPopulation(w.generatorSetupParameters(), w.generator, w.registrySnapshot(), chunkX, chunkZ, center, adjacent)
+		for _, blk := range result.NewTemplates {
+			w.registerTemplate(blk)
+		}
+		oldChunk := chunk
+		w.SetChunk(chunkX, chunkZ, result.Center)
+		for relative, c := range result.Adjacent {
+			w.SetChunk(chunkX+relative[0], chunkZ+relative[1], c)
+		}
+		chunk = result.Center
+		if oldChunk == nil || !oldChunk.IsPopulated() {
+			if event.HasHandlers[worldevent.ChunkPopulateEvent]() {
+				event.Call(worldevent.NewChunkPopulateEvent(w, chunkX, chunkZ, chunk))
+			}
+			for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
+				listener.OnChunkPopulated(chunkX, chunkZ, chunk)
+			}
+		}
+		if resolver, ok := w.chunkPopulationRequestMap[chunkKey(chunkX, chunkZ)]; ok {
+			if _, active := w.activeChunkPopulationTasks[chunkKey(chunkX, chunkZ)]; !active {
+				delete(w.chunkPopulationRequestMap, chunkKey(chunkX, chunkZ))
+				resolver.Resolve(chunk)
+			}
 		}
 	}
-
-	c := w.generator.GenerateChunk(chunkX, chunkZ)
-	w.chunks[key] = c
-	// setChunk's "$oldChunk === null" branch.
-	if event.HasHandlers[worldevent.ChunkLoadEvent]() {
-		event.Call(worldevent.NewChunkLoadEvent(w, chunkX, chunkZ, c, true))
+	if lit, known := chunk.IsLightPopulated(); !known || !lit {
+		result := computeChunkLight(chunk.Clone(), w.registrySnapshot())
+		chunk.SetHeightMapArray(result.HeightMap)
+		for y, lightArray := range result.BlockLight {
+			chunk.GetSubChunk(y).SetBlockLightArray(lightArray)
+		}
+		for y, lightArray := range result.SkyLight {
+			chunk.GetSubChunk(y).SetBlockSkyLightArray(lightArray)
+		}
+		chunk.SetLightPopulated(true, true)
 	}
-	w.fireOnChunkLoaded(chunkX, chunkZ, c)
+	return chunk
+}
+
+// generateChunkOnly returns the loaded chunk, loading it from disk or generating it (without
+// population) if needed. PHP's getBlockAt and friends read unloaded terrain as air instead; this
+// port's block accessors generate on demand, which is cheap (see World.GetBlockAt's callers). A
+// chunk that's locked for async population isn't generated here (nil is returned), so the main
+// thread doesn't race the worker for it.
+func (w *World) generateChunkOnly(chunkX, chunkZ int) *format.Chunk {
+	if c := w.loadChunk(chunkX, chunkZ); c != nil {
+		return c
+	}
+	if w.IsChunkLocked(chunkX, chunkZ) {
+		return nil
+	}
+	c := w.generator.GenerateChunk(chunkX, chunkZ)
+	w.SetChunk(chunkX, chunkZ, c)
 	return c
 }
 
@@ -468,72 +530,6 @@ func (w *World) Close() error {
 	return w.provider.Close()
 }
 
-// ensurePopulated runs this chunk's Populators exactly once (see the populated map), first making
-// sure its 8 immediate neighbours are generated - not populated - via generateChunkOnly, so a
-// populator can safely read/write a handful of blocks across a chunk border (matching Ore's blast
-// radius) without that write recursively triggering the neighbour's own population.
-//
-// Real PocketMine-MP achieves the same guarantee differently: it defers a chunk's PopulationTask
-// until World::orderChunkPopulation sees all 8 neighbours already generated, running generation and
-// population as separate asynchronous passes over a whole neighbourhood. This port has no
-// worker-thread/task-queue system to defer onto, so it does both synchronously and immediately
-// on first access instead - but still keeps "generate a neighbour" and "populate a neighbour"
-// as two distinct steps, which is the part that actually matters: collapsing them into one (as an
-// earlier version of this method did) means populating chunk (0,0) can write into chunk (1,0),
-// whose own populate call can reach into (2,0), and so on - an unbounded chain reaction that
-// eagerly populates the entire world. Only ever generating (never populating) neighbours here is
-// what stops that chain.
-func (w *World) ensurePopulated(chunkX, chunkZ int) {
-	key := chunkKey(chunkX, chunkZ)
-	if w.populated[key] {
-		return
-	}
-	w.populated[key] = true
-
-	for dx := -1; dx <= 1; dx++ {
-		for dz := -1; dz <= 1; dz++ {
-			w.generateChunkOnly(chunkX+dx, chunkZ+dz)
-		}
-	}
-	// In PHP population runs in an async PopulationTask on copies of the chunks
-	// (SimpleChunkManager: no neighbour updates, light or changed-block tracking), and the results
-	// come back through World::setChunk, which drops each modified chunk's changedBlocks and tells
-	// its listeners the whole chunk changed (players resend it).
-	w.populationWrites = map[[2]int]bool{{chunkX, chunkZ}: true}
-	w.generator.PopulateChunk(w, chunkX, chunkZ)
-	modified := w.populationWrites
-	w.populationWrites = nil
-
-	w.chunks[key].SetPopulated(true)
-	if event.HasHandlers[worldevent.ChunkPopulateEvent]() {
-		event.Call(worldevent.NewChunkPopulateEvent(w, chunkX, chunkZ, w.chunks[key]))
-	}
-	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
-		listener.OnChunkPopulated(chunkX, chunkZ, w.chunks[key])
-	}
-	for chunkPos := range modified {
-		delete(w.changedBlocks, chunkPos) // setChunk: unset($this->changedBlocks[$chunkHash])
-		if chunk, ok := w.chunks[chunkKey(chunkPos[0], chunkPos[1])]; ok {
-			for _, listener := range w.GetChunkListeners(chunkPos[0], chunkPos[1]) {
-				listener.OnChunkChanged(chunkPos[0], chunkPos[1], chunk)
-			}
-		}
-	}
-
-	// Light is recalculated after population (not generation) so it reflects the final terrain -
-	// populators (Tree, Ore, ...) can add/remove blocks with real light filters/emission that
-	// pure generation didn't have yet. Matches real PocketMine-MP's own dependency: a
-	// PopulationTask always runs before a chunk is considered ready for LightPopulationTask.
-	// Neighbours only being *generated* (not populated) here is exactly as safe for light
-	// propagation as it already is for population's own cross-border writes - see this method's
-	// own doc comment above on why that's the invariant that matters, not "fully populated".
-	w.skyLightUpdate.RecalculateChunk(chunkX, chunkZ)
-	w.skyLightUpdate.Execute()
-	w.blockLightUpdate.RecalculateChunk(chunkX, chunkZ)
-	w.blockLightUpdate.Execute()
-	w.chunks[key].SetLightPopulated(true, true)
-}
-
 // Translator returns the BlockTranslator this World's chunks were populated through - the network
 // chunk serializer needs it to translate a chunk's stored internal state IDs to Bedrock runtime
 // IDs.
@@ -544,8 +540,10 @@ func (w *World) Translator() *convert.BlockTranslator { return w.translator }
 // stateTemplates' doc comment) rather than panicking; this should never happen for a state this
 // World itself ever wrote, only for data corruption.
 func (w *World) GetBlockAt(x, y, z int) block.Behavior {
-	chunk := w.generateChunkOnly(x>>4, z>>4)
-	stateID := chunk.GetBlockStateID(x&0xf, y, z&0xf)
+	stateID := int32(block.VanillaAir().GetStateId())
+	if chunk := w.generateChunkOnly(x>>4, z>>4); chunk != nil {
+		stateID = chunk.GetBlockStateID(x&0xf, y, z&0xf)
+	}
 	tpl, ok := w.stateTemplates[stateID]
 	if !ok {
 		tpl = w.stateTemplates[int32(block.VanillaAir().GetStateId())]
@@ -571,20 +569,18 @@ func (w *World) SetBlock(pos block.Position, blk block.Behavior) error {
 
 // SetBlockUpdate is World::setBlock with its $update parameter: when update is false, light isn't
 // recalculated and neighbours aren't notified (Leaves and Farmland use this).
-//
-// While a chunk is being populated the write only changes the chunk data, like PHP's
-// SimpleChunkManager::setBlockAt in the async PopulationTask: see ensurePopulated.
 func (w *World) SetBlockUpdate(pos block.Position, blk block.Behavior, update bool) error {
 	x, y, z := pos.FloorX(), pos.FloorY(), pos.FloorZ()
 	w.registerTemplate(blk)
 	chunk := w.generateChunkOnly(x>>4, z>>4)
+	if chunk == nil {
+		return fmt.Errorf("Cannot set a block in un-generated terrain")
+	}
+	// setBlockAt breaks any population lock: the async result is discarded and redone.
+	w.UnlockChunk(x>>4, z>>4, nil)
 	chunk.SetBlockStateID(x&0xf, y, z&0xf, int32(blk.GetStateId()))
 
 	chunkPos := [2]int{x >> 4, z >> 4}
-	if w.populationWrites != nil {
-		w.populationWrites[chunkPos] = true
-		return nil
-	}
 
 	if w.changedBlocks == nil {
 		w.changedBlocks = map[[2]int]map[[3]int]math.Vector3{}
@@ -620,6 +616,9 @@ func (w *World) GetTile(pos block.Position) (block.Tile, bool) {
 // e.g. Chest's neighbour-pairing lookup).
 func (w *World) GetTileAt(x, y, z int) (block.Tile, bool) {
 	chunk := w.generateChunkOnly(x>>4, z>>4)
+	if chunk == nil {
+		return nil, false
+	}
 	return chunk.GetTile(x&0xf, y, z&0xf)
 }
 
@@ -627,6 +626,9 @@ func (w *World) GetTileAt(x, y, z int) (block.Tile, bool) {
 func (w *World) AddTile(t block.Tile) {
 	pos := t.GetPosition()
 	chunk := w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)
+	if chunk == nil {
+		panic(fmt.Sprintf("Attempted to create tile %T in unloaded chunk", t))
+	}
 	chunk.AddTile(t)
 }
 
@@ -635,8 +637,9 @@ func (w *World) AddTile(t block.Tile) {
 // removeTile($this)`-style bookkeeping).
 func (w *World) RemoveTile(t block.Tile) {
 	pos := t.GetPosition()
-	chunk := w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)
-	chunk.RemoveTile(t)
+	if chunk := w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4); chunk != nil {
+		chunk.RemoveTile(t)
+	}
 }
 
 // chunkAdapter satisfies block.Chunk (just SetBlockStateID(x,y,z,stateID int)) over a
@@ -656,12 +659,14 @@ func (a chunkAdapter) GetBiomeID(x, y, z int) int32 {
 	return a.chunk.GetBiomeID(x, y, z)
 }
 
-// GetOrLoadChunkAtPosition is a port of World::getOrLoadChunkAtPosition. Uses generateChunkOnly,
-// not GetOrLoadChunk - see ensurePopulated's doc comment on why code reachable from inside a
-// populate pass (this is how populator.TallGrass looks up a chunk's heightmap) must not trigger
-// population itself.
+// GetOrLoadChunkAtPosition is a port of World::getOrLoadChunkAtPosition (generating the chunk if
+// needed, see generateChunkOnly; never populating it).
 func (w *World) GetOrLoadChunkAtPosition(pos block.Position) (block.Chunk, bool) {
-	return chunkAdapter{w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)}, true
+	chunk := w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4)
+	if chunk == nil {
+		return nil, false
+	}
+	return chunkAdapter{chunk}, true
 }
 
 // viewer is the local surface AddSound/AddParticle/BroadcastPacketToViewers need to actually
@@ -1060,6 +1065,9 @@ func (w *World) IsSpawnChunk(chunkX, chunkZ int) bool {
 // this port.
 func (w *World) GetBiomeID(x, y, z int) int32 {
 	chunk := w.generateChunkOnly(x>>4, z>>4)
+	if chunk == nil {
+		return 0 // BiomeIds::OCEAN, what PHP returns for ungenerated terrain
+	}
 	return chunk.GetBiomeID(x&0xf, y, z&0xf)
 }
 
@@ -1071,6 +1079,10 @@ func (w *World) GetBiome(x, y, z int) *biome.Biome {
 // SetBiomeID is a port of World::setBiomeId.
 func (w *World) SetBiomeID(x, y, z int, biomeID int32) {
 	chunk := w.generateChunkOnly(x>>4, z>>4)
+	if chunk == nil {
+		return
+	}
+	w.UnlockChunk(x>>4, z>>4, nil)
 	chunk.SetBiomeID(x&0xf, y, z&0xf, biomeID)
 }
 

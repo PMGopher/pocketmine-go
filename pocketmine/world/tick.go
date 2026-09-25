@@ -2,6 +2,7 @@ package world
 
 import (
 	stdmath "math"
+	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/event"
 	blockevent "pocketmine-go/pocketmine/event/block"
 
@@ -201,7 +202,13 @@ func (w *World) UnregisterChunkLoader(loader any, chunkX, chunkZ int) {
 	delete(loaders, loader)
 	if len(loaders) == 0 {
 		delete(w.chunkLoaders, key)
-		w.unloadQueue[key] = w.currentTick
+		w.UnloadChunkRequest(chunkX, chunkZ, true)
+		if resolver, ok := w.chunkPopulationRequestMap[key]; ok {
+			if _, active := w.activeChunkPopulationTasks[key]; !active {
+				resolver.Reject()
+				delete(w.chunkPopulationRequestMap, key)
+			}
+		}
 	}
 }
 
@@ -245,27 +252,25 @@ func (w *World) UnregisterTickingChunk(loader any, chunkX, chunkZ int) {
 	}
 }
 
-// isChunkTickable is a port of World::isChunkTickable's actual eligibility check (chunk + its 8
-// neighbours all loaded, populated and light-populated), minus the validTickingChunks/
-// recheckTickingChunks caching machinery real PHP wraps around it.
-//
-// That caching exists in PHP purely to avoid re-running this check every tick while a chunk's
-// neighbourhood is mid-async-light-population (LightPopulationTask runs on a worker thread there,
-// so a chunk can sit in a "generated, not yet light-populated" state for an unpredictable stretch
-// of real time). This port's whole generate -> populate -> light-populate pipeline runs
-// synchronously, inline, in ensurePopulated (see its own doc comment) - by the time any chunk is
-// reachable via GetChunk at all, it is already fully generated, populated, and light-populated.
-// There is no async gap for a recheck-queue to paper over, so the check can just run directly
-// every tick with identical results and no correctness cost - a legitimate architectural
-// simplification of PHP's own internal bookkeeping, not a difference in observable behaviour.
+// isChunkTickable is a port of World::isChunkTickable: the chunk and its 8 neighbours must be
+// loaded, populated, unlocked and lit. A neighbour whose light hasn't been calculated yet gets it
+// ordered (orderLightPopulation). PHP caches the result per tick and rechecks only chunks marked
+// for it; this port checks the registered ticking chunks every tick instead.
 func (w *World) isChunkTickable(chunkX, chunkZ int) bool {
 	for cx := -1; cx <= 1; cx++ {
 		for cz := -1; cz <= 1; cz++ {
+			if w.IsChunkLocked(chunkX+cx, chunkZ+cz) {
+				return false
+			}
 			chunk, ok := w.GetChunk(chunkX+cx, chunkZ+cz)
 			if !ok || !chunk.IsPopulated() {
 				return false
 			}
-			if lit, known := chunk.IsLightPopulated(); !known || !lit {
+			lit, known := chunk.IsLightPopulated()
+			if !known || !lit {
+				if known && !lit {
+					w.orderLightPopulation(chunkX+cx, chunkZ+cz)
+				}
 				return false
 			}
 		}
@@ -371,7 +376,8 @@ func (w *World) unloadChunk(chunkX, chunkZ int, safe bool) bool {
 
 	chunk.OnUnload()
 	delete(w.chunks, key)
-	delete(w.populated, key)
+	delete(w.changedBlocks, key)
+	w.rejectPopulationRequest(chunkX, chunkZ)
 	return true
 }
 
@@ -526,7 +532,10 @@ func (w *World) CreateBlockUpdatePackets(blocks []math.Vector3) []packet.Packet 
 	packets := make([]packet.Packet, 0, len(blocks))
 	for _, b := range blocks {
 		x, y, z := b.FloorX(), b.FloorY(), b.FloorZ()
-		stateID := w.generateChunkOnly(x>>4, z>>4).GetBlockStateID(x&0xf, y, z&0xf)
+		stateID := int32(block.VanillaAir().GetStateId())
+		if chunk := w.generateChunkOnly(x>>4, z>>4); chunk != nil {
+			stateID = chunk.GetBlockStateID(x&0xf, y, z&0xf)
+		}
 		packets = append(packets, &packet.UpdateBlock{
 			Position:          protocol.BlockPos{int32(x), int32(y), int32(z)},
 			NewBlockRuntimeID: uint32(w.translator.NetworkIDForCachedState(stateID)),

@@ -8,6 +8,7 @@ import (
 	worldevent "pocketmine-go/pocketmine/event/world"
 	"pocketmine-go/pocketmine/log"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/scheduler"
 	"strings"
 	"time"
 
@@ -39,6 +40,51 @@ type WorldManager struct {
 	autoSave       bool
 	autoSaveTicks  int64
 	autoSaveTicker int64
+
+	// asyncPool is Server::getAsyncPool(), which worlds populate chunks and calculate light on;
+	// nil makes worlds do both synchronously.
+	asyncPool *scheduler.AsyncPool
+	// populationQueueSize is pocketmine.yml's chunk-generation.population-queue-size.
+	populationQueueSize int
+}
+
+// SetAsyncPool sets the pool worlds loaded or generated from now on populate chunks on.
+func (m *WorldManager) SetAsyncPool(pool *scheduler.AsyncPool) { m.asyncPool = pool }
+
+// SetPopulationQueueSize sets pocketmine.yml's chunk-generation.population-queue-size for worlds
+// loaded or generated from now on.
+func (m *WorldManager) SetPopulationQueueSize(n int) { m.populationQueueSize = n }
+
+// fastGenerators are the generators GeneratorManager registers with $fast = true: they're cheap
+// enough to run on the main thread (World::__construct uses a SyncGeneratorExecutor for them).
+var fastGenerators = map[string]bool{"flat": true}
+
+// setUpGeneration is the generator part of World::__construct: an AsyncGeneratorExecutor whose
+// workers build their own generator from the world's generator name, seed and options.
+func (m *WorldManager) setUpGeneration(w *World, generatorName string, seed int64, generatorOptions string) {
+	if m.logger != nil {
+		w.SetLogger(log.NewPrefixedLogger(m.logger, "World: "+w.GetFolderName()))
+	}
+	if m.populationQueueSize > 0 {
+		w.SetMaxConcurrentChunkPopulationTasks(m.populationQueueSize)
+	}
+	if m.asyncPool == nil {
+		return
+	}
+	factory, ok := generator.GetFactory(strings.ToLower(generatorName))
+	if !ok || fastGenerators[strings.ToLower(generatorName)] {
+		w.SetGeneratorExecutor(nil, m.asyncPool)
+		return
+	}
+	logger := m.logger
+	if logger == nil {
+		logger = log.Global()
+	}
+	w.SetGeneratorExecutor(NewAsyncGeneratorExecutor(logger, m.asyncPool, GeneratorExecutorSetupParameters{
+		WorldMinY:    YMin,
+		WorldMaxY:    YMax,
+		NewGenerator: func() (generator.Generator, error) { return factory(seed, generatorOptions) },
+	}), m.asyncPool)
 }
 
 // NewWorldManager is a port of WorldManager::__construct. translator/knownBlocks are shared by
@@ -182,6 +228,9 @@ func (m *WorldManager) UnloadWorld(w *World, forceUnload bool) (bool, error) {
 	if err := w.Close(); err != nil {
 		return false, fmt.Errorf("world manager: closing world %q: %w", w.GetFolderName(), err)
 	}
+	if w.generatorExecutor != nil {
+		w.generatorExecutor.Shutdown()
+	}
 	return true, nil
 }
 
@@ -226,6 +275,7 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 	w.id = m.nextID
 	w.folderName = name
 	w.displayName = wd.GetName()
+	m.setUpGeneration(w, wd.GetGenerator(), wd.GetSeed(), wd.GetGeneratorOptions())
 
 	m.worlds[w.id] = w
 	m.worldData[w.id] = wd
@@ -235,10 +285,8 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 }
 
 // GenerateWorld is a port of WorldManager::generateWorld, minus background spawn-chunk
-// pregeneration (real PHP's own $backgroundGeneration - a pure startup-latency optimisation this
-// port's synchronous generation pipeline has no equivalent async task queue to run it on anyway;
-// see ensurePopulated's own doc comment on why this port generates everything inline instead) and
-// the WorldInitEvent/WorldLoadEvent (see WorldManager's own doc comment).
+// pregeneration, which the server does (Server.generateSpawnTerrain: it needs ChunkSelector from
+// the player package).
 //
 // gen must already be fully constructed by the caller (see generator.Factory's own doc comment on
 // why - not every Generator this port has can be built from just a name + options string yet).
@@ -275,6 +323,7 @@ func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, optio
 	w.id = m.nextID
 	w.folderName = name
 	w.displayName = name
+	m.setUpGeneration(w, options.GeneratorName, options.Seed, options.GeneratorOptions)
 
 	m.worlds[w.id] = w
 	m.worldData[w.id] = wd

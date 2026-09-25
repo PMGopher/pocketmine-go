@@ -2,6 +2,7 @@ package block
 
 import (
 	"fmt"
+	"sync"
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
 )
@@ -103,69 +104,83 @@ func mustVanillaBlockIdentifier(blockTypeID int) *BlockIdentifier {
 
 // VanillaAir is a port of VanillaBlocks::AIR() - see VanillaBlocksInputs.php's
 // register("air", ...): BreakInfo::indestructible(-1.0).
+var vanillaAirOnce sync.Once
+
 func VanillaAir() Behavior {
-	if vanillaAir == nil {
+	vanillaAirOnce.Do(func() {
 		vanillaAir = NewAir(mustVanillaBlockIdentifier(AIR), "Air", NewBlockTypeInfo(BlockBreakInfoIndestructible(-1.0), nil, nil))
-	}
+	})
 	return vanillaAir.Clone()
 }
 
 // VanillaDirt is a port of VanillaBlocks::DIRT() - see VanillaBlocksInputs.php's
 // register("dirt", ...): BreakInfo::shovel(0.5), [Tags::DIRT].
+var vanillaDirtOnce sync.Once
+
 func VanillaDirt() Behavior {
-	if vanillaDirt == nil {
+	vanillaDirtOnce.Do(func() {
 		vanillaDirt = NewDirt(mustVanillaBlockIdentifier(DIRT), "Dirt", NewBlockTypeInfo(BlockBreakInfoShovel(0.5, nil, nil), []string{BlockTypeTagsDirt}, nil))
-	}
+	})
 	return vanillaDirt.Clone()
 }
 
 // VanillaWater is a port of VanillaBlocks::WATER() - see VanillaBlocksInputs.php's
 // register("water", ...): BreakInfo::indestructible(500.0).
+var vanillaWaterOnce sync.Once
+
 func VanillaWater() Behavior {
-	if vanillaWater == nil {
+	vanillaWaterOnce.Do(func() {
 		vanillaWater = NewWater(mustVanillaBlockIdentifier(WATER), "Water", NewBlockTypeInfo(BlockBreakInfoIndestructible(500.0), nil, nil))
-	}
+	})
 	return vanillaWater.Clone()
 }
 
 // VanillaNetherrack is a port of VanillaBlocks::NETHERRACK() - see VanillaBlocksInputs.php's
 // register("netherrack", ...): BreakInfo::pickaxe(0.4, ToolTier::WOOD).
+var vanillaNetherrackOnce sync.Once
+
 func VanillaNetherrack() Behavior {
-	if vanillaNetherrack == nil {
+	vanillaNetherrackOnce.Do(func() {
 		vanillaNetherrack = NewNetherrack(mustVanillaBlockIdentifier(NETHERRACK), "Netherrack", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.4, vanillaToolTierWood, nil), nil, nil))
-	}
+	})
 	return vanillaNetherrack.Clone()
 }
 
 // VanillaObsidian is a port of VanillaBlocks::OBSIDIAN() - see VanillaBlocksInputs.php's
 // register("obsidian", ...): BreakInfo::pickaxe(35.0, ToolTier::DIAMOND, 6000.0).
+var vanillaObsidianOnce sync.Once
+
 func VanillaObsidian() Behavior {
-	if vanillaObsidian == nil {
+	vanillaObsidianOnce.Do(func() {
 		blastResistance := 6000.0
 		obsidian := &Opaque{Block: NewBlock(mustVanillaBlockIdentifier(OBSIDIAN), "Obsidian", NewBlockTypeInfo(BlockBreakInfoPickaxe(35.0, vanillaToolTierDiamond, &blastResistance), nil, nil))}
 		obsidian.Init(obsidian)
 		vanillaObsidian = obsidian
-	}
+	})
 	return vanillaObsidian.Clone()
 }
 
 // VanillaSoulSoil is a port of VanillaBlocks::SOUL_SOIL() - see VanillaBlocksInputs.php's
 // register("soul_soil", ...): BreakInfo::shovel(0.5).
+var vanillaSoulSoilOnce sync.Once
+
 func VanillaSoulSoil() Behavior {
-	if vanillaSoulSoil == nil {
+	vanillaSoulSoilOnce.Do(func() {
 		soil := &Opaque{Block: NewBlock(mustVanillaBlockIdentifier(SOUL_SOIL), "Soul Soil", NewBlockTypeInfo(BlockBreakInfoShovel(0.5, nil, nil), nil, nil))}
 		soil.Init(soil)
 		vanillaSoulSoil = soil
-	}
+	})
 	return vanillaSoulSoil.Clone()
 }
 
 // VanillaCake is a port of VanillaBlocks::CAKE() - see VanillaBlocksInputs.php's
 // register("cake", ...): new BreakInfo(0.5) (no tool type, no tier).
+var vanillaCakeOnce sync.Once
+
 func VanillaCake() Behavior {
-	if vanillaCake == nil {
+	vanillaCakeOnce.Do(func() {
 		vanillaCake = NewCake(mustVanillaBlockIdentifier(CAKE), "Cake", NewBlockTypeInfo(NewBlockBreakInfo(0.5, ToolTypeNone, 0, nil, nil), nil, nil))
-	}
+	})
 	return vanillaCake.Clone()
 }
 
@@ -173,64 +188,78 @@ func VanillaCake() Behavior {
 // register("concrete", ...): BreakInfo::pickaxe(1.8, ToolTier::WOOD). Defaults to White, same as
 // the real singleton - callers needing a specific color call SetColor on the result, same pattern
 // as VanillaCake()/CakeWithCandle.GetResidue.
+var vanillaConcreteOnce sync.Once
+
 func VanillaConcrete() Behavior {
-	if vanillaConcrete == nil {
+	vanillaConcreteOnce.Do(func() {
 		vanillaConcrete = NewConcrete(mustVanillaBlockIdentifier(CONCRETE), "Concrete", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.8, vanillaToolTierWood, nil), nil, nil))
-	}
+	})
 	return vanillaConcrete.Clone()
 }
 
 // VanillaMelon is a port of VanillaBlocks::MELON() - see VanillaBlocksInputs.php's
 // register("melon", ...): BreakInfo::axe(1.0).
+var vanillaMelonOnce sync.Once
+
 func VanillaMelon() Behavior {
-	if vanillaMelon == nil {
+	vanillaMelonOnce.Do(func() {
 		vanillaMelon = NewMelon(mustVanillaBlockIdentifier(MELON), "Melon Block", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
-	}
+	})
 	return vanillaMelon.Clone()
 }
 
 // VanillaPumpkin is a port of VanillaBlocks::PUMPKIN() - see VanillaBlocksInputs.php's
 // register("pumpkin", ...): BreakInfo::axe(1.0).
+var vanillaPumpkinOnce sync.Once
+
 func VanillaPumpkin() Behavior {
-	if vanillaPumpkin == nil {
+	vanillaPumpkinOnce.Do(func() {
 		vanillaPumpkin = NewPumpkin(mustVanillaBlockIdentifier(PUMPKIN), "Pumpkin", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
-	}
+	})
 	return vanillaPumpkin.Clone()
 }
 
 // VanillaSugarcane is a port of VanillaBlocks::SUGARCANE() - see VanillaBlocksInputs.php's
 // register("sugarcane", ...): BreakInfo::instant().
+var vanillaSugarcaneOnce sync.Once
+
 func VanillaSugarcane() Behavior {
-	if vanillaSugarcane == nil {
+	vanillaSugarcaneOnce.Do(func() {
 		vanillaSugarcane = NewSugarcane(mustVanillaBlockIdentifier(SUGARCANE), "Sugarcane", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
-	}
+	})
 	return vanillaSugarcane.Clone()
 }
 
 // VanillaCaveVines is a port of VanillaBlocks::CAVE_VINES() - see VanillaBlocksInputs.php's
 // register("cave_vines", ...): BreakInfo::instant().
+var vanillaCaveVinesOnce sync.Once
+
 func VanillaCaveVines() Behavior {
-	if vanillaCaveVines == nil {
+	vanillaCaveVinesOnce.Do(func() {
 		vanillaCaveVines = NewCaveVines(mustVanillaBlockIdentifier(CAVE_VINES), "Cave Vines", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
-	}
+	})
 	return vanillaCaveVines.Clone()
 }
 
 // VanillaTorchflower is a port of VanillaBlocks::TORCHFLOWER() - see VanillaBlocksInputs.php's
 // register("torchflower", ...): BreakInfo::instant(), [Tags::POTTABLE_PLANTS] ($flowerTypeInfo).
+var vanillaTorchflowerOnce sync.Once
+
 func VanillaTorchflower() Behavior {
-	if vanillaTorchflower == nil {
+	vanillaTorchflowerOnce.Do(func() {
 		vanillaTorchflower = NewFlower(mustVanillaBlockIdentifier(TORCHFLOWER), "Torchflower", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), []string{BlockTypeTagsPottablePlants}, nil))
-	}
+	})
 	return vanillaTorchflower.Clone()
 }
 
 // VanillaTorchflowerCrop is a port of VanillaBlocks::TORCHFLOWER_CROP() - see
 // VanillaBlocksInputs.php's register("torchflower_crop", ...): BreakInfo::instant().
+var vanillaTorchflowerCropOnce sync.Once
+
 func VanillaTorchflowerCrop() Behavior {
-	if vanillaTorchflowerCrop == nil {
+	vanillaTorchflowerCropOnce.Do(func() {
 		vanillaTorchflowerCrop = NewTorchflowerCrop(mustVanillaBlockIdentifier(TORCHFLOWER_CROP), "Torchflower Crop", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
-	}
+	})
 	return vanillaTorchflowerCrop.Clone()
 }
 
@@ -238,106 +267,128 @@ func VanillaTorchflowerCrop() Behavior {
 // registerDelayed("crimson_nylium", ...): BreakInfo::pickaxe(0.4, ToolTier::WOOD), [Tags::NYLIUM].
 // Vegetation is nil (the real singleton lists CRIMSON_FUNGUS/CRIMSON_ROOTS, neither ported yet) -
 // harmless for Netherrack.tryTransform, the only current caller, which never reads it.
+var vanillaCrimsonNyliumOnce sync.Once
+
 func VanillaCrimsonNylium() Behavior {
-	if vanillaCrimsonNylium == nil {
+	vanillaCrimsonNyliumOnce.Do(func() {
 		vanillaCrimsonNylium = NewNylium(mustVanillaBlockIdentifier(CRIMSON_NYLIUM), "Crimson Nylium", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.4, vanillaToolTierWood, nil), []string{BlockTypeTagsNylium}, nil), nil)
-	}
+	})
 	return vanillaCrimsonNylium.Clone()
 }
 
 // VanillaWarpedNylium is a port of VanillaBlocks::WARPED_NYLIUM() - see VanillaBlocksInputs.php's
 // registerDelayed("warped_nylium", ...): BreakInfo::pickaxe(0.4, ToolTier::WOOD), [Tags::NYLIUM].
 // Vegetation is nil, same reasoning as VanillaCrimsonNylium.
+var vanillaWarpedNyliumOnce sync.Once
+
 func VanillaWarpedNylium() Behavior {
-	if vanillaWarpedNylium == nil {
+	vanillaWarpedNyliumOnce.Do(func() {
 		vanillaWarpedNylium = NewNylium(mustVanillaBlockIdentifier(WARPED_NYLIUM), "Warped Nylium", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.4, vanillaToolTierWood, nil), []string{BlockTypeTagsNylium}, nil), nil)
-	}
+	})
 	return vanillaWarpedNylium.Clone()
 }
 
 // VanillaAmethystCluster is a port of VanillaBlocks::AMETHYST_CLUSTER() - see
 // VanillaBlocksInputs.php's register("amethyst_cluster", ...): BreakInfo::pickaxe(1.5, ToolTier::WOOD).
+var vanillaAmethystClusterOnce sync.Once
+
 func VanillaAmethystCluster() Behavior {
-	if vanillaAmethystCluster == nil {
+	vanillaAmethystClusterOnce.Do(func() {
 		vanillaAmethystCluster = NewAmethystCluster(mustVanillaBlockIdentifier(AMETHYST_CLUSTER), "Amethyst Cluster", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.5, vanillaToolTierWood, nil), nil, nil))
-	}
+	})
 	return vanillaAmethystCluster.Clone()
 }
 
 // VanillaCobblestone is a port of VanillaBlocks::COBBLESTONE() - see VanillaBlocksInputs.php's
 // register("cobblestone", ...): BreakInfo::pickaxe(2.0, ToolTier::WOOD, 30.0).
+var vanillaCobblestoneOnce sync.Once
+
 func VanillaCobblestone() Behavior {
-	if vanillaCobblestone == nil {
+	vanillaCobblestoneOnce.Do(func() {
 		blastResistance := 30.0
 		cobble := &Opaque{Block: NewBlock(mustVanillaBlockIdentifier(COBBLESTONE), "Cobblestone", NewBlockTypeInfo(BlockBreakInfoPickaxe(2.0, vanillaToolTierWood, &blastResistance), nil, nil))}
 		cobble.Init(cobble)
 		vanillaCobblestone = cobble
-	}
+	})
 	return vanillaCobblestone.Clone()
 }
 
 // VanillaBasalt is a port of VanillaBlocks::BASALT() - see VanillaBlocksInputs.php's
 // register("basalt", ...): BreakInfo::pickaxe(1.25, ToolTier::WOOD, 21.0).
+var vanillaBasaltOnce sync.Once
+
 func VanillaBasalt() Behavior {
-	if vanillaBasalt == nil {
+	vanillaBasaltOnce.Do(func() {
 		blastResistance := 21.0
 		vanillaBasalt = NewSimplePillar(mustVanillaBlockIdentifier(BASALT), "Basalt", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.25, vanillaToolTierWood, &blastResistance), nil, nil))
-	}
+	})
 	return vanillaBasalt.Clone()
 }
 
 // VanillaGrass is a port of VanillaBlocks::GRASS() - see VanillaBlocksInputs.php's
 // register("grass", ...): BreakInfo::shovel(0.6), [Tags::DIRT].
+var vanillaGrassOnce sync.Once
+
 func VanillaGrass() Behavior {
-	if vanillaGrass == nil {
+	vanillaGrassOnce.Do(func() {
 		vanillaGrass = NewGrass(mustVanillaBlockIdentifier(GRASS), "Grass", NewBlockTypeInfo(BlockBreakInfoShovel(0.6, nil, nil), []string{BlockTypeTagsDirt}, nil))
-	}
+	})
 	return vanillaGrass.Clone()
 }
 
 // VanillaMycelium is a port of VanillaBlocks::MYCELIUM() - see VanillaBlocksInputs.php's
 // register("mycelium", ...): BreakInfo::shovel(0.6), [Tags::DIRT].
+var vanillaMyceliumOnce sync.Once
+
 func VanillaMycelium() Behavior {
-	if vanillaMycelium == nil {
+	vanillaMyceliumOnce.Do(func() {
 		vanillaMycelium = NewMycelium(mustVanillaBlockIdentifier(MYCELIUM), "Mycelium", NewBlockTypeInfo(BlockBreakInfoShovel(0.6, nil, nil), []string{BlockTypeTagsDirt}, nil))
-	}
+	})
 	return vanillaMycelium.Clone()
 }
 
 // VanillaCactus is a port of VanillaBlocks::CACTUS() - see VanillaBlocksInputs.php's
 // register("cactus", ...): new BreakInfo(0.4) (no tool type, no tier), [Tags::POTTABLE_PLANTS].
+var vanillaCactusOnce sync.Once
+
 func VanillaCactus() Behavior {
-	if vanillaCactus == nil {
+	vanillaCactusOnce.Do(func() {
 		vanillaCactus = NewCactus(mustVanillaBlockIdentifier(CACTUS), "Cactus", NewBlockTypeInfo(NewBlockBreakInfo(0.4, ToolTypeNone, 0, nil, nil), []string{BlockTypeTagsPottablePlants}, nil))
-	}
+	})
 	return vanillaCactus.Clone()
 }
 
 // VanillaCactusFlower is a port of VanillaBlocks::CACTUS_FLOWER() - see VanillaBlocksInputs.php's
 // register("cactus_flower", ...): BreakInfo::instant().
+var vanillaCactusFlowerOnce sync.Once
+
 func VanillaCactusFlower() Behavior {
-	if vanillaCactusFlower == nil {
+	vanillaCactusFlowerOnce.Do(func() {
 		vanillaCactusFlower = NewCactusFlower(mustVanillaBlockIdentifier(CACTUS_FLOWER), "Cactus Flower", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
-	}
+	})
 	return vanillaCactusFlower.Clone()
 }
 
 // VanillaOminousBanner is a port of VanillaBlocks::OMINOUS_BANNER() - see
 // VanillaBlocksInputs.php's register("ominous_banner", ...): BreakInfo::axe(1.0) (no tool tier).
+var vanillaOminousBannerOnce sync.Once
+
 func VanillaOminousBanner() Behavior {
-	if vanillaOminousBanner == nil {
+	vanillaOminousBannerOnce.Do(func() {
 		vanillaOminousBanner = NewOminousFloorBanner(mustVanillaBlockIdentifier(OMINOUS_BANNER), "Ominous Banner", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
-	}
+	})
 	return vanillaOminousBanner.Clone()
 }
 
 // VanillaOminousWallBanner is a port of VanillaBlocks::OMINOUS_WALL_BANNER() - see
 // VanillaBlocksInputs.php's register("ominous_wall_banner", ...): BreakInfo::axe(1.0) (no tool
 // tier, same $bannerBreakInfo as VanillaOminousBanner).
+var vanillaOminousWallBannerOnce sync.Once
+
 func VanillaOminousWallBanner() Behavior {
-	if vanillaOminousWallBanner == nil {
+	vanillaOminousWallBannerOnce.Do(func() {
 		vanillaOminousWallBanner = NewOminousWallBanner(mustVanillaBlockIdentifier(OMINOUS_WALL_BANNER), "Ominous Wall Banner", NewBlockTypeInfo(BlockBreakInfoAxe(1.0, nil, nil), nil, nil))
-	}
+	})
 	return vanillaOminousWallBanner.Clone()
 }
 
@@ -347,96 +398,116 @@ func VanillaOminousWallBanner() Behavior {
 // (getBreakTime() returns 0.0 for ToolType::SWORD) - BlockBreakInfo isn't self-dispatched in this
 // port (no concrete type overrides its methods anywhere else either), so that one behavioral
 // nuance is dropped here; every other field is copied exactly.
+var vanillaBambooOnce sync.Once
+
 func VanillaBamboo() Behavior {
-	if vanillaBamboo == nil {
+	vanillaBambooOnce.Do(func() {
 		vanillaBamboo = NewBamboo(mustVanillaBlockIdentifier(BAMBOO), "Bamboo", NewBlockTypeInfo(NewBlockBreakInfo(1.0, ToolTypeAxe, 0, nil, nil), []string{BlockTypeTagsPottablePlants}, nil))
-	}
+	})
 	return vanillaBamboo.Clone()
 }
 
 // VanillaChorusPlant is a port of VanillaBlocks::CHORUS_PLANT() - see VanillaBlocksInputs.php's
 // register("chorus_plant", ...): BreakInfo::axe(0.4).
+var vanillaChorusPlantOnce sync.Once
+
 func VanillaChorusPlant() Behavior {
-	if vanillaChorusPlant == nil {
+	vanillaChorusPlantOnce.Do(func() {
 		vanillaChorusPlant = NewChorusPlant(mustVanillaBlockIdentifier(CHORUS_PLANT), "Chorus Plant", NewBlockTypeInfo(BlockBreakInfoAxe(0.4, nil, nil), nil, nil))
-	}
+	})
 	return vanillaChorusPlant.Clone()
 }
 
 // VanillaDoublePitcherCrop is a port of VanillaBlocks::DOUBLE_PITCHER_CROP() - see
 // VanillaBlocksInputs.php's register("double_pitcher_crop", ...): BreakInfo::instant().
+var vanillaDoublePitcherCropOnce sync.Once
+
 func VanillaDoublePitcherCrop() Behavior {
-	if vanillaDoublePitcherCrop == nil {
+	vanillaDoublePitcherCropOnce.Do(func() {
 		vanillaDoublePitcherCrop = NewDoublePitcherCrop(mustVanillaBlockIdentifier(DOUBLE_PITCHER_CROP), "Double Pitcher Crop", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
-	}
+	})
 	return vanillaDoublePitcherCrop.Clone()
 }
 
 // VanillaBigDripleafStem is a port of VanillaBlocks::BIG_DRIPLEAF_STEM() - see
 // VanillaBlocksInputs.php's register("big_dripleaf_stem", ...): new BreakInfo(0.1) (no tool type,
 // no tier).
+var vanillaBigDripleafStemOnce sync.Once
+
 func VanillaBigDripleafStem() Behavior {
-	if vanillaBigDripleafStem == nil {
+	vanillaBigDripleafStemOnce.Do(func() {
 		vanillaBigDripleafStem = NewBigDripleafStem(mustVanillaBlockIdentifier(BIG_DRIPLEAF_STEM), "Big Dripleaf Stem", NewBlockTypeInfo(NewBlockBreakInfo(0.1, ToolTypeNone, 0, nil, nil), nil, nil))
-	}
+	})
 	return vanillaBigDripleafStem.Clone()
 }
 
 // VanillaSmallDripleaf is a port of VanillaBlocks::SMALL_DRIPLEAF() - see
 // VanillaBlocksInputs.php's register("small_dripleaf", ...): BreakInfo::instant(ToolType::SHEARS,
 // toolHarvestLevel: 1).
+var vanillaSmallDripleafOnce sync.Once
+
 func VanillaSmallDripleaf() Behavior {
-	if vanillaSmallDripleaf == nil {
+	vanillaSmallDripleafOnce.Do(func() {
 		vanillaSmallDripleaf = NewSmallDripleaf(mustVanillaBlockIdentifier(SMALL_DRIPLEAF), "Small Dripleaf", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeShears, 1), nil, nil))
-	}
+	})
 	return vanillaSmallDripleaf.Clone()
 }
 
 // VanillaBigDripleafHead is a port of VanillaBlocks::BIG_DRIPLEAF_HEAD() - see
 // VanillaBlocksInputs.php's register("big_dripleaf_head", ...): new BreakInfo(0.1) (no tool type,
 // no tier).
+var vanillaBigDripleafHeadOnce sync.Once
+
 func VanillaBigDripleafHead() Behavior {
-	if vanillaBigDripleafHead == nil {
+	vanillaBigDripleafHeadOnce.Do(func() {
 		vanillaBigDripleafHead = NewBigDripleafHead(mustVanillaBlockIdentifier(BIG_DRIPLEAF_HEAD), "Big Dripleaf", NewBlockTypeInfo(NewBlockBreakInfo(0.1, ToolTypeNone, 0, nil, nil), nil, nil))
-	}
+	})
 	return vanillaBigDripleafHead.Clone()
 }
 
 // VanillaStone is a port of VanillaBlocks::STONE() - see VanillaBlocksInputs.php's
 // register("stone", ...): BreakInfo::pickaxe(1.5, ToolTier::WOOD, 30.0).
+var vanillaStoneOnce sync.Once
+
 func VanillaStone() Behavior {
-	if vanillaStone == nil {
+	vanillaStoneOnce.Do(func() {
 		blastResistance := 30.0
 		vanillaStone = NewStone(mustVanillaBlockIdentifier(STONE), "Stone", NewBlockTypeInfo(BlockBreakInfoPickaxe(1.5, vanillaToolTierWood, &blastResistance), nil, nil))
-	}
+	})
 	return vanillaStone.Clone()
 }
 
 // VanillaBedrock is a port of VanillaBlocks::BEDROCK() - see VanillaBlocksInputs.php's
 // register("bedrock", ...): BreakInfo::indestructible(18000000.0).
+var vanillaBedrockOnce sync.Once
+
 func VanillaBedrock() Behavior {
-	if vanillaBedrock == nil {
+	vanillaBedrockOnce.Do(func() {
 		vanillaBedrock = NewBedrock(mustVanillaBlockIdentifier(BEDROCK), "Bedrock", NewBlockTypeInfo(BlockBreakInfoIndestructible(18000000.0), nil, nil))
-	}
+	})
 	return vanillaBedrock.Clone()
 }
 
 // VanillaTallGrass is a port of VanillaBlocks::TALL_GRASS() - see VanillaBlocksInputs.php's
 // register("tall_grass", ...): BreakInfo::instant(ToolType::SHEARS, 1). No DoublePlantVariant
 // (nil) since VanillaDoubleTallGrass isn't ported yet.
+var vanillaTallGrassOnce sync.Once
+
 func VanillaTallGrass() Behavior {
-	if vanillaTallGrass == nil {
+	vanillaTallGrassOnce.Do(func() {
 		vanillaTallGrass = NewTallGrass(mustVanillaBlockIdentifier(TALL_GRASS), "Tall Grass", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeShears, 1), nil, nil), nil)
-	}
+	})
 	return vanillaTallGrass.Clone()
 }
 
 // VanillaGravel is a port of VanillaBlocks::GRAVEL() - see VanillaBlocksInputs.php's
 // register("gravel", ...): BreakInfo::shovel(0.6).
+var vanillaGravelOnce sync.Once
+
 func VanillaGravel() Behavior {
-	if vanillaGravel == nil {
+	vanillaGravelOnce.Do(func() {
 		vanillaGravel = NewGravel(mustVanillaBlockIdentifier(GRAVEL), "Gravel", NewBlockTypeInfo(BlockBreakInfoShovel(0.6, vanillaToolTierWood, nil), nil, nil))
-	}
+	})
 	return vanillaGravel.Clone()
 }
 
@@ -448,93 +519,113 @@ func vanillaStoneOreBreakInfo(toolTier ToolTier) *BlockBreakInfo {
 
 // VanillaCoalOre is a port of VanillaBlocks::COAL_ORE() - see VanillaBlocksInputs.php's
 // register("coal_ore", ...): $stoneOreBreakInfo(ToolTier::WOOD).
+var vanillaCoalOreOnce sync.Once
+
 func VanillaCoalOre() Behavior {
-	if vanillaCoalOre == nil {
+	vanillaCoalOreOnce.Do(func() {
 		vanillaCoalOre = NewCoalOre(mustVanillaBlockIdentifier(COAL_ORE), "Coal Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierWood), nil, nil))
-	}
+	})
 	return vanillaCoalOre.Clone()
 }
 
 // VanillaDiamondOre is a port of VanillaBlocks::DIAMOND_ORE() - see VanillaBlocksInputs.php's
 // register("diamond_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+var vanillaDiamondOreOnce sync.Once
+
 func VanillaDiamondOre() Behavior {
-	if vanillaDiamondOre == nil {
+	vanillaDiamondOreOnce.Do(func() {
 		vanillaDiamondOre = NewDiamondOre(mustVanillaBlockIdentifier(DIAMOND_ORE), "Diamond Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
-	}
+	})
 	return vanillaDiamondOre.Clone()
 }
 
 // VanillaGoldOre is a port of VanillaBlocks::GOLD_ORE() - see VanillaBlocksInputs.php's
 // register("gold_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+var vanillaGoldOreOnce sync.Once
+
 func VanillaGoldOre() Behavior {
-	if vanillaGoldOre == nil {
+	vanillaGoldOreOnce.Do(func() {
 		vanillaGoldOre = NewGoldOre(mustVanillaBlockIdentifier(GOLD_ORE), "Gold Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
-	}
+	})
 	return vanillaGoldOre.Clone()
 }
 
 // VanillaIronOre is a port of VanillaBlocks::IRON_ORE() - see VanillaBlocksInputs.php's
 // register("iron_ore", ...): $stoneOreBreakInfo(ToolTier::STONE).
+var vanillaIronOreOnce sync.Once
+
 func VanillaIronOre() Behavior {
-	if vanillaIronOre == nil {
+	vanillaIronOreOnce.Do(func() {
 		vanillaIronOre = NewIronOre(mustVanillaBlockIdentifier(IRON_ORE), "Iron Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierStone), nil, nil))
-	}
+	})
 	return vanillaIronOre.Clone()
 }
 
 // VanillaLapisLazuliOre is a port of VanillaBlocks::LAPIS_LAZULI_ORE() - see
 // VanillaBlocksInputs.php's register("lapis_lazuli_ore", ...): $stoneOreBreakInfo(ToolTier::STONE).
+var vanillaLapisLazuliOreOnce sync.Once
+
 func VanillaLapisLazuliOre() Behavior {
-	if vanillaLapisLazuliOre == nil {
+	vanillaLapisLazuliOreOnce.Do(func() {
 		vanillaLapisLazuliOre = NewLapisOre(mustVanillaBlockIdentifier(LAPIS_LAZULI_ORE), "Lapis Lazuli Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierStone), nil, nil))
-	}
+	})
 	return vanillaLapisLazuliOre.Clone()
 }
 
 // VanillaRedstoneOre is a port of VanillaBlocks::REDSTONE_ORE() - see VanillaBlocksInputs.php's
 // register("redstone_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+var vanillaRedstoneOreOnce sync.Once
+
 func VanillaRedstoneOre() Behavior {
-	if vanillaRedstoneOre == nil {
+	vanillaRedstoneOreOnce.Do(func() {
 		vanillaRedstoneOre = NewRedstoneOre(mustVanillaBlockIdentifier(REDSTONE_ORE), "Redstone Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
-	}
+	})
 	return vanillaRedstoneOre.Clone()
 }
 
 // VanillaEmeraldOre is a port of VanillaBlocks::EMERALD_ORE() - see VanillaBlocksInputs.php's
 // register("emerald_ore", ...): $stoneOreBreakInfo(ToolTier::IRON).
+var vanillaEmeraldOreOnce sync.Once
+
 func VanillaEmeraldOre() Behavior {
-	if vanillaEmeraldOre == nil {
+	vanillaEmeraldOreOnce.Do(func() {
 		vanillaEmeraldOre = NewEmeraldOre(mustVanillaBlockIdentifier(EMERALD_ORE), "Emerald Ore", NewBlockTypeInfo(vanillaStoneOreBreakInfo(vanillaToolTierIron), nil, nil))
-	}
+	})
 	return vanillaEmeraldOre.Clone()
 }
 
 // VanillaSand is a port of VanillaBlocks::SAND() - see VanillaBlocksInputs.php's
 // register("sand", ...): $sandTypeInfo = new Info(BreakInfo::shovel(0.5), [Tags::SAND]).
+var vanillaSandOnce sync.Once
+
 func VanillaSand() Behavior {
-	if vanillaSand == nil {
+	vanillaSandOnce.Do(func() {
 		vanillaSand = NewSand(mustVanillaBlockIdentifier(SAND), "Sand", NewBlockTypeInfo(BlockBreakInfoShovel(0.5, nil, nil), []string{BlockTypeTagsSand}, nil))
-	}
+	})
 	return vanillaSand.Clone()
 }
 
 // VanillaSandstone is a port of VanillaBlocks::SANDSTONE() - see VanillaBlocksInputs.php's
 // register("sandstone", ...): $sandstoneBreakInfo = new Info(BreakInfo::pickaxe(0.8, ToolTier::WOOD)).
+var vanillaSandstoneOnce sync.Once
+
 func VanillaSandstone() Behavior {
-	if vanillaSandstone == nil {
+	vanillaSandstoneOnce.Do(func() {
 		sandstone := &Opaque{Block: NewBlock(mustVanillaBlockIdentifier(SANDSTONE), "Sandstone", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.8, vanillaToolTierWood, nil), nil, nil))}
 		sandstone.Init(sandstone)
 		vanillaSandstone = sandstone
-	}
+	})
 	return vanillaSandstone.Clone()
 }
 
 // VanillaSnowLayer is a port of VanillaBlocks::SNOW_LAYER() - see VanillaBlocksInputs.php's
 // register("snow_layer", ...): BreakInfo::shovel(0.1, ToolTier::WOOD).
+var vanillaSnowLayerOnce sync.Once
+
 func VanillaSnowLayer() Behavior {
-	if vanillaSnowLayer == nil {
+	vanillaSnowLayerOnce.Do(func() {
 		vanillaSnowLayer = NewSnowLayer(mustVanillaBlockIdentifier(SNOW_LAYER), "Snow Layer", NewBlockTypeInfo(BlockBreakInfoShovel(0.1, vanillaToolTierWood, nil), nil, nil))
-	}
+	})
 	return vanillaSnowLayer.Clone()
 }
 
@@ -552,114 +643,140 @@ func vanillaLeavesBreakInfo() *BlockBreakInfo {
 
 // VanillaOakLog is a port of VanillaBlocks::OAK_LOG() - see VanillaBlocksInputs.php's
 // registerWoodenBlocks loop (WoodType::OAK, standard log suffix).
+var vanillaOakLogOnce sync.Once
+
 func VanillaOakLog() Behavior {
-	if vanillaOakLog == nil {
+	vanillaOakLogOnce.Do(func() {
 		vanillaOakLog = NewWood(mustVanillaBlockIdentifier(OAK_LOG), "Oak Log", NewBlockTypeInfo(vanillaLogBreakInfo(), nil, nil), blockutils.WoodTypeOak)
-	}
+	})
 	return vanillaOakLog.Clone()
 }
 
 // VanillaOakLeaves is a port of VanillaBlocks::OAK_LEAVES() - see VanillaBlocksInputs.php's
 // LeavesType::cases() loop.
+var vanillaOakLeavesOnce sync.Once
+
 func VanillaOakLeaves() Behavior {
-	if vanillaOakLeaves == nil {
+	vanillaOakLeavesOnce.Do(func() {
 		vanillaOakLeaves = NewLeaves(mustVanillaBlockIdentifier(OAK_LEAVES), "Oak Leaves", NewBlockTypeInfo(vanillaLeavesBreakInfo(), nil, nil), blockutils.LeavesTypeOak)
-	}
+	})
 	return vanillaOakLeaves.Clone()
 }
 
 // VanillaSpruceLog is a port of VanillaBlocks::SPRUCE_LOG().
+var vanillaSpruceLogOnce sync.Once
+
 func VanillaSpruceLog() Behavior {
-	if vanillaSpruceLog == nil {
+	vanillaSpruceLogOnce.Do(func() {
 		vanillaSpruceLog = NewWood(mustVanillaBlockIdentifier(SPRUCE_LOG), "Spruce Log", NewBlockTypeInfo(vanillaLogBreakInfo(), nil, nil), blockutils.WoodTypeSpruce)
-	}
+	})
 	return vanillaSpruceLog.Clone()
 }
 
 // VanillaSpruceLeaves is a port of VanillaBlocks::SPRUCE_LEAVES().
+var vanillaSpruceLeavesOnce sync.Once
+
 func VanillaSpruceLeaves() Behavior {
-	if vanillaSpruceLeaves == nil {
+	vanillaSpruceLeavesOnce.Do(func() {
 		vanillaSpruceLeaves = NewLeaves(mustVanillaBlockIdentifier(SPRUCE_LEAVES), "Spruce Leaves", NewBlockTypeInfo(vanillaLeavesBreakInfo(), nil, nil), blockutils.LeavesTypeSpruce)
-	}
+	})
 	return vanillaSpruceLeaves.Clone()
 }
 
 // VanillaBirchLog is a port of VanillaBlocks::BIRCH_LOG().
+var vanillaBirchLogOnce sync.Once
+
 func VanillaBirchLog() Behavior {
-	if vanillaBirchLog == nil {
+	vanillaBirchLogOnce.Do(func() {
 		vanillaBirchLog = NewWood(mustVanillaBlockIdentifier(BIRCH_LOG), "Birch Log", NewBlockTypeInfo(vanillaLogBreakInfo(), nil, nil), blockutils.WoodTypeBirch)
-	}
+	})
 	return vanillaBirchLog.Clone()
 }
 
 // VanillaBirchLeaves is a port of VanillaBlocks::BIRCH_LEAVES().
+var vanillaBirchLeavesOnce sync.Once
+
 func VanillaBirchLeaves() Behavior {
-	if vanillaBirchLeaves == nil {
+	vanillaBirchLeavesOnce.Do(func() {
 		vanillaBirchLeaves = NewLeaves(mustVanillaBlockIdentifier(BIRCH_LEAVES), "Birch Leaves", NewBlockTypeInfo(vanillaLeavesBreakInfo(), nil, nil), blockutils.LeavesTypeBirch)
-	}
+	})
 	return vanillaBirchLeaves.Clone()
 }
 
 // VanillaFire is a port of VanillaBlocks::FIRE() - see VanillaBlocksInputs.php's
 // register("fire", ...): new Info(BreakInfo::instant(), [Tags::FIRE]).
+var vanillaFireOnce sync.Once
+
 func VanillaFire() Behavior {
-	if vanillaFire == nil {
+	vanillaFireOnce.Do(func() {
 		vanillaFire = NewFire(mustVanillaBlockIdentifier(FIRE), "Fire", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), []string{BlockTypeTagsFire}, nil))
-	}
+	})
 	return vanillaFire.Clone()
 }
 
 // VanillaTNT is a port of VanillaBlocks::TNT() - see VanillaBlocksInputs.php's
 // register("tnt", ...): new Info(BreakInfo::instant()).
+var vanillaTNTOnce sync.Once
+
 func VanillaTNT() Behavior {
-	if vanillaTNT == nil {
+	vanillaTNTOnce.Do(func() {
 		vanillaTNT = NewTNT(mustVanillaBlockIdentifier(TNT), "TNT", NewBlockTypeInfo(BlockBreakInfoInstant(ToolTypeNone, 0), nil, nil))
-	}
+	})
 	return vanillaTNT.Clone()
 }
 
 // VanillaLava is a port of VanillaBlocks::LAVA() - see VanillaBlocksInputs.php's
 // register("lava", ...): BreakInfo::indestructible(500.0).
+var vanillaLavaOnce sync.Once
+
 func VanillaLava() Behavior {
-	if vanillaLava == nil {
+	vanillaLavaOnce.Do(func() {
 		vanillaLava = NewLava(mustVanillaBlockIdentifier(LAVA), "Lava", NewBlockTypeInfo(BlockBreakInfoIndestructible(500.0), nil, nil))
-	}
+	})
 	return vanillaLava.Clone()
 }
 
 // VanillaNetherQuartzOre is a port of VanillaBlocks::NETHER_QUARTZ_ORE() - see
 // VanillaBlocksInputs.php's registerOres's $netherrackOreBreakInfo = BreakInfo::pickaxe(3.0, ToolTier::WOOD).
+var vanillaNetherQuartzOreOnce sync.Once
+
 func VanillaNetherQuartzOre() Behavior {
-	if vanillaNetherQuartzOre == nil {
+	vanillaNetherQuartzOreOnce.Do(func() {
 		vanillaNetherQuartzOre = NewNetherQuartzOre(mustVanillaBlockIdentifier(NETHER_QUARTZ_ORE), "Nether Quartz Ore", NewBlockTypeInfo(BlockBreakInfoPickaxe(3.0, vanillaToolTierWood, nil), nil, nil))
-	}
+	})
 	return vanillaNetherQuartzOre.Clone()
 }
 
 // VanillaIce is a port of VanillaBlocks::ICE() - see VanillaBlocksInputs.php's
 // register("ice", ...): new Info(BreakInfo::pickaxe(0.5)).
+var vanillaIceOnce sync.Once
+
 func VanillaIce() Behavior {
-	if vanillaIce == nil {
+	vanillaIceOnce.Do(func() {
 		vanillaIce = NewIce(mustVanillaBlockIdentifier(ICE), "Ice", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.5, nil, nil), nil, nil))
-	}
+	})
 	return vanillaIce.Clone()
 }
 
 // VanillaFrostedIce is a port of VanillaBlocks::FROSTED_ICE() - see VanillaBlocksInputs.php's
 // register("frosted_ice", ...): new Info(BreakInfo::pickaxe(0.5)).
+var vanillaFrostedIceOnce sync.Once
+
 func VanillaFrostedIce() Behavior {
-	if vanillaFrostedIce == nil {
+	vanillaFrostedIceOnce.Do(func() {
 		vanillaFrostedIce = NewFrostedIce(mustVanillaBlockIdentifier(FROSTED_ICE), "Frosted Ice", NewBlockTypeInfo(BlockBreakInfoPickaxe(0.5, nil, nil), nil, nil))
-	}
+	})
 	return vanillaFrostedIce.Clone()
 }
 
 // VanillaOakPlanks is a port of VanillaBlocks::OAK_PLANKS() - see VanillaBlocksInputs.php's
 // wood-type loop: new Planks($id, "Oak Planks", new Info(BreakInfo::axe(2.0, null, 15.0)), WoodType::OAK).
+var vanillaOakPlanksOnce sync.Once
+
 func VanillaOakPlanks() Behavior {
-	if vanillaOakPlanks == nil {
+	vanillaOakPlanksOnce.Do(func() {
 		blastResistance := 15.0
 		vanillaOakPlanks = NewPlanks(mustVanillaBlockIdentifier(OAK_PLANKS), "Oak Planks", NewBlockTypeInfo(BlockBreakInfoAxe(2.0, nil, &blastResistance), nil, nil), blockutils.WoodTypeOak)
-	}
+	})
 	return vanillaOakPlanks.Clone()
 }

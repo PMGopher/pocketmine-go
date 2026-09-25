@@ -60,9 +60,9 @@ func (p *Player) spawnEntitiesOnChunk(chunkX, chunkZ int) {
 }
 
 // requestChunks is a port of Player::requestChunks: requests chunks from the world to be sent, up
-// to a set limit every tick. This operates on the results of the most recent chunk order.
-// Generation is synchronous in this port (see World.ensurePopulated), so the population promise
-// resolves immediately.
+// to a set limit every tick. This operates on the results of the most recent chunk order. Chunks
+// that aren't populated yet are populated asynchronously (World.RequestChunkPopulation); they're
+// sent once that completes.
 func (p *Player) requestChunks() {
 	if !p.IsConnected() {
 		return
@@ -99,38 +99,43 @@ func (p *Player) requestChunks() {
 			w.RegisterTickingChunk(p, chunkX, chunkZ)
 		}
 
-		w.GetOrLoadChunk(chunkX, chunkZ)
-
-		// requestChunkPopulation()->onCompletion()
-		if !p.IsConnected() {
-			continue
-		}
-		if status, ok := p.usedChunks[index]; !ok || w != p.GetWorld() || status != UsedChunkStatusRequestedGeneration {
-			//We may have previously requested this, decided we didn't want it, and then decided we did want
-			//it again, all before the generation request got executed. In that case, the promise would have
-			//multiple callbacks for this player. In that case, only the first one matters.
-			continue
-		}
-		delete(p.activeChunkGenerationRequests, index)
-		p.usedChunks[index] = UsedChunkStatusRequestedSending
-
-		p.GetNetworkSession().StartUsingChunk(chunkX, chunkZ, func() {
-			p.usedChunks[index] = UsedChunkStatusSent
-			if p.spawnChunkLoadCount == -1 {
-				p.spawnEntitiesOnChunk(chunkX, chunkZ)
-			} else {
-				loaded := p.spawnChunkLoadCount
-				p.spawnChunkLoadCount++
-				if loaded == p.spawnThreshold {
-					p.spawnChunkLoadCount = -1
-
-					p.spawnEntitiesOnAllChunks()
-
-					p.GetNetworkSession().NotifyTerrainReady()
+		w.RequestChunkPopulation(chunkX, chunkZ, p).OnCompletion(
+			func(*format.Chunk) {
+				status, ok := p.usedChunks[index]
+				if !p.IsConnected() || !ok || w != p.GetWorld() {
+					return
 				}
-			}
-			event.Call(playerevent.NewPlayerPostChunkSendEvent(p, chunkX, chunkZ))
-		})
+				if status != UsedChunkStatusRequestedGeneration {
+					//We may have previously requested this, decided we didn't want it, and then decided we did want
+					//it again, all before the generation request got executed. In that case, the promise would have
+					//multiple callbacks for this player. In that case, only the first one matters.
+					return
+				}
+				delete(p.activeChunkGenerationRequests, index)
+				p.usedChunks[index] = UsedChunkStatusRequestedSending
+
+				p.GetNetworkSession().StartUsingChunk(chunkX, chunkZ, func() {
+					p.usedChunks[index] = UsedChunkStatusSent
+					if p.spawnChunkLoadCount == -1 {
+						p.spawnEntitiesOnChunk(chunkX, chunkZ)
+					} else {
+						loaded := p.spawnChunkLoadCount
+						p.spawnChunkLoadCount++
+						if loaded == p.spawnThreshold {
+							p.spawnChunkLoadCount = -1
+
+							p.spawnEntitiesOnAllChunks()
+
+							p.GetNetworkSession().NotifyTerrainReady()
+						}
+					}
+					event.Call(playerevent.NewPlayerPostChunkSendEvent(p, chunkX, chunkZ))
+				})
+			},
+			func() {
+				//NOOP: we'll re-request this if it fails anyway
+			},
+		)
 	}
 	p.loadQueueOrder = remaining
 }

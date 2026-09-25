@@ -11,17 +11,32 @@ const (
 	FurnaceTagMaxTime  = "MaxTime"
 )
 
-// FurnaceType is a port of pocketmine\crafting\FurnaceType, placed here instead of a separate
-// crafting package since nothing else needs it yet - just enough for NormalFurnace/BlastFurnace/
-// Smoker to report which kind they are. GetCookDurationTicks (used by Furnace::onUpdate's recipe
-// matching, not ported - see Furnace's doc comment) isn't ported.
+// FurnaceType is a port of pocketmine\crafting\FurnaceType (crafting.FurnaceType is an alias):
+// it lives here because the furnace tiles need it and the crafting package imports this one.
+// getCookSound isn't ported (the furnace sounds aren't).
 type FurnaceType int
 
 const (
 	FurnaceTypeFurnace FurnaceType = iota
 	FurnaceTypeBlastFurnace
 	FurnaceTypeSmoker
+	FurnaceTypeCampfire
+	FurnaceTypeSoulCampfire
 )
+
+// AllFurnaceTypes is FurnaceType::cases().
+var AllFurnaceTypes = []FurnaceType{FurnaceTypeFurnace, FurnaceTypeBlastFurnace, FurnaceTypeSmoker, FurnaceTypeCampfire, FurnaceTypeSoulCampfire}
+
+// GetCookDurationTicks is a port of FurnaceType::getCookDurationTicks.
+func (t FurnaceType) GetCookDurationTicks() int {
+	switch t {
+	case FurnaceTypeBlastFurnace, FurnaceTypeSmoker:
+		return 100
+	case FurnaceTypeCampfire, FurnaceTypeSoulCampfire:
+		return 600
+	}
+	return 200
+}
 
 // Furnace is a port of pocketmine\block\tile\Furnace, minus its inventory/Container half - see
 // ContainerComponent's doc comment for why the inventory package can't be imported here.

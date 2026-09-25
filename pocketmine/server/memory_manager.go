@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"pocketmine-go/pocketmine/scheduler"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -181,6 +182,9 @@ func (m *MemoryManager) TriggerGarbageCollector() {
 	if pool := m.server.GetAsyncPool(); pool != nil {
 		if w := pool.ShutdownUnusedWorkers(); w > 0 {
 			m.logger.Debug(fmt.Sprintf("Shut down %d idle async pool workers", w))
+		}
+		for _, i := range pool.GetRunningWorkers() {
+			pool.SubmitTaskToWorker(scheduler.NewGarbageCollectionTask(), i)
 		}
 	}
 	runtime.GC()

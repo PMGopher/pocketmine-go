@@ -1,4 +1,6 @@
-package blockinventory
+// Package crafting is a port of pocketmine\crafting: crafting grids, recipes (shaped, shapeless,
+// furnace, brewing) and the CraftingManager holding them.
+package crafting
 
 import (
 	"pocketmine-go/pocketmine/inventory"
@@ -10,11 +12,8 @@ const (
 	CraftingGridSizeBig   = 3
 )
 
-// CraftingGrid is a port of pocketmine\crafting\CraftingGrid, placed here rather than a separate
-// crafting package since CraftingTableInventory is its only consumer so far and nothing else
-// needs it yet - actual recipe matching (CraftingManager) isn't ported, but the grid's own
-// bookkeeping (tracking the smallest rectangle of non-empty slots, so a recipe matcher would know
-// where to look) is fully real and doesn't depend on recipe matching at all.
+// CraftingGrid is a port of pocketmine\crafting\CraftingGrid: a square crafting inventory that
+// tracks the smallest rectangle of non-empty slots, which recipes are matched against.
 type CraftingGrid struct {
 	*inventory.SimpleInventory
 

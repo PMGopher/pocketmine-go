@@ -21,29 +21,43 @@ var (
 	itemTypeByName     map[string]int
 )
 
+// DeserializeItemType is ItemDeserializer::deserializeType for a saved item type name and meta:
+// ok is false for a type (or meta variant) that can't be deserialized yet (only the item types
+// itemTypeNames maps, without meta variants or block items - see ItemTranslator).
+func DeserializeItemType(name string, meta int) (item.Item, bool) {
+	itemTypeByNameOnce.Do(func() {
+		itemTypeByName = make(map[string]int, len(itemTypeNames))
+		for typeID, n := range itemTypeNames {
+			itemTypeByName[n] = typeID
+		}
+	})
+	typeID, ok := itemTypeByName[name]
+	if !ok || meta != 0 {
+		return nil, false
+	}
+	constructor, ok := coreItemConstructors[typeID]
+	if !ok {
+		return nil, false
+	}
+	return constructor(), true
+}
+
 // FromNetworkID is a port of ItemTranslator::fromNetworkId: the item for a network item ID and
 // meta. Only the item types itemTypeNames maps can be deserialized so far (no block items, no
 // meta variants - see ItemTranslator).
 func (t *ItemTranslator) FromNetworkID(networkID int32, meta int16, blockRuntimeID int32) (item.Item, error) {
-	itemTypeByNameOnce.Do(func() {
-		itemTypeByName = make(map[string]int, len(itemTypeNames))
-		for typeID, name := range itemTypeNames {
-			itemTypeByName[name] = typeID
-		}
-	})
 	name, ok := bedrock.ItemNameForRuntimeID(networkID)
 	if !ok {
 		return nil, &TypeConversionError{Message: fmt.Sprintf("Unknown network item ID %d", networkID)}
 	}
-	typeID, ok := itemTypeByName[name]
-	if !ok || meta != 0 || blockRuntimeID != noBlockRuntimeID {
+	if blockRuntimeID != noBlockRuntimeID {
 		return nil, &TypeConversionError{Message: fmt.Sprintf("Unsupported network item %s (meta %d, block runtime ID %d)", name, meta, blockRuntimeID)}
 	}
-	constructor, ok := coreItemConstructors[typeID]
+	it, ok := DeserializeItemType(name, int(meta))
 	if !ok {
-		return nil, &TypeConversionError{Message: fmt.Sprintf("No item type registered for %s", name)}
+		return nil, &TypeConversionError{Message: fmt.Sprintf("Unsupported network item %s (meta %d, block runtime ID %d)", name, meta, blockRuntimeID)}
 	}
-	return constructor(), nil
+	return it, nil
 }
 
 // NetItemStackToCore is a port of TypeConverter::netItemStackToCore.

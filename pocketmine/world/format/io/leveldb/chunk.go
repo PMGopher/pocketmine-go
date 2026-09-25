@@ -45,7 +45,11 @@ func SaveChunk(db *leveldb.DB, chunkX, chunkZ int32, chunk *format.Chunk, lookup
 	}
 	batch.Put(taggedKey(chunkX, chunkZ, tagHeightmapAnd3DBiomes), biomeBuf)
 
-	batch.Put(taggedKey(chunkX, chunkZ, tagFinalization), []byte{finalizationDone})
+	finalization := finalizationNeedsPopulation
+	if chunk.IsPopulated() {
+		finalization = finalizationDone
+	}
+	batch.Put(taggedKey(chunkX, chunkZ, tagFinalization), []byte{finalization})
 
 	if err := db.Write(batch, nil); err != nil {
 		return fmt.Errorf("leveldb: saving chunk (%d,%d): %w", chunkX, chunkZ, err)
@@ -100,6 +104,14 @@ func LoadChunk(db *leveldb.DB, chunkX, chunkZ int32, emptyBlockID, defaultBiomeI
 		subChunks[y] = format.NewSubChunk(emptyBlockID, layers, biomeArrays[y])
 	}
 
-	chunk := format.NewChunk(subChunks, true, emptyBlockID, defaultBiomeID)
+	// LevelDB::readChunk: a chunk is populated when its finalisation is FINALISATION_DONE (chunks
+	// saved without the tag were saved by older versions of this port, which only saved populated
+	// chunks).
+	populated := true
+	if data, err := db.Get(taggedKey(chunkX, chunkZ, tagFinalization), nil); err == nil && len(data) > 0 {
+		populated = data[0] == finalizationDone
+	}
+	chunk := format.NewChunk(subChunks, populated, emptyBlockID, defaultBiomeID)
+	chunk.ClearTerrainDirtyFlags()
 	return chunk, true, nil
 }

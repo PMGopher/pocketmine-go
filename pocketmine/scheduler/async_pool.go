@@ -57,7 +57,7 @@ func (w *AsyncWorker) run() {
 	for {
 		select {
 		case task := <-w.queue:
-			runAsyncTask(task)
+			runAsyncTask(task, w)
 		case <-w.quit:
 			return
 		}

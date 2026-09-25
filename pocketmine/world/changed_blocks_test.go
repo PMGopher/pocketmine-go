@@ -79,17 +79,3 @@ func TestSetBlockUpdateFalseSkipsNeighbourUpdates(t *testing.T) {
 		t.Errorf("setBlock queued %d neighbour updates, want 7 (the block and its 6 sides)", len(w.neighbourUpdateQueue))
 	}
 }
-
-func TestPopulationWritesDontCountAsBlockChanges(t *testing.T) {
-	w := newTestWorld()
-	w.populationWrites = map[[2]int]bool{}
-	if err := w.SetBlockAt(1, 10, 1, block.VanillaStone()); err != nil {
-		t.Fatal(err)
-	}
-	if len(w.changedBlocks) != 0 || len(w.neighbourUpdateQueue) != 0 {
-		t.Error("a write during population was tracked as a block change or caused neighbour updates")
-	}
-	if !w.populationWrites[[2]int{0, 0}] {
-		t.Error("the chunk written during population wasn't recorded as modified")
-	}
-}

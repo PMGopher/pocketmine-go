@@ -1,16 +1,19 @@
 package blockinventory
 
-import "pocketmine-go/pocketmine/block"
+import (
+	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/crafting"
+)
 
 // CraftingTableInventory is a port of pocketmine\block\inventory\CraftingTableInventory.
 type CraftingTableInventory struct {
-	*CraftingGrid
+	*crafting.CraftingGrid
 	BlockInventoryTrait
 }
 
 func NewCraftingTableInventory(holder block.Position) *CraftingTableInventory {
 	return &CraftingTableInventory{
-		CraftingGrid:        NewCraftingGrid(CraftingGridSizeBig),
+		CraftingGrid:        crafting.NewCraftingGrid(crafting.CraftingGridSizeBig),
 		BlockInventoryTrait: BlockInventoryTrait{Holder: holder},
 	}
 }

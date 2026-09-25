@@ -42,6 +42,7 @@ import (
 	"pocketmine-go/pocketmine/timings"
 	"pocketmine-go/pocketmine/utils"
 	"pocketmine-go/pocketmine/world"
+	"pocketmine-go/pocketmine/world/format"
 	"pocketmine-go/pocketmine/world/generator"
 
 	// Linked for their init(): EntityFactory registrations and the world/block hooks that create
@@ -294,6 +295,12 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 	timings.SetEnabled(s.configGroup.GetPropertyBool(YmlSettingsEnableProfiling, false))
 
 	s.asyncPool = scheduler.NewAsyncPool(poolSize, logger)
+	workerStartHook := func(i int) {
+		if timings.IsEnabled() {
+			s.asyncPool.SubmitTaskToWorker(scheduler.NewTimingsControlTaskSetEnabled(true), i)
+		}
+	}
+	s.asyncPool.AddWorkerStartHook(&workerStartHook)
 
 	s.doTitleTick = s.configGroup.GetPropertyBool(YmlConsoleTitleTick, true) && utils.IsTerminalInit() && utils.HasFormattingCodes()
 
@@ -357,6 +364,8 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 
 	s.worldManager = world.NewWorldManager(filepath.Join(s.dataPath, "worlds"), convert.NewBlockTranslator(), knownBlocks())
 	s.worldManager.SetLogger(logger)
+	s.worldManager.SetAsyncPool(s.asyncPool)
+	s.worldManager.SetPopulationQueueSize(s.configGroup.GetPropertyInt(YmlChunkGenerationPopulationQueueSize, 2))
 	s.worldManager.SetAutoSave(s.configGroup.GetConfigBool(PropertyAutoSave, s.worldManager.GetAutoSave()))
 	if err := s.worldManager.SetAutoSaveInterval(int64(s.configGroup.GetPropertyInt(YmlTicksPerAutosave, int(s.worldManager.GetAutoSaveInterval())))); err != nil {
 		logger.Warning(err.Error())
@@ -535,10 +544,12 @@ func (s *Server) startupPrepareWorlds() bool {
 const spawnTerrainRadius = 8
 
 // generateSpawnTerrain is the $backgroundGeneration branch of WorldManager::generateWorld: the
-// chunks around the new world's spawn are generated (and populated) right away, so the first
-// player doesn't wait for them. It lives here rather than in WorldManager because
-// player.SelectChunks (ChunkSelector) can't be imported from the world package (import cycle), and
-// generation is synchronous in this port, so it runs during startup instead of in the background.
+// chunks around the new world's spawn are ordered for population (on the async workers) with
+// progress logging. It lives here rather than in WorldManager because player.SelectChunks
+// (ChunkSelector) can't be imported from the world package (import cycle). PHP lets the server
+// start meanwhile; this port waits for it (collecting the async results itself, since the tick
+// isn't running yet), because gophertunnel spawns the client before its chunks can be sent (see
+// NetworkSession.OnClientRequestChunkRadius).
 func (s *Server) generateSpawnTerrain(w *world.World) {
 	s.logger.Notice(fmt.Sprintf("Spawn terrain for world %q is being pregenerated in the background", w.GetFolderName()))
 
@@ -548,13 +559,34 @@ func (s *Server) generateSpawnTerrain(w *world.World) {
 		selected = append(selected, chunk)
 	}
 	total := len(selected)
-	for i, chunk := range selected {
-		w.GetOrLoadChunk(chunk[0], chunk[1])
-		done := i + 1
-		oldProgress, newProgress := (done-1)*100/total, done*100/total
-		if oldProgress/10 != newProgress/10 || done == total || done == 1 {
-			s.logger.Info(fmt.Sprintf("[World: %s] Spawn terrain generation progress: %d / %d (%d%%)", w.GetFolderName(), done, total, newProgress))
+	done := 0
+	for _, chunk := range selected {
+		w.OrderChunkPopulation(chunk[0], chunk[1], nil).OnCompletion(
+			func(*format.Chunk) {
+				done++
+				oldProgress, newProgress := (done-1)*100/total, done*100/total
+				if oldProgress/10 != newProgress/10 || done == total || done == 1 {
+					s.logger.Info(fmt.Sprintf("[World: %s] Spawn terrain generation progress: %d / %d (%d%%)", w.GetFolderName(), done, total, newProgress))
+				}
+			},
+			func() {
+				s.logger.Warning(fmt.Sprintf("[World: %s] Spawn terrain generation failed for chunk %d %d", w.GetFolderName(), chunk[0], chunk[1]))
+				done++
+			},
+		)
+	}
+	for done < total {
+		more, err := s.asyncPool.CollectTasks()
+		if err != nil {
+			s.logger.Error(err.Error())
+			return
 		}
+		if !more && done < total {
+			// Nothing running but requests still queued behind locks: they're drained as results
+			// come in, so this only happens if the queue stalled.
+			break
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
