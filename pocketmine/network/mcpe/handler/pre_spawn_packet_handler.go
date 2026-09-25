@@ -89,12 +89,14 @@ func (h *PreSpawnPacketHandler) SetUp() error {
 	session.SyncAllInventories()
 	session.SyncSelectedHotbarSlot()
 
-	// syncCreative: gophertunnel's StartGame already sent an (empty) CreativeContent; the creative
-	// inventory isn't ported.
+	session.GetLogger().Debug("Sending creative inventory data")
+	// InventoryManager::syncCreative: the 1.26.50 creative inventory (see bedrock.CreativeContent).
+	session.SendDataPacket(bedrock.CreativeContent())
 
 	session.GetLogger().Debug("Sending crafting data")
-	// CraftingDataCache::getCache: no CraftingManager yet, so no recipes.
-	session.SendDataPacket(&packet.CraftingData{ClearRecipes: true})
+	// CraftingDataCache::getCache: the 1.26.50 recipes (see bedrock.CraftingData). CraftingManager
+	// isn't ported, so crafting itself doesn't work yet.
+	session.SendDataPacket(bedrock.CraftingData())
 
 	session.GetLogger().Debug("Sending player list")
 	session.SyncPlayerList(h.server.GetOnlinePlayers())

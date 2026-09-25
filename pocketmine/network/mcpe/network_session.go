@@ -228,6 +228,7 @@ func (s *NetworkSession) onClientSpawnResponse() error {
 	p := s.player
 	p.SetNoClientPredictions(false) //TODO: HACK: we set this during the spawn sequence to prevent the client sending junk movements
 	p.SetViewDistance(s.server.GetAllowedViewDistance(s.conn.ChunkRadius()))
+	s.OnEnterWorld()
 	if err := s.SyncViewAreaCenterPoint(); err != nil {
 		return err
 	}
@@ -506,6 +507,24 @@ func (s *NetworkSession) SyncAdventureSettings() {
 		AutoJump:       s.player.HasAutoJump(),
 	})
 }
+
+// OnEnterWorld is a port of NetworkSession::onEnterWorld: the world's time, difficulty and spawn
+// point. PHP calls it when the player changes worlds; it's also called on the spawn response,
+// where Dragonfly (which 1.26.50 clients are known to work with) sends the same packets.
+func (s *NetworkSession) OnEnterWorld() {
+	w := s.player.GetWorld()
+	s.SendDataPacket(&packet.SetTime{Time: int32(w.GetTime())})                    // syncWorldTime
+	s.SendDataPacket(&packet.SetDifficulty{Difficulty: uint32(w.GetDifficulty())}) // syncWorldDifficulty
+	spawn := w.GetSpawnLocation()
+	spawnPos := protocol.BlockPos{int32(spawn.FloorX()), int32(spawn.FloorY()), int32(spawn.FloorZ())}
+	// syncWorldSpawnPoint: SetSpawnPositionPacket::worldSpawn
+	s.SendDataPacket(&packet.SetSpawnPosition{SpawnType: packet.SpawnTypeWorld, Position: spawnPos, Dimension: packet.DimensionOverworld, SpawnPosition: protocol.BlockPos{math32MinInt, math32MinInt, math32MinInt}})
+	//TODO: weather needs to be synced here (when implemented)
+}
+
+// math32MinInt is PHP's Limits::INT32_MIN, which SetSpawnPositionPacket::worldSpawn uses for the
+// causing block position.
+const math32MinInt = -2147483648
 
 // SyncAllInventories is InventoryManager::syncAll for the player's permanent windows (inventory,
 // armor, off-hand). InventoryManager itself isn't ported: there are no other windows yet, and no

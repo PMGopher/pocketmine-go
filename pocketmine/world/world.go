@@ -48,6 +48,8 @@ type World struct {
 	// changedBlocks is World::$changedBlocks: blocks set since the last tick, per chunk, sent to
 	// the players using those chunks at the end of the tick (see sendChangedBlocks).
 	changedBlocks map[[2]int]map[[3]int]math.Vector3
+	// sendTimeTicker is World::$sendTimeTicker: the time is sent to players every 200 ticks.
+	sendTimeTicker int
 	// populationWrites is non-nil while a chunk is being populated and collects the chunks the
 	// populators wrote to (see ensurePopulated).
 	populationWrites map[[2]int]bool

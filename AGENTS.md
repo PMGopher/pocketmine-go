@@ -86,6 +86,10 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
   (`NetworkSession.sendSpawnTerrain`). Before this, the first chunk arrived ~1 s after the client
   had already entered an empty world, and it disconnected ("Block") without ever requesting a
   sub-chunk (seen in the packet trace).
+- **Debugging a real client:** `tools/packetproxy` (gophertunnel's proxy example plus logging, not
+  part of the port) sits between the game and a server started with `--xbox-auth=false` and
+  writes every packet in both directions to `packets.log`. Run the same session through it
+  against this server and against Dragonfly to see exactly what the client does differently.
 - Go embedding has no virtual dispatch: a base `Entity`/`Living`/`Human` method that PHP calls as
   `$this->x()` must call `e.self.x()` / `l.lself.x()` / `h.hself.x()` when a subclass (usually
   `Player`) overrides `x`. This was missed for `sendData` (a player never got its own metadata
@@ -96,6 +100,7 @@ go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # 
 
 ```
 cmd/pocketmine-go/     Entry point only (port of PocketMine.php): --data/--version, then server.New/Start.
+tools/packetproxy/     Debugging proxy that logs a real client's packets (not part of the port).
 pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP/src/.
   server/              Server, ServerProperties, ServerConfigGroup (PHP's root-namespace classes;
                        own package because the root package is imported by entity/world)

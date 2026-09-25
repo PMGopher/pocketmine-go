@@ -63,16 +63,35 @@ func (w *World) GetTime() int64 { return w.time }
 // GetTimeOfDay is a port of World::getTimeOfDay.
 func (w *World) GetTimeOfDay() int64 { return w.time % TimeFull }
 
-// SetTime is a port of World::setTime. Real PHP also calls sendTime() to broadcast the change to
-// players - this port has no player-packet-broadcast wiring at the World level yet (matches
-// AddSound's own documented gap), so that part is left undone rather than guessed at.
-func (w *World) SetTime(t int64) { w.time = t }
+// SetTime is a port of World::setTime.
+func (w *World) SetTime(t int64) {
+	w.time = t
+	w.SendTime()
+}
 
-// StopTime/StartTime/IsTimeStopped port World::stopTime/startTime/$stopTime - see SetTime's doc
-// comment on the same missing sendTime() broadcast.
-func (w *World) StopTime()           { w.stopTime = true }
-func (w *World) StartTime()          { w.stopTime = false }
+// StopTime/StartTime/IsTimeStopped port World::stopTime/startTime/$stopTime.
+func (w *World) StopTime() {
+	w.stopTime = true
+	w.SendTime()
+}
+
+func (w *World) StartTime() {
+	w.stopTime = false
+	w.SendTime()
+}
+
 func (w *World) IsTimeStopped() bool { return w.stopTime }
+
+// SendTime is a port of World::sendTime: every player in the world (NetworkSession::syncWorldTime)
+// gets the time. Players are the entities that are packet viewers (see viewer).
+func (w *World) SendTime() {
+	pk := &packet.SetTime{Time: int32(w.time)}
+	for _, e := range w.entities {
+		if v, ok := e.(viewer); ok {
+			v.SendPacket(pk)
+		}
+	}
+}
 
 // tryAddToNeighbourUpdateQueue is a port of World::tryAddToNeighbourUpdateQueue.
 func (w *World) tryAddToNeighbourUpdateQueue(x, y, z int) {
@@ -390,6 +409,11 @@ func (w *World) DoTick(currentTick int64) {
 
 	if !w.stopTime {
 		w.time++
+	}
+	w.sendTimeTicker++
+	if w.sendTimeTicker == 200 {
+		w.SendTime()
+		w.sendTimeTicker = 0
 	}
 	w.sunAnglePercentage = computeSunAnglePercentage(w.time)
 	w.skyLightReduction = computeSkyLightReduction(w.sunAnglePercentage)

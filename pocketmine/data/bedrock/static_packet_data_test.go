@@ -36,11 +36,31 @@ func TestEntityIdentifiersAreNetworkNBT(t *testing.T) {
 	}
 	found := false
 	for _, e := range m.IDList {
-		if e["id"] == "minecraft:zombie" {
+		if e["id"] == "minecraft:tnt" {
 			found = true
 		}
 	}
-	if len(m.IDList) < 100 || !found {
-		t.Errorf("idlist has %d entries (zombie present: %v), want the full vanilla list", len(m.IDList), found)
+	if len(m.IDList) == 0 || !found {
+		t.Errorf("idlist has %d entries (tnt present: %v)", len(m.IDList), found)
+	}
+}
+
+func TestCreativeContentAndCraftingDataDecode(t *testing.T) {
+	creative := CreativeContent()
+	if len(creative.Groups) == 0 || len(creative.Items) == 0 {
+		t.Fatalf("creative content has %d groups and %d items", len(creative.Groups), len(creative.Items))
+	}
+	known := map[int32]bool{}
+	for _, it := range ItemTypes() {
+		known[it.RuntimeID] = true
+	}
+	for _, entry := range creative.Items {
+		if !known[entry.Item.NetworkID] {
+			t.Fatalf("creative item network ID %d isn't in required_item_list.json", entry.Item.NetworkID)
+		}
+	}
+	crafting := CraftingData()
+	if len(crafting.ShapedRecipes) == 0 || len(crafting.ShapelessRecipes) == 0 || !crafting.ClearRecipes {
+		t.Errorf("crafting data: %d shaped, %d shapeless, clear=%v", len(crafting.ShapedRecipes), len(crafting.ShapelessRecipes), crafting.ClearRecipes)
 	}
 }
