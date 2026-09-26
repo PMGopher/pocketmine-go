@@ -38,27 +38,33 @@ Stop with Ctrl+C or by typing `stop` in the console (players and worlds are save
 
 ## Progress
 
-Roughly **750–850 of PocketMine-MP's 1,498 PHP classes (~50–57%)** have a Go counterpart. The range depends on how classes that were merged or renamed in Go are counted. The server
-"glue" is in place: `Server`, network sessions and packet handlers, events, the command map with
-most default commands, the console, query and UPnP, crafting and enchanting. The big remaining gaps
-are plugins, item NBT and container tiles.
+Roughly **1,230–1,270 of PocketMine-MP's 1,498 PHP classes (~82–85%)** have a Go counterpart: 1,235
+match by file or type name, and about 40 more were merged or renamed in Go (traits as `...Component`
+structs, all biomes in one file, the tree types as `Tree` constructors). Many of the rest are out
+of scope on purpose (PHP threads, RakLib and the protocol classes gophertunnel replaces, the
+updater). The server "glue" is in place: `Server`, network sessions and packet handlers, events,
+the command map with most default commands, the console, query and UPnP, crafting and enchanting.
+World and blocks are complete, incl. world formats and tiles. The big remaining gaps are plugins,
+crash dumps and 7 default commands.
 
 | Area (PHP namespace, incl. sub-namespaces) | Ported / total PHP classes |
 |---|---|
-| `block` (incl. tile, inventory, utils) | 348 / 390 (all 19 block inventories) |
-| `item` (incl. enchantment) | 137 / 154 (incl. enchanting table helper and registries) |
-| `world` (all sub-namespaces) | 135 / 271 |
+| `block` (incl. tile, inventory, utils) | 390 / 390 (every block, all tiles via `TileFactory`, all 19 block inventories; the 25 traits are embedded `...Component` structs) |
+| `item` (incl. enchantment) | 143 / 154 (incl. item NBT, enchanting table helper and registries) |
+| `world` (all sub-namespaces) | ~262 / 271 (missing: `GeneratorManager`/`GeneratorManagerEntry`/`InvalidGeneratorOptionsException`, `FlatGeneratorOptions`, `PopulationUtils`, `ChunkTicker`, `WorldTimings`, the two biome definition models) |
 | ↳ `world/particle` | 38 / 38 |
-| ↳ `world/sound` | 48 / 113 |
-| ↳ `world/format/io` (LevelDB, region, upgraders) | LevelDB + level.dat only |
+| ↳ `world/sound` | 113 / 113 |
+| ↳ `world/format` + `world/format/io` (LevelDB, region, conversion) | 76 / 76 (PHP exceptions are Go error types) |
+| ↳ `world/generator` (incl. object, populator, noise) | ~34 / 39 (every generator, populator and tree) |
+| `data` (block/item (de)serializers, upgraders, runtime) | 55 / 99 by name (the rest are mostly per-block `Model`/helper classes merged into bigger Go files) |
 | `player` | 16 / 16 |
 | `permission` | 9 / 14 |
 | `command` | 43 / 53 (34 of 41 default commands) |
 | `plugin` | 8 / 22 |
 | `scheduler` | 14 / 15 (all but `DumpWorkerMemoryTask`, which needs PHP's MemoryDump) |
-| `entity` (incl. effect, object, projectile, animation, attribute) | 77 / 77 |
+| `entity` (incl. effect, object, projectile, animation, attribute) | 77 / 77 (ItemEntity, Trident and Human inventories are saved) |
 | `event` | ~145 / 150 (every concrete event; fired where the ported code fires them) |
-| `inventory` | 34 / 35 (incl. crafting and enchanting transactions; `json/CreativeGroupData` isn't needed: creative items come from the vendored 1.26.50 data) |
+| `inventory` | 34 / 35 (incl. crafting and enchanting transactions; `json/CreativeGroupData` isn't needed) |
 | `network` (above the protocol layer) | ~40 / 85 (most of the rest are protocol-level classes gophertunnel replaces: compression, encryption, JWT/login, RakLib) |
 | `console` | 2 / 5 (the rest is PHP child-process plumbing) |
 | `resourcepacks`, `form` | 4 / 11 (the manifest classes are gophertunnel's) |
