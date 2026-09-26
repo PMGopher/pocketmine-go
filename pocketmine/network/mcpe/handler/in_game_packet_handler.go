@@ -438,8 +438,15 @@ func (h *InGamePacketHandler) handleInventoryTransaction(pk *packet.InventoryTra
 	return result, nil
 }
 
+// executableTransaction is an InventoryTransaction or one of its subclasses (CraftingTransaction,
+// EnchantingTransaction).
+type executableTransaction interface {
+	GetActions() []transaction.InventoryAction
+	Execute() error
+}
+
 // executeInventoryTransaction is a port of InGamePacketHandler::executeInventoryTransaction.
-func (h *InGamePacketHandler) executeInventoryTransaction(tx *transaction.InventoryTransaction, requestID int32) bool {
+func (h *InGamePacketHandler) executeInventoryTransaction(tx executableTransaction, requestID int32) bool {
 	h.player.SetUsingItem(false)
 
 	h.inventoryManager.SetCurrentItemStackRequestID(&requestID)

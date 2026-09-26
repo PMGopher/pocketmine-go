@@ -12,8 +12,11 @@ type CraftingTableInventory struct {
 }
 
 func NewCraftingTableInventory(holder block.Position) *CraftingTableInventory {
-	return &CraftingTableInventory{
+	i := &CraftingTableInventory{
 		CraftingGrid:        crafting.NewCraftingGrid(crafting.CraftingGridSizeBig),
 		BlockInventoryTrait: BlockInventoryTrait{Holder: holder},
 	}
+	// Dispatch BaseInventory's $this (listeners, viewers' sync) to the outer inventory.
+	i.Init(i)
+	return i
 }

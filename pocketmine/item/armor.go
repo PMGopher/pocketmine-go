@@ -25,9 +25,10 @@ type Armor struct {
 	hasCustomColor bool
 }
 
-func NewArmor(identifier ItemIdentifier, name string, info ArmorTypeInfo) *Armor {
+func NewArmor(identifier ItemIdentifier, name string, info ArmorTypeInfo, enchantmentTags ...string) *Armor {
 	a := &Armor{ArmorInfo: info}
 	a.Init(a, identifier, name)
+	a.enchantmentTags = enchantmentTags
 	return a
 }
 

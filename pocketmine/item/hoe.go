@@ -7,9 +7,10 @@ type Hoe struct {
 	TieredTool
 }
 
-func NewHoe(identifier ItemIdentifier, name string, tier ToolTier) *Hoe {
+func NewHoe(identifier ItemIdentifier, name string, tier ToolTier, enchantmentTags ...string) *Hoe {
 	h := &Hoe{TieredTool: TieredTool{Tier: tier}}
 	h.Init(h, identifier, name)
+	h.enchantmentTags = enchantmentTags
 	return h
 }
 

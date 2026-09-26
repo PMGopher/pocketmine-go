@@ -149,4 +149,3 @@ func TestPopulatedChunkGetsLightWhenTicked(t *testing.T) {
 		t.Errorf("sky light high above ground = %d, want 15", got)
 	}
 }
-

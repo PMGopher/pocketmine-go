@@ -425,8 +425,18 @@ type changeReporter interface {
 	reportsChanges() bool
 }
 
+// SlotChangeOverrider is implemented by inventories that override onSlotChange (e.g.
+// EnchantInventory): OverrideSlotChange runs first, then BaseInventory::onSlotChange (PHP's
+// parent::onSlotChange() call).
+type SlotChangeOverrider interface {
+	OverrideSlotChange(index int, before item.Item)
+}
+
 // onSlotChange is a port of BaseInventory::onSlotChange.
 func (b *BaseInventory) onSlotChange(index int, before item.Item) {
+	if o, ok := b.self.(SlotChangeOverrider); ok {
+		o.OverrideSlotChange(index, before)
+	}
 	if r, ok := b.self.(changeReporter); ok && !r.reportsChanges() {
 		return
 	}

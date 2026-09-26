@@ -22,6 +22,8 @@ import (
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/command"
 	"pocketmine-go/pocketmine/console"
+	"pocketmine-go/pocketmine/crafting"
+	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/event"
 	playerevent "pocketmine-go/pocketmine/event/player"
@@ -85,7 +87,7 @@ func init() {
 // Server is a port of pocketmine\Server.
 //
 // Not ported (see AGENTS.md): plugins (PluginManager: the design is undecided, so there are no
-// plugin schedulers to tick and no plugin enable phases), CraftingManager, the update checker,
+// plugin schedulers to tick and no plugin enable phases), the update checker,
 // anonymous usage statistics (SendUsageTask), crash dumps, the signal handler (main.go handles
 // SIGINT/SIGTERM), compression settings (gophertunnel compresses; network.batch-threshold is
 // passed on as its compression threshold) and the AuthKeyProvider (gophertunnel verifies logins).
@@ -118,6 +120,7 @@ type Server struct {
 	network         *network.Network
 	commandMap      *command.SimpleCommandMap
 	resourceManager *resourcepacks.ResourcePackManager
+	craftingManager *crafting.CraftingManager
 	worldManager    *world.WorldManager
 	queryInfo       *query.QueryInfo
 
@@ -357,6 +360,10 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 
 	s.commandMap = command.NewSimpleCommandMap(s)
 	RegisterDefaultCommandsFunc(s.commandMap)
+
+	if s.craftingManager, err = crafting.MakeCraftingManager(bedrock.Recipes, bedrock.RecipesDir); err != nil {
+		return nil, fmt.Errorf("loading recipes: %w", err)
+	}
 
 	if s.resourceManager, err = resourcepacks.NewResourcePackManager(filepath.Join(s.dataPath, "resource_packs"), logger); err != nil {
 		return nil, err
@@ -1009,6 +1016,10 @@ func (s *Server) GetMotd() string {
 }
 
 func (s *Server) GetLogger() log.Logger { return s.logger }
+
+// GetCraftingManager is a port of Server::getCraftingManager.
+func (s *Server) GetCraftingManager() *crafting.CraftingManager { return s.craftingManager }
+
 func (s *Server) GetResourcePackManager() *resourcepacks.ResourcePackManager {
 	return s.resourceManager
 }

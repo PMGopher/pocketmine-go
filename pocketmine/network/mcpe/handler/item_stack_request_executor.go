@@ -5,6 +5,8 @@ import (
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 
+	blockinventory "pocketmine-go/pocketmine/block/inventory"
+	"pocketmine-go/pocketmine/crafting"
 	"pocketmine-go/pocketmine/inventory"
 	"pocketmine-go/pocketmine/inventory/transaction"
 	"pocketmine-go/pocketmine/item"
@@ -28,10 +30,6 @@ func processError(format string, args ...any) *ItemStackRequestProcessError {
 
 // ItemStackRequestExecutor is a port of pocketmine\network\mcpe\handler\ItemStackRequestExecutor:
 // turns an ItemStackRequest into an InventoryTransaction.
-//
-// Not ported: crafting (CraftingManager and CraftingTransaction aren't ported, so every
-// CraftRecipe/CraftRecipeAuto action fails like an unknown recipe index) and enchanting
-// (EnchantingTransaction and the enchanting table options aren't ported).
 type ItemStackRequestExecutor struct {
 	player           *player.Player
 	inventoryManager *mcpe.InventoryManager
@@ -39,6 +37,12 @@ type ItemStackRequestExecutor struct {
 
 	builder          *transaction.TransactionBuilder
 	requestSlotInfos []protocol.StackRequestSlotInfo
+
+	// specialTransaction is the CraftingTransaction or EnchantingTransaction the request builds
+	// (nil for a plain InventoryTransaction).
+	specialTransaction specialTransaction
+
+	craftingResults []item.Item
 
 	nextCreatedItem                  item.Item
 	createdItemFromCreativeInventory bool
@@ -184,9 +188,23 @@ func (e *ItemStackRequestExecutor) setNextCreatedItem(it item.Item, creative boo
 	return nil
 }
 
-// beginCrafting is a port of ItemStackRequestExecutor::beginCrafting. The recipe lookup
-// (CraftingManager::getCraftingRecipeFromIndex) isn't ported, so no recipe index exists.
+// specialTransaction is the part of CraftingTransaction/EnchantingTransaction the executor uses.
+type specialTransaction interface {
+	AddAction(action transaction.InventoryAction) error
+	Execute() error
+	GetActions() []transaction.InventoryAction
+}
+
+// craftingManagerOwner is Server::getCraftingManager.
+type craftingManagerOwner interface {
+	GetCraftingManager() *crafting.CraftingManager
+}
+
+// beginCrafting is a port of ItemStackRequestExecutor::beginCrafting.
 func (e *ItemStackRequestExecutor) beginCrafting(recipeID uint32, repetitions int) error {
+	if e.specialTransaction != nil {
+		return processError("Another special transaction is already in progress")
+	}
 	if repetitions < 1 {
 		return processError("Cannot craft a recipe less than 1 time")
 	}
@@ -196,8 +214,40 @@ func (e *ItemStackRequestExecutor) beginCrafting(recipeID uint32, repetitions in
 		//It's already hard-limited to 256 repetitions in the protocol, so this is just a sanity check.
 		return processError("Cannot craft a recipe more than 256 times")
 	}
-	const recipeIDOffset = 1 // CraftingDataCache::RECIPE_ID_OFFSET
-	return processError("No such crafting recipe index: %d", int(recipeID)-recipeIDOffset)
+	owner, ok := e.player.GetServer().(craftingManagerOwner)
+	if !ok {
+		return processError("No crafting manager")
+	}
+	craftingManager := owner.GetCraftingManager()
+	recipeIndex := int(recipeID) - mcpe.RecipeIDOffset
+	recipe := craftingManager.GetCraftingRecipeFromIndex(recipeIndex)
+	if recipe == nil {
+		return processError("No such crafting recipe index: %d", recipeIndex)
+	}
+
+	tx, err := transaction.NewCraftingTransaction(e.player, craftingManager, nil, recipe, repetitions)
+	if err != nil {
+		return &ItemStackRequestProcessError{Message: err.Error(), Cause: err}
+	}
+	e.specialTransaction = tx
+
+	//TODO: Since the system assumes that crafting can only be done in the crafting grid, we have to give it a
+	//crafting grid to make the API happy. No implementation of getResultsFor() actually uses the crafting grid
+	//right now, so this will work, but this will become a problem in the future for things like shulker boxes and
+	//custom crafting recipes.
+	var grid *crafting.CraftingGrid
+	if g, ok := e.player.GetCraftingGrid().(interface{ Grid() *crafting.CraftingGrid }); ok {
+		grid = g.Grid()
+	}
+	for _, craftingResult := range recipe.GetResultsFor(grid) {
+		craftingResult.SetCount(craftingResult.GetCount() * repetitions)
+		e.craftingResults = append(e.craftingResults, craftingResult)
+	}
+	if len(e.craftingResults) == 1 {
+		//for multi-output recipes, later actions will tell us which result to create and when
+		return e.setNextCreatedItem(e.craftingResults[0], false)
+	}
+	return nil
 }
 
 // takeCreatedItem is a port of ItemStackRequestExecutor::takeCreatedItem.
@@ -229,10 +279,15 @@ func (e *ItemStackRequestExecutor) takeCreatedItem(count int) (item.Item, error)
 	return takenItem, nil
 }
 
-// assertDoingCrafting is a port of ItemStackRequestExecutor::assertDoingCrafting. No crafting
-// transaction can be started (see beginCrafting).
+// assertDoingCrafting is a port of ItemStackRequestExecutor::assertDoingCrafting.
 func (e *ItemStackRequestExecutor) assertDoingCrafting() error {
-	return processError("Expected CraftRecipe or CraftRecipeAuto action to precede this action")
+	switch e.specialTransaction.(type) {
+	case *transaction.CraftingTransaction, *transaction.EnchantingTransaction:
+		return nil
+	case nil:
+		return processError("Expected CraftRecipe or CraftRecipeAuto action to precede this action")
+	}
+	return processError("A different special transaction is already in progress")
 }
 
 // durableForPrediction is pocketmine\item\Durable as MineBlockStackRequestAction needs it.
@@ -290,14 +345,29 @@ func (e *ItemStackRequestExecutor) processItemStackRequestAction(action protocol
 		}
 		return e.setNextCreatedItem(it, true)
 	case *protocol.CraftRecipeStackRequestAction:
-		// The enchanting table branch needs EnchantInventory::getOption (EnchantingHelper), which
-		// isn't ported; InventoryManager never offers enchanting options, so it can't match.
+		if window, ok := e.player.GetCurrentWindow().(*blockinventory.EnchantInventory); ok {
+			optionID, found := e.inventoryManager.GetEnchantingTableOptionIndex(int(a.RecipeNetworkID))
+			if found {
+				if option := window.GetOption(optionID); option != nil {
+					e.specialTransaction = transaction.NewEnchantingTransaction(e.player, option, optionID+1)
+					return e.setNextCreatedItem(window.GetOutput(optionID), false)
+				}
+			}
+			return nil
+		}
 		return e.beginCrafting(a.RecipeNetworkID, int(a.NumberOfCrafts))
 	case *protocol.AutoCraftRecipeStackRequestAction:
 		return e.beginCrafting(a.RecipeNetworkID, int(a.NumberOfCrafts))
 	case *protocol.CreateStackRequestAction:
 		// CraftingCreateSpecificResultStackRequestAction
-		return e.assertDoingCrafting()
+		if err := e.assertDoingCrafting(); err != nil {
+			return err
+		}
+		index := int(a.ResultsSlot)
+		if index >= len(e.craftingResults) {
+			return processError("No such crafting result index: %d", a.ResultsSlot)
+		}
+		return e.setNextCreatedItem(e.craftingResults[index], false)
 	case *protocol.CraftResultsDeprecatedStackRequestAction:
 		//no obvious use
 	case *protocol.MineBlockStackRequestAction:
@@ -324,7 +394,7 @@ func (e *ItemStackRequestExecutor) processItemStackRequestAction(action protocol
 
 // GenerateInventoryTransaction is a port of ItemStackRequestExecutor::generateInventoryTransaction:
 // nil when the request only carried predictions.
-func (e *ItemStackRequestExecutor) GenerateInventoryTransaction() (*transaction.InventoryTransaction, error) {
+func (e *ItemStackRequestExecutor) GenerateInventoryTransaction() (specialTransaction, error) {
 	for k, action := range e.request.Actions {
 		if err := e.processItemStackRequestAction(action); err != nil {
 			return nil, &ItemStackRequestProcessError{Message: fmt.Sprintf("Error processing action %d (%T): %s", k, action, err.Error()), Cause: err}
@@ -338,9 +408,13 @@ func (e *ItemStackRequestExecutor) GenerateInventoryTransaction() (*transaction.
 		return nil, nil
 	}
 
-	tx, err := transaction.NewInventoryTransaction(e.player, nil)
-	if err != nil {
-		return nil, err
+	var tx specialTransaction = e.specialTransaction
+	if tx == nil {
+		plain, err := transaction.NewInventoryTransaction(e.player, nil)
+		if err != nil {
+			return nil, err
+		}
+		tx = plain
 	}
 	for _, action := range inventoryActions {
 		if err := tx.AddAction(action); err != nil {

@@ -10,8 +10,11 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	blockinventory "pocketmine-go/pocketmine/block/inventory"
+	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/inventory"
 	"pocketmine-go/pocketmine/item"
+	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/network"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/player"
@@ -139,9 +142,6 @@ type ContainerOpenFunc func(id int, inv inventory.Inventory) []packet.Packet
 // InventoryManager is a port of pocketmine\network\mcpe\InventoryManager: tracks which inventories
 // the client can see, under which window IDs, the network stack IDs of their items and the
 // client's predictions, and keeps the client in sync.
-//
-// Not ported: furnace, brewing stand, anvil and hopper window types (those block inventories
-// aren't ported), and syncEnchantingTableOptions (EnchantingHelper isn't ported).
 type InventoryManager struct {
 	player  *player.Player
 	session *NetworkSession
@@ -164,8 +164,14 @@ type InventoryManager struct {
 	pendingCloseWindowID      *int
 	pendingOpenWindowCallback func()
 
-	nextItemStackID           int32
-	currentItemStackRequestID *int32
+	nextItemStackID int32
+
+	// enchantingTableOptions maps the option IDs sent to the client to the option index.
+	enchantingTableOptions map[int]int
+	//TODO: this should be based on the total number of crafting recipes - if there are ever 100k recipes, this will
+	//conflict with regular recipes
+	nextEnchantingTableOptionID int
+	currentItemStackRequestID   *int32
 
 	fullSyncRequested bool
 
@@ -175,15 +181,17 @@ type InventoryManager struct {
 // NewInventoryManager is a port of InventoryManager::__construct.
 func NewInventoryManager(p *player.Player, session *NetworkSession) *InventoryManager {
 	m := &InventoryManager{
-		player:                    p,
-		session:                   session,
-		inventories:               map[inventory.Inventory]*InventoryManagerEntry{},
-		networkIDToInventoryMap:   map[int]inventory.Inventory{},
-		complexSlotToInventoryMap: map[int]*ComplexInventoryMapEntry{},
-		lastInventoryNetworkID:    ContainerIDFirst,
-		currentWindowType:         WindowTypeContainer,
-		clientSelectedHotbarSlot:  -1,
-		nextItemStackID:           1,
+		player:                      p,
+		session:                     session,
+		inventories:                 map[inventory.Inventory]*InventoryManagerEntry{},
+		networkIDToInventoryMap:     map[int]inventory.Inventory{},
+		complexSlotToInventoryMap:   map[int]*ComplexInventoryMapEntry{},
+		lastInventoryNetworkID:      ContainerIDFirst,
+		currentWindowType:           WindowTypeContainer,
+		clientSelectedHotbarSlot:    -1,
+		nextItemStackID:             1,
+		enchantingTableOptions:      map[int]int{},
+		nextEnchantingTableOptionID: 100000,
 	}
 	m.containerOpenCallbacks = []ContainerOpenFunc{createContainerOpen}
 
@@ -358,6 +366,8 @@ func (m *InventoryManager) openWindowDeferred(fn func()) {
 func createComplexSlotMapping(inv inventory.Inventory) map[int]int {
 	//TODO: make this dynamic so plugins can add mappings for stuff not implemented by PM
 	switch inv.(type) {
+	case *blockinventory.AnvilInventory:
+		return UISlotAnvil
 	case *blockinventory.EnchantInventory:
 		return UISlotEnchantingTable
 	case *blockinventory.LoomInventory:
@@ -422,11 +432,28 @@ func createContainerOpen(id int, inv inventory.Inventory) []packet.Packet {
 	}
 	holder := blockInv.GetHolder()
 	windowType := WindowTypeContainer
-	switch inv.(type) {
+	switch inv := inv.(type) {
 	case *blockinventory.LoomInventory:
 		windowType = WindowTypeLoom
+	case *blockinventory.FurnaceInventory:
+		switch inv.GetFurnaceType() {
+		case tile.FurnaceTypeFurnace:
+			windowType = WindowTypeFurnace
+		case tile.FurnaceTypeBlastFurnace:
+			windowType = WindowTypeBlastFurnace
+		case tile.FurnaceTypeSmoker:
+			windowType = WindowTypeSmoker
+		default:
+			panic("Campfire inventory cannot be displayed to a player")
+		}
 	case *blockinventory.EnchantInventory:
 		windowType = WindowTypeEnchantment
+	case *blockinventory.BrewingStandInventory:
+		windowType = WindowTypeBrewingStand
+	case *blockinventory.AnvilInventory:
+		windowType = WindowTypeAnvil
+	case *blockinventory.HopperInventory:
+		windowType = WindowTypeHopper
 	case *blockinventory.CraftingTableInventory:
 		windowType = WindowTypeWorkbench
 	case *blockinventory.StonecutterInventory:
@@ -471,6 +498,7 @@ func (m *InventoryManager) OnCurrentWindowRemove() {
 		}
 		id := m.lastInventoryNetworkID
 		m.pendingCloseWindowID = &id
+		m.enchantingTableOptions = map[int]int{}
 	}
 }
 
@@ -751,9 +779,37 @@ func (m *InventoryManager) SyncCreative() {
 	m.session.SendDataPacket(GetCreativeInventoryCache().BuildPacket(m.player.GetCreativeInventory(), m.session))
 }
 
+// SyncEnchantingTableOptions is a port of InventoryManager::syncEnchantingTableOptions.
+func (m *InventoryManager) SyncEnchantingTableOptions(options []*enchantment.EnchantingOption) {
+	protocolOptions := make([]protocol.EnchantmentOption, 0, len(options))
+
+	for index, option := range options {
+		optionID := m.nextEnchantingTableOptionID
+		m.nextEnchantingTableOptionID++
+		m.enchantingTableOptions[optionID] = index
+
+		var protocolEnchantments []protocol.EnchantmentInstance
+		for _, e := range option.GetEnchantments() {
+			protocolEnchantments = append(protocolEnchantments, protocol.EnchantmentInstance{Type: byte(bedrock.EnchantmentIdMap().ToID(e.GetType())), Level: byte(e.GetLevel())})
+		}
+		// We don't pay attention to the $slotFlags, $heldActivatedEnchantments and $selfActivatedEnchantments
+		// as everything works fine without them (perhaps these values are used somehow in the BDS).
+		protocolOptions = append(protocolOptions, protocol.EnchantmentOption{
+			Cost:            uint8(option.GetRequiredXpLevel()),
+			Enchantments:    protocol.ItemEnchantments{Slot: 0, Enchantments: [3][]protocol.EnchantmentInstance{protocolEnchantments, nil, nil}},
+			Name:            option.GetDisplayName(),
+			RecipeNetworkID: uint32(optionID),
+		})
+	}
+
+	m.session.SendDataPacket(&packet.PlayerEnchantOptions{Options: protocolOptions})
+}
+
 // GetEnchantingTableOptionIndex is a port of InventoryManager::getEnchantingTableOptionIndex.
-// Enchanting options are never sent (EnchantingHelper isn't ported), so there are none.
-func (m *InventoryManager) GetEnchantingTableOptionIndex(recipeID int) (int, bool) { return 0, false }
+func (m *InventoryManager) GetEnchantingTableOptionIndex(recipeID int) (int, bool) {
+	index, ok := m.enchantingTableOptions[recipeID]
+	return index, ok
+}
 
 func (m *InventoryManager) newItemStackID() int32 {
 	id := m.nextItemStackID

@@ -5,9 +5,7 @@ import (
 	"pocketmine-go/pocketmine/math"
 )
 
-// EnchantingTable is a port of pocketmine\block\EnchantingTable, minus actually opening the
-// inventory window (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc
-// comment for the same gap) and the "//TODO lock" the PHP original never implemented either.
+// EnchantingTable is a port of pocketmine\block\EnchantingTable.
 type EnchantingTable struct {
 	Transparent
 }
@@ -33,6 +31,8 @@ func (e *EnchantingTable) GetSupportType(facing math.Facing) blockutils.SupportT
 }
 
 func (e *EnchantingTable) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	// player.SetCurrentWindow(NewEnchantInventory(e.position)) - not ported, see doc comment above.
+	//TODO lock
+
+	openWindow(player, WindowEnchantingTable, e.position)
 	return true
 }

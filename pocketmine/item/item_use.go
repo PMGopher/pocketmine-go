@@ -3,6 +3,7 @@ package item
 import (
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/entity/effect"
+	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -192,9 +193,10 @@ type Bow struct {
 	Tool
 }
 
-func NewBow(identifier ItemIdentifier, name string) *Bow {
+func NewBow(identifier ItemIdentifier, name string, enchantmentTags ...string) *Bow {
 	b := &Bow{}
 	b.Init(b, identifier, name)
+	b.enchantmentTags = enchantmentTags
 	return b
 }
 
@@ -234,7 +236,7 @@ var vanillaBow Item
 // VanillaBow is a port of VanillaItems::BOW().
 func VanillaBow() Item {
 	if vanillaBow == nil {
-		vanillaBow = NewBow(NewItemIdentifier(BOW), "Bow")
+		vanillaBow = NewBow(NewItemIdentifier(BOW), "Bow", enchantment.TagBow)
 	}
 	return vanillaBow.Clone()
 }

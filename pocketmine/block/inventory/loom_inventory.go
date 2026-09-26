@@ -21,8 +21,11 @@ type LoomInventory struct {
 }
 
 func NewLoomInventory(holder block.Position) *LoomInventory {
-	return &LoomInventory{
+	i := &LoomInventory{
 		SimpleInventory:     inventory.NewSimpleInventory(3),
 		BlockInventoryTrait: BlockInventoryTrait{Holder: holder},
 	}
+	// Dispatch BaseInventory's $this (listeners, viewers' sync) to the outer inventory.
+	i.Init(i)
+	return i
 }

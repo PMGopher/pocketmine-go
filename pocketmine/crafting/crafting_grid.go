@@ -81,3 +81,7 @@ func (c *CraftingGrid) GetIngredient(x, y int) item.Item {
 func (c *CraftingGrid) GetRecipeWidth() int { return c.xLen }
 
 func (c *CraftingGrid) GetRecipeHeight() int { return c.yLen }
+
+// Grid returns the grid itself: inventories embedding a CraftingGrid (PlayerCraftingInventory,
+// CraftingTableInventory) expose it through this promoted method.
+func (c *CraftingGrid) Grid() *CraftingGrid { return c }

@@ -5,9 +5,10 @@ type EnchantedBook struct {
 	ItemBase
 }
 
-func NewEnchantedBook(identifier ItemIdentifier, name string) *EnchantedBook {
+func NewEnchantedBook(identifier ItemIdentifier, name string, enchantmentTags ...string) *EnchantedBook {
 	e := &EnchantedBook{}
 	e.Init(e, identifier, name)
+	e.enchantmentTags = enchantmentTags
 	return e
 }
 

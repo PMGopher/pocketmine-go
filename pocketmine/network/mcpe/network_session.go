@@ -25,6 +25,7 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine/command"
+	"pocketmine-go/pocketmine/crafting"
 	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/entity/effect"
 	"pocketmine-go/pocketmine/event"
@@ -75,6 +76,8 @@ type Server interface {
 	GetAllowedViewDistance(distance int) int
 	// GetGamemode is a port of Server::getGamemode.
 	GetGamemode() player.GameMode
+	// GetCraftingManager is a port of Server::getCraftingManager.
+	GetCraftingManager() *crafting.CraftingManager
 }
 
 // PacketSender is a port of pocketmine\network\mcpe\PacketSender: gophertunnel's connection plays

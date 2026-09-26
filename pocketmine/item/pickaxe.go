@@ -7,9 +7,10 @@ type Pickaxe struct {
 	TieredTool
 }
 
-func NewPickaxe(identifier ItemIdentifier, name string, tier ToolTier) *Pickaxe {
+func NewPickaxe(identifier ItemIdentifier, name string, tier ToolTier, enchantmentTags ...string) *Pickaxe {
 	p := &Pickaxe{TieredTool: TieredTool{Tier: tier}}
 	p.Init(p, identifier, name)
+	p.enchantmentTags = enchantmentTags
 	return p
 }
 

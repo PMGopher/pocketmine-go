@@ -7,9 +7,10 @@ type Shovel struct {
 	TieredTool
 }
 
-func NewShovel(identifier ItemIdentifier, name string, tier ToolTier) *Shovel {
+func NewShovel(identifier ItemIdentifier, name string, tier ToolTier, enchantmentTags ...string) *Shovel {
 	s := &Shovel{TieredTool: TieredTool{Tier: tier}}
 	s.Init(s, identifier, name)
+	s.enchantmentTags = enchantmentTags
 	return s
 }
 

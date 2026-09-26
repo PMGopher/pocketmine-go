@@ -8,6 +8,7 @@ import "pocketmine-go/pocketmine/item"
 var coreItemConstructors = map[int]func() item.Item{
 	item.INK_SAC:                item.VanillaInkSac,
 	item.IRON_INGOT:             item.VanillaIronIngot,
+	item.LAPIS_LAZULI:           item.VanillaLapisLazuli,
 	item.ARROW:                  item.VanillaArrow,
 	item.EGG:                    item.VanillaEgg,
 	item.SNOWBALL:               item.VanillaSnowball,

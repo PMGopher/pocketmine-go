@@ -7,9 +7,10 @@ type FishingRod struct {
 	Durable
 }
 
-func NewFishingRod(identifier ItemIdentifier, name string) *FishingRod {
+func NewFishingRod(identifier ItemIdentifier, name string, enchantmentTags ...string) *FishingRod {
 	f := &FishingRod{}
 	f.Init(f, identifier, name)
+	f.enchantmentTags = enchantmentTags
 	return f
 }
 

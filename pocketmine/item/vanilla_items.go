@@ -2,6 +2,7 @@ package item
 
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/item/enchantment"
 	"sync"
 )
 
@@ -49,6 +50,7 @@ var (
 	vanillaFireworkStar         Item
 	vanillaFishingRod           Item
 	vanillaFlintAndSteel        Item
+	vanillaLapisLazuli          Item
 	vanillaGlassBottle          Item
 	vanillaGlowBerries          Item
 	vanillaGoatHorn             Item
@@ -157,7 +159,7 @@ var vanillaBookOnce sync.Once
 
 func VanillaBook() Item {
 	vanillaBookOnce.Do(func() {
-		vanillaBook = NewBook(NewItemIdentifier(BOOK), "Book")
+		vanillaBook = NewBook(NewItemIdentifier(BOOK), "Book", enchantment.TagAll)
 	})
 	return vanillaBook.Clone()
 }
@@ -249,7 +251,7 @@ var vanillaCompassOnce sync.Once
 
 func VanillaCompass() Item {
 	vanillaCompassOnce.Do(func() {
-		vanillaCompass = NewCompass(NewItemIdentifier(COMPASS), "Compass")
+		vanillaCompass = NewCompass(NewItemIdentifier(COMPASS), "Compass", enchantment.TagCompass)
 	})
 	return vanillaCompass.Clone()
 }
@@ -339,7 +341,7 @@ var vanillaEnchantedBookOnce sync.Once
 
 func VanillaEnchantedBook() Item {
 	vanillaEnchantedBookOnce.Do(func() {
-		vanillaEnchantedBook = NewEnchantedBook(NewItemIdentifier(ENCHANTED_BOOK), "Enchanted Book")
+		vanillaEnchantedBook = NewEnchantedBook(NewItemIdentifier(ENCHANTED_BOOK), "Enchanted Book", enchantment.TagAll)
 	})
 	return vanillaEnchantedBook.Clone()
 }
@@ -366,7 +368,7 @@ var vanillaFishingRodOnce sync.Once
 
 func VanillaFishingRod() Item {
 	vanillaFishingRodOnce.Do(func() {
-		vanillaFishingRod = NewFishingRod(NewItemIdentifier(FISHING_ROD), "Fishing Rod")
+		vanillaFishingRod = NewFishingRod(NewItemIdentifier(FISHING_ROD), "Fishing Rod", enchantment.TagFishingRod)
 	})
 	return vanillaFishingRod.Clone()
 }
@@ -375,7 +377,7 @@ var vanillaFlintAndSteelOnce sync.Once
 
 func VanillaFlintAndSteel() Item {
 	vanillaFlintAndSteelOnce.Do(func() {
-		vanillaFlintAndSteel = NewFlintSteel(NewItemIdentifier(FLINT_AND_STEEL), "Flint and Steel")
+		vanillaFlintAndSteel = NewFlintSteel(NewItemIdentifier(FLINT_AND_STEEL), "Flint and Steel", enchantment.TagFlintAndSteel)
 	})
 	return vanillaFlintAndSteel.Clone()
 }
@@ -649,7 +651,7 @@ var vanillaShearsOnce sync.Once
 
 func VanillaShears() Item {
 	vanillaShearsOnce.Do(func() {
-		vanillaShears = NewShears(NewItemIdentifier(SHEARS), "Shears")
+		vanillaShears = NewShears(NewItemIdentifier(SHEARS), "Shears", enchantment.TagShears)
 	})
 	return vanillaShears.Clone()
 }
@@ -839,4 +841,13 @@ func VanillaRecords() []Item {
 		items[i] = vanillaRecord(e.typeID, e.recordType, e.name)
 	}
 	return items
+}
+
+var vanillaLapisLazuliOnce sync.Once
+
+func VanillaLapisLazuli() Item {
+	vanillaLapisLazuliOnce.Do(func() {
+		vanillaLapisLazuli = NewItem(NewItemIdentifier(LAPIS_LAZULI), "Lapis Lazuli")
+	})
+	return vanillaLapisLazuli.Clone()
 }

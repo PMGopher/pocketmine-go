@@ -107,6 +107,7 @@ type Item interface {
 	IsNull() bool
 
 	GetEnchantability() int
+	GetEnchantmentTags() []string
 
 	GetMaxStackSize() int
 	GetFuelTime() int
@@ -145,7 +146,8 @@ type ItemBase struct {
 	canDestroy     map[string]string
 	keepOnDeath    bool
 
-	enchantments enchantments
+	enchantments    enchantments
+	enchantmentTags []string
 
 	nbtTag *nbt.CompoundTag
 }
@@ -412,6 +414,10 @@ func (b *ItemBase) GetName() string {
 func (b *ItemBase) GetVanillaName() string { return b.name }
 
 func (b *ItemBase) GetEnchantability() int { return 1 }
+
+// GetEnchantmentTags is a port of Item::getEnchantmentTags: the ItemEnchantmentTags the item can be
+// enchanted with (via an enchanting table, anvil, fishing, etc.).
+func (b *ItemBase) GetEnchantmentTags() []string { return b.enchantmentTags }
 
 // OnTickWorn is Item::onTickWorn's default: nothing happens.
 func (b *ItemBase) OnTickWorn(entity Living) bool { return false }

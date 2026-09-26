@@ -66,10 +66,9 @@ func (a *Anvil) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone
 }
 
-// OnInteract should open an AnvilInventory for the interacting player — needs the unported
-// block/inventory package, so this is a no-op for now; it still returns true, matching the PHP
-// original's unconditional `return true;`.
+// OnInteract is a port of Anvil::onInteract.
 func (a *Anvil) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	openWindow(player, WindowAnvil, a.position)
 	return true
 }
 

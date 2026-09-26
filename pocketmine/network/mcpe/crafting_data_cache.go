@@ -85,8 +85,8 @@ func buildCraftingDataCache(manager *crafting.CraftingManager) *packet.CraftingD
 	defer timings.CraftingDataCacheRebuild.StopTiming()
 
 	pk := &packet.CraftingData{ClearRecipes: true}
-	noUnlockingRequirement := protocol.Option(protocol.RecipeUnlockRequirement{Context: protocol.RecipeUnlockContextAlwaysUnlocked})
-	noUnlockingRequirement = protocol.Optional[protocol.RecipeUnlockRequirement]{}
+	// RecipeUnlockingRequirement(null): no requirement.
+	noUnlockingRequirement := protocol.Optional[protocol.RecipeUnlockRequirement]{}
 
 	recipeNetID := RecipeIDOffset
 	for index, recipe := range manager.GetCraftingRecipeIndex() {

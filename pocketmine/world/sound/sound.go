@@ -326,6 +326,48 @@ func (ChestCloseSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []pack
 	return nonActorSound(packet.SoundEventChestClosed, pos, false, -1)
 }
 
+// BarrelOpenSound is a port of pocketmine\world\sound\BarrelOpenSound.
+type BarrelOpenSound struct{}
+
+func (BarrelOpenSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBarrelOpen, pos, false, -1)
+}
+
+// BarrelCloseSound is a port of pocketmine\world\sound\BarrelCloseSound.
+type BarrelCloseSound struct{}
+
+func (BarrelCloseSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBarrelClose, pos, false, -1)
+}
+
+// EnderChestOpenSound is a port of pocketmine\world\sound\EnderChestOpenSound.
+type EnderChestOpenSound struct{}
+
+func (EnderChestOpenSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEnderChestOpen, pos, false, -1)
+}
+
+// EnderChestCloseSound is a port of pocketmine\world\sound\EnderChestCloseSound.
+type EnderChestCloseSound struct{}
+
+func (EnderChestCloseSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEnderChestClosed, pos, false, -1)
+}
+
+// ShulkerBoxOpenSound is a port of pocketmine\world\sound\ShulkerBoxOpenSound.
+type ShulkerBoxOpenSound struct{}
+
+func (ShulkerBoxOpenSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventShulkerBoxOpen, pos, false, -1)
+}
+
+// ShulkerBoxCloseSound is a port of pocketmine\world\sound\ShulkerBoxCloseSound.
+type ShulkerBoxCloseSound struct{}
+
+func (ShulkerBoxCloseSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventShulkerBoxClosed, pos, false, -1)
+}
+
 // recordSoundTypes is a port of RecordSound::encode's match expression, verified against real PHP.
 var recordSoundTypes = map[blockutils.RecordType]string{
 	blockutils.RecordTypeDisk13:              packet.SoundEventRecord13,

@@ -12,8 +12,11 @@ type CartographyTableInventory struct {
 }
 
 func NewCartographyTableInventory(holder block.Position) *CartographyTableInventory {
-	return &CartographyTableInventory{
+	i := &CartographyTableInventory{
 		SimpleInventory:     inventory.NewSimpleInventory(2),
 		BlockInventoryTrait: BlockInventoryTrait{Holder: holder},
 	}
+	// Dispatch BaseInventory's $this (listeners, viewers' sync) to the outer inventory.
+	i.Init(i)
+	return i
 }

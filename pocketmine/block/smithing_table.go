@@ -2,9 +2,7 @@ package block
 
 import "pocketmine-go/pocketmine/math"
 
-// SmithingTable is a port of pocketmine\block\SmithingTable, minus actually opening the
-// inventory window (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc
-// comment for the same gap).
+// SmithingTable is a port of pocketmine\block\SmithingTable.
 type SmithingTable struct {
 	Opaque
 }
@@ -22,8 +20,7 @@ func (s *SmithingTable) Clone() Behavior {
 }
 
 func (s *SmithingTable) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	// player.SetCurrentWindow(NewSmithingTableInventory(s.position)) - not ported, see doc comment
-	// above.
+	openWindow(player, WindowSmithingTable, s.position)
 	return true
 }
 

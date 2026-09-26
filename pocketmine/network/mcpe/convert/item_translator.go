@@ -31,6 +31,7 @@ const noBlockRuntimeID = 0
 var itemTypeNames = map[int]string{
 	item.INK_SAC:                "minecraft:ink_sac",
 	item.IRON_INGOT:             "minecraft:iron_ingot",
+	item.LAPIS_LAZULI:           "minecraft:lapis_lazuli",
 	item.ARROW:                  "minecraft:arrow",
 	item.EGG:                    "minecraft:egg",
 	item.SNOWBALL:               "minecraft:snowball",

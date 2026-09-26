@@ -40,13 +40,13 @@ Stop with Ctrl+C or by typing `stop` in the console (players and worlds are save
 
 Roughly **750–850 of PocketMine-MP's 1,498 PHP classes (~50–57%)** have a Go counterpart. The range depends on how classes that were merged or renamed in Go are counted. The server
 "glue" is in place: `Server`, network sessions and packet handlers, events, the command map with
-most default commands, the console, query and UPnP. The big remaining gaps are crafting, plugins,
-item NBT and the full block/item network mappings.
+most default commands, the console, query and UPnP, crafting and enchanting. The big remaining gaps
+are plugins, item NBT, container tiles and the full block/item network mappings.
 
 | Area (PHP namespace, incl. sub-namespaces) | Ported / total PHP classes |
 |---|---|
-| `block` (incl. tile, inventory, utils) | 341 / 390 |
-| `item` (incl. enchantment) | 133 / 154 |
+| `block` (incl. tile, inventory, utils) | 348 / 390 (all 19 block inventories) |
+| `item` (incl. enchantment) | 137 / 154 (incl. enchanting table helper and registries) |
 | `world` (all sub-namespaces) | 135 / 271 |
 | ↳ `world/particle` | 38 / 38 |
 | ↳ `world/sound` | 48 / 113 |
@@ -55,14 +55,15 @@ item NBT and the full block/item network mappings.
 | `permission` | 9 / 14 |
 | `command` | 43 / 53 (34 of 41 default commands) |
 | `plugin` | 8 / 22 |
-| `scheduler` | 10 / 15 (sync scheduler + async pool) |
+| `scheduler` | 14 / 15 (all but `DumpWorkerMemoryTask`, which needs PHP's MemoryDump) |
 | `entity` (incl. effect, object, projectile, animation, attribute) | 77 / 77 |
 | `event` | ~145 / 150 (every concrete event; fired where the ported code fires them) |
-| `inventory` | 27 / 35 (incl. cursor, creative, transactions; no crafting/enchanting transactions) |
+| `inventory` | 34 / 35 (incl. crafting and enchanting transactions; `json/CreativeGroupData` isn't needed: creative items come from the vendored 1.26.50 data) |
 | `network` (above the protocol layer) | ~40 / 85 (most of the rest are protocol-level classes gophertunnel replaces: compression, encryption, JWT/login, RakLib) |
 | `console` | 2 / 5 (the rest is PHP child-process plumbing) |
 | `resourcepacks`, `form` | 4 / 11 (the manifest classes are gophertunnel's) |
-| `crafting`, `crash` | 0 |
+| `crafting` | 25 / 25 (recipes loaded from pmmp/BedrockData's recipe JSON) |
+| `crash` | 0 |
 
 _Counts are approximate: a class counts as ported if a Go file with its snake_case name or a Go
 type with its name exists._
@@ -112,7 +113,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Particles (all types) and sounds **(partial)**, 49 of 113 sound types
 - [ ] Block-state / item upgraders (loading worlds from vanilla or older PMMP)
 - [ ] Region formats (Anvil, McRegion, PMAnvil) and world conversion
-- [ ] Async chunk generation / population / lighting
+- [x] Async chunk generation / population / lighting (worker goroutines, like PHP's `AsyncGeneratorExecutor`, `PopulationTask` and `LightPopulationTask`)
 
 ### World generation
 - [x] Flat generator
@@ -154,7 +155,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Death and respawn (death screen, `DeathPacketHandler`, respawn)
 - [x] Hunger, saturation, experience, attributes (logic ported; attribute packets sent)
 - [x] Changing game mode in-game (`/gamemode`)
-- [ ] Server-side movement checks / physics
+- [x] Server-side movement checks (`Player::handleMovement`: moves over 15 blocks per tick are reverted). PocketMine-MP has no server-side movement physics or anti-cheat for players ("This is NOT an anti-cheat check"), so there is nothing more to port
 
 ### Inventory & crafting
 - [x] Base inventory types
@@ -162,8 +163,12 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Player inventory, armor, offhand, ender chest
 - [x] Cursor inventory, inventory network sync (InventoryManager)
 - [x] Creative inventory (only items with a network mapping so far)
-- [x] Inventory transactions / item stack requests (moving, dropping, using items; crafting requests fail until crafting is ported)
-- [ ] Crafting, furnace smelting, brewing, smithing, enchanting
+- [x] Inventory transactions / item stack requests (moving, dropping, using items, crafting, enchanting)
+- [x] Crafting (shaped/shapeless recipes, `CraftingDataPacket`, `CraftingTransaction`) **(partial)**: only recipes whose items have a network mapping are loaded
+- [x] Enchanting table (options, bookshelves, `EnchantingTransaction`, lapis/XP cost)
+- [x] Block inventories (all 19) and opening crafting table, enchanting table, anvil, loom, stonecutter, smithing/cartography table and ender chest windows
+- [ ] Container tiles holding inventories (chest, barrel, furnace, hopper, brewing stand, shulker box): needs item NBT serialization to save their contents
+- [ ] Furnace smelting and brewing ticks (the recipes are loaded), smithing
 
 ### Entities
 All 77 classes under `pocketmine\entity` are ported, with their full logic.
@@ -189,7 +194,7 @@ All 77 classes under `pocketmine\entity` are ported, with their full logic.
 
 1. **Make the world playable:** all block and item network mappings (blocks without one can't be placed or shown).
 2. **Real server structure:** done (`Server`, network sessions and handlers, console, command map, events, permissions, query, UPnP, resource packs). Remaining: the 7 missing default commands.
-3. **Gameplay:** crafting, item NBT, enchanting.
+3. **Gameplay:** item NBT, container tiles, furnace/brewing ticks.
 4. **Plugins** (design decision pending, see AGENTS.md §6 Phase 4).
 5. **Everything else:** world upgraders, crash dumps.
 

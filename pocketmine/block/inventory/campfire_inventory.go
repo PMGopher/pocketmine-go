@@ -18,6 +18,8 @@ func NewCampfireInventory(holder block.Position) *CampfireInventory {
 		SimpleInventory:     inventory.NewSimpleInventory(4),
 		BlockInventoryTrait: BlockInventoryTrait{Holder: holder},
 	}
+	// Dispatch BaseInventory's $this (listeners, viewers' sync) to the outer inventory.
+	c.Init(c)
 	c.SetMaxStackSize(1)
 	return c
 }

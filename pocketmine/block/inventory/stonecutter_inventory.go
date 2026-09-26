@@ -14,8 +14,11 @@ type StonecutterInventory struct {
 }
 
 func NewStonecutterInventory(holder block.Position) *StonecutterInventory {
-	return &StonecutterInventory{
+	i := &StonecutterInventory{
 		SimpleInventory:     inventory.NewSimpleInventory(1),
 		BlockInventoryTrait: BlockInventoryTrait{Holder: holder},
 	}
+	// Dispatch BaseInventory's $this (listeners, viewers' sync) to the outer inventory.
+	i.Init(i)
+	return i
 }

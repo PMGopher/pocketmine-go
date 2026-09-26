@@ -7,9 +7,10 @@ type Shears struct {
 	Tool
 }
 
-func NewShears(identifier ItemIdentifier, name string) *Shears {
+func NewShears(identifier ItemIdentifier, name string, enchantmentTags ...string) *Shears {
 	s := &Shears{}
 	s.Init(s, identifier, name)
+	s.enchantmentTags = enchantmentTags
 	return s
 }
 

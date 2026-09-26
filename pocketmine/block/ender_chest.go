@@ -45,10 +45,7 @@ func (e *EnderChest) Place(tx BlockTransaction, item Item, blockReplace Behavior
 	return e.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract is a port of EnderChest::onInteract, minus actually opening the inventory window
-// (player.SetCurrentWindow and player.GetEnderInventory aren't ported - see
-// block.Chest.OnInteract's doc comment for the same gap on the window side). The lid-transparency
-// check and the ViewerCount increment it gates are both fully real.
+// OnInteract is a port of EnderChest::onInteract.
 func (e *EnderChest) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return true
@@ -69,8 +66,7 @@ func (e *EnderChest) OnInteract(item Item, face math.Facing, clickVector math.Ve
 		return true
 	}
 	tileEnderChest.SetViewerCount(tileEnderChest.GetViewerCount() + 1)
-	// player.SetCurrentWindow(NewEnderChestInventory(e.position, player.GetEnderInventory())) -
-	// not ported, see doc comment above.
+	openWindow(player, WindowEnderChest, e.position)
 	return true
 }
 

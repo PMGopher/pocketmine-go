@@ -12,8 +12,11 @@ type SmithingTableInventory struct {
 }
 
 func NewSmithingTableInventory(holder block.Position) *SmithingTableInventory {
-	return &SmithingTableInventory{
+	i := &SmithingTableInventory{
 		SimpleInventory:     inventory.NewSimpleInventory(3),
 		BlockInventoryTrait: BlockInventoryTrait{Holder: holder},
 	}
+	// Dispatch BaseInventory's $this (listeners, viewers' sync) to the outer inventory.
+	i.Init(i)
+	return i
 }

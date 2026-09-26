@@ -5,9 +5,10 @@ type Compass struct {
 	ItemBase
 }
 
-func NewCompass(identifier ItemIdentifier, name string) *Compass {
+func NewCompass(identifier ItemIdentifier, name string, enchantmentTags ...string) *Compass {
 	c := &Compass{}
 	c.Init(c, identifier, name)
+	c.enchantmentTags = enchantmentTags
 	return c
 }
 

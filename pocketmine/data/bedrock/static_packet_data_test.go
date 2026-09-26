@@ -59,8 +59,4 @@ func TestCreativeContentAndCraftingDataDecode(t *testing.T) {
 			t.Fatalf("creative item network ID %d isn't in required_item_list.json", entry.Item.NetworkID)
 		}
 	}
-	crafting := CraftingData()
-	if len(crafting.ShapedRecipes) == 0 || len(crafting.ShapelessRecipes) == 0 || !crafting.ClearRecipes {
-		t.Errorf("crafting data: %d shaped, %d shapeless, clear=%v", len(crafting.ShapedRecipes), len(crafting.ShapelessRecipes), crafting.ClearRecipes)
-	}
 }

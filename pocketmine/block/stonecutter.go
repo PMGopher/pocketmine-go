@@ -37,11 +37,10 @@ func (s *Stonecutter) Place(tx BlockTransaction, item Item, blockReplace Behavio
 	return s.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract should open a StonecutterInventory for the interacting player — needs the unported
-// block/inventory package, so this is a no-op for now; it still returns whether a player was
-// present, matching the PHP original (same shape as Loom.OnInteract).
+// OnInteract is a port of Stonecutter::onInteract.
 func (s *Stonecutter) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	return player != nil
+	openWindow(player, WindowStonecutter, s.position)
+	return true
 }
 
 func (s *Stonecutter) RecalculateCollisionBoxes() []math.AxisAlignedBB {

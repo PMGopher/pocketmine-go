@@ -103,9 +103,7 @@ func (h *PreSpawnPacketHandler) SetUp() {
 	h.inventoryManager.SyncCreative()
 
 	logger.Debug("Sending crafting data")
-	// CraftingDataCache::getCache: CraftingManager isn't ported, so this is the vendored 1.26.50
-	// recipe list (see bedrock.CraftingData); crafting itself doesn't work yet.
-	session.SendDataPacket(bedrock.CraftingData())
+	session.SendDataPacket(mcpe.GetCraftingDataCache().GetCache(h.server.GetCraftingManager()))
 
 	logger.Debug("Sending player list")
 	session.SyncPlayerList(h.server.GetOnlinePlayers())

@@ -17,9 +17,10 @@ type SplashPotion struct {
 	Linger          bool
 }
 
-func NewSplashPotion(identifier ItemIdentifier, name string, linger bool) *SplashPotion {
+func NewSplashPotion(identifier ItemIdentifier, name string, linger bool, enchantmentTags ...string) *SplashPotion {
 	s := &SplashPotion{PotionTypeValue: PotionTypeWater, Linger: linger}
 	s.Init(s, identifier, name)
+	s.enchantmentTags = enchantmentTags
 	return s
 }
 

@@ -1,6 +1,9 @@
 package inventory
 
-import "pocketmine-go/pocketmine/item"
+import (
+	"pocketmine-go/pocketmine/item"
+	"pocketmine-go/pocketmine/utils"
+)
 
 // TransactionValidationError is a port of
 // pocketmine\inventory\transaction\TransactionValidationException, as returned by slot validators.
@@ -30,3 +33,12 @@ func NewCallbackSlotValidator(validate func(inv Inventory, it item.Item, slot in
 func (c *CallbackSlotValidator) Validate(inv Inventory, it item.Item, slot int) *TransactionValidationError {
 	return c.validate(inv, it, slot)
 }
+
+// SlotValidatedInventory is a port of pocketmine\inventory\SlotValidatedInventory: an inventory
+// whose slots can have validators that inventory transactions consult (BaseInventory implements
+// it).
+type SlotValidatedInventory interface {
+	GetSlotValidators() *utils.ObjectSet[SlotValidator]
+}
+
+var _ SlotValidatedInventory = (*BaseInventory)(nil)

@@ -21,6 +21,7 @@ type ItemBlock struct {
 func NewItemBlock(identifier ItemIdentifier, blk block.Behavior) *ItemBlock {
 	ib := &ItemBlock{Block: blk}
 	ib.Init(ib, identifier, blk.GetName())
+	ib.enchantmentTags = blk.GetEnchantmentTags()
 	return ib
 }
 

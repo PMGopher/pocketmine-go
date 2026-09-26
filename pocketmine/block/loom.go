@@ -36,9 +36,11 @@ func (l *Loom) Place(tx BlockTransaction, item Item, blockReplace Behavior, bloc
 	return l.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract should open a LoomInventory for the interacting player — needs the unported
-// block/inventory package, so this is a no-op for now; it still returns whether a player was
-// present, matching the PHP original.
+// OnInteract is a port of Loom::onInteract.
 func (l *Loom) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	return player != nil
+	if player != nil {
+		openWindow(player, WindowLoom, l.position)
+		return true
+	}
+	return false
 }

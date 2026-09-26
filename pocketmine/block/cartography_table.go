@@ -2,9 +2,7 @@ package block
 
 import "pocketmine-go/pocketmine/math"
 
-// CartographyTable is a port of pocketmine\block\CartographyTable, minus actually opening the
-// inventory window (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc
-// comment for the same gap).
+// CartographyTable is a port of pocketmine\block\CartographyTable.
 type CartographyTable struct {
 	Opaque
 }
@@ -22,8 +20,7 @@ func (c *CartographyTable) Clone() Behavior {
 }
 
 func (c *CartographyTable) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	// player.SetCurrentWindow(NewCartographyTableInventory(c.position)) - not ported, see doc
-	// comment above.
+	openWindow(player, WindowCartographyTable, c.position)
 	return true
 }
 

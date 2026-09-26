@@ -7,9 +7,10 @@ type TurtleHelmet struct {
 	Armor
 }
 
-func NewTurtleHelmet(identifier ItemIdentifier, name string, info ArmorTypeInfo) *TurtleHelmet {
+func NewTurtleHelmet(identifier ItemIdentifier, name string, info ArmorTypeInfo, enchantmentTags ...string) *TurtleHelmet {
 	t := &TurtleHelmet{Armor: Armor{ArmorInfo: info}}
 	t.Init(t, identifier, name)
+	t.enchantmentTags = enchantmentTags
 	return t
 }
 

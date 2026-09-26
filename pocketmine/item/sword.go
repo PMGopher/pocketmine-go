@@ -7,9 +7,10 @@ type Sword struct {
 	TieredTool
 }
 
-func NewSword(identifier ItemIdentifier, name string, tier ToolTier) *Sword {
+func NewSword(identifier ItemIdentifier, name string, tier ToolTier, enchantmentTags ...string) *Sword {
 	s := &Sword{TieredTool: TieredTool{Tier: tier}}
 	s.Init(s, identifier, name)
+	s.enchantmentTags = enchantmentTags
 	return s
 }
 

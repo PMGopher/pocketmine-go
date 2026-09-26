@@ -10,9 +10,10 @@ type Axe struct {
 	TieredTool
 }
 
-func NewAxe(identifier ItemIdentifier, name string, tier ToolTier) *Axe {
+func NewAxe(identifier ItemIdentifier, name string, tier ToolTier, enchantmentTags ...string) *Axe {
 	a := &Axe{TieredTool: TieredTool{Tier: tier}}
 	a.Init(a, identifier, name)
+	a.enchantmentTags = enchantmentTags
 	return a
 }
 

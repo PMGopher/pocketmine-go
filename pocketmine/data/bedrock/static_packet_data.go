@@ -29,18 +29,14 @@ var entityIdentifiersData []byte
 //go:embed assets/biome_definitions.bin
 var biomeDefinitionsData []byte
 
-// creativeContentData and craftingDataData are encoded CreativeContent and CraftingData packet
-// payloads for Bedrock 1.26.50: what InventoryManager::syncCreative (CreativeInventoryCache) and
-// CraftingDataCache send. PHP builds them from BedrockData's creative and recipe files, which have
-// no 1.26.50 release yet, so these are the packets Dragonfly sends (MIT, see
-// assets/LICENSE-dragonfly), captured from the wire. They use the item network IDs of
-// required_item_list.json, which comes from the same source.
+// creativeContentData is an encoded CreativeContent packet payload for Bedrock 1.26.50, the source
+// of the vanilla creative items (convert's CreativeInventory loader). PHP loads them from
+// BedrockData's creative files, which have no 1.26.50 release yet, so this is the packet Dragonfly
+// sends (MIT, see assets/LICENSE-dragonfly), captured from the wire. It uses the item network IDs
+// of required_item_list.json, which comes from the same source.
 //
 //go:embed assets/creative_content.bin
 var creativeContentData []byte
-
-//go:embed assets/crafting_data.bin
-var craftingDataData []byte
 
 var (
 	biomeDefinitionsOnce sync.Once
@@ -48,12 +44,9 @@ var (
 
 	creativeContentOnce sync.Once
 	creativeContent     *packet.CreativeContent
-
-	craftingDataOnce sync.Once
-	craftingData     *packet.CraftingData
 )
 
-// CreativeContent is the creative inventory packet (InventoryManager::syncCreative).
+// CreativeContent is the captured 1.26.50 creative inventory packet (see creativeContentData).
 func CreativeContent() *packet.CreativeContent {
 	creativeContentOnce.Do(func() {
 		pk := &packet.CreativeContent{}
@@ -61,16 +54,6 @@ func CreativeContent() *packet.CreativeContent {
 		creativeContent = pk
 	})
 	return creativeContent
-}
-
-// CraftingData is the recipe packet (CraftingDataCache::getCache).
-func CraftingData() *packet.CraftingData {
-	craftingDataOnce.Do(func() {
-		pk := &packet.CraftingData{}
-		pk.Marshal(protocol.NewReader(bytes.NewReader(craftingDataData), 0, false))
-		craftingData = pk
-	})
-	return craftingData
 }
 
 // AvailableActorIdentifiers is a port of StaticPacketCache::getAvailableActorIdentifiers.

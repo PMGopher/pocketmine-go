@@ -19,10 +19,9 @@ func (c *CraftingTable) Clone() Behavior {
 	return &cl
 }
 
-// OnInteract should open a CraftingTableInventory for the interacting player — needs the unported
-// block/inventory package, so this is a no-op for now; it still returns true, matching the PHP
-// original's unconditional `return true;`.
+// OnInteract is a port of CraftingTable::onInteract.
 func (c *CraftingTable) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	openWindow(player, WindowCraftingTable, c.position)
 	return true
 }
 

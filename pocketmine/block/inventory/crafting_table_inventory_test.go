@@ -19,4 +19,3 @@ func TestCraftingTableInventorySize(t *testing.T) {
 		t.Errorf("GetGridWidth() = %d, want 3", c.GetGridWidth())
 	}
 }
-

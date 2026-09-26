@@ -11,9 +11,10 @@ type FlintSteel struct {
 	Tool
 }
 
-func NewFlintSteel(identifier ItemIdentifier, name string) *FlintSteel {
+func NewFlintSteel(identifier ItemIdentifier, name string, enchantmentTags ...string) *FlintSteel {
 	f := &FlintSteel{}
 	f.Init(f, identifier, name)
+	f.enchantmentTags = enchantmentTags
 	return f
 }
 
