@@ -32,6 +32,10 @@ type DataDescriber interface {
 	FacingExcept(facing *math.Facing, except math.Facing)
 	Axis(axis *math.Axis)
 	HorizontalAxis(axis *math.Axis)
+	// RailShape/StraightOnlyRailShape are RuntimeDataDescriber::railShape/straightOnlyRailShape:
+	// 4 and 3 bits, rejecting values that aren't rail shapes when reading.
+	RailShape(railShape *int)
+	StraightOnlyRailShape(railShape *int)
 }
 
 // InvalidSerializedRuntimeDataError is a port of pocketmine\data\runtime\InvalidSerializedRuntimeDataException.

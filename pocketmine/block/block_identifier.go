@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/math"
 )
 
 // Tile is a type alias (not just an interface with matching methods) for tile.Tile - the real
@@ -24,10 +25,13 @@ type Tile = tile.Tile
 // instead of a runtime one.
 type BlockIdentifier struct {
 	blockTypeID int
-	newTile     func() Tile
+	newTile     TileFactory
 }
 
-func NewBlockIdentifier(blockTypeID int, newTile func() Tile) (*BlockIdentifier, error) {
+// TileFactory creates the tile of a block (PHP's tile class-string plus `new $tileClass($world, $pos)`).
+type TileFactory func(world tile.World, pos math.Vector3) Tile
+
+func NewBlockIdentifier(blockTypeID int, newTile TileFactory) (*BlockIdentifier, error) {
 	if blockTypeID < 0 {
 		return nil, fmt.Errorf("block type ID may not be negative")
 	}
@@ -36,10 +40,13 @@ func NewBlockIdentifier(blockTypeID int, newTile func() Tile) (*BlockIdentifier,
 
 func (b *BlockIdentifier) GetBlockTypeID() int { return b.blockTypeID }
 
-// NewTileInstance constructs this block's tile. ok is false if this block type has no tile.
-func (b *BlockIdentifier) NewTileInstance() (tile Tile, ok bool) {
+// HasTile reports whether this block type has a tile (getTileClass() !== null).
+func (b *BlockIdentifier) HasTile() bool { return b.newTile != nil }
+
+// NewTileInstance constructs this block's tile at pos. ok is false if this block type has no tile.
+func (b *BlockIdentifier) NewTileInstance(world tile.World, pos math.Vector3) (t Tile, ok bool) {
 	if b.newTile == nil {
 		return nil, false
 	}
-	return b.newTile(), true
+	return b.newTile(world, pos), true
 }

@@ -1,0 +1,72 @@
+package bedrockitem
+
+import (
+	"errors"
+	"fmt"
+
+	"pocketmine-go/pocketmine/block"
+	blockconvert "pocketmine-go/pocketmine/data/bedrock/block/convert"
+	"pocketmine-go/pocketmine/item"
+)
+
+// ItemDeserializer is a port of pocketmine\data\bedrock\item\ItemDeserializer.
+type ItemDeserializer struct {
+	blockStateDeserializer *blockconvert.BlockStateToObjectDeserializer
+
+	deserializers map[string]func(data SavedItemData) item.Item
+}
+
+func NewItemDeserializer(blockStateDeserializer *blockconvert.BlockStateToObjectDeserializer) *ItemDeserializer {
+	d := &ItemDeserializer{blockStateDeserializer: blockStateDeserializer, deserializers: map[string]func(SavedItemData) item.Item{}}
+	NewItemSerializerDeserializerRegistrar(d, nil)
+	return d
+}
+
+// Map is a port of ItemDeserializer::map.
+func (d *ItemDeserializer) Map(id string, deserializer func(data SavedItemData) item.Item) {
+	d.deserializers[id] = deserializer
+}
+
+// GetDeserializerForID is a port of ItemDeserializer::getDeserializerForId.
+func (d *ItemDeserializer) GetDeserializerForID(id string) (func(data SavedItemData) item.Item, bool) {
+	f, ok := d.deserializers[id]
+	return f, ok
+}
+
+// MapBlock is a port of ItemDeserializer::mapBlock.
+func (d *ItemDeserializer) MapBlock(id string, deserializer func(data SavedItemData) block.Behavior) {
+	d.Map(id, func(data SavedItemData) item.Item { return blockAsItem(deserializer(data)) })
+}
+
+// blockAsItem is Block::asItem.
+func blockAsItem(blk block.Behavior) item.Item {
+	it, err := blk.(interface{ AsItem() (block.Item, error) }).AsItem()
+	if err != nil {
+		panic(&ItemTypeDeserializeError{Message: err.Error()})
+	}
+	return it.(item.Item)
+}
+
+// DeserializeType is a port of ItemDeserializer::deserializeType.
+func (d *ItemDeserializer) DeserializeType(data SavedItemData) (it item.Item, err error) {
+	defer recoverItemError(&err)
+	if blockData := data.Block; blockData != nil {
+		//TODO: this is rough duct tape; we need a better way to deal with this
+		stateID, err := d.blockStateDeserializer.Deserialize(*blockData)
+		if err != nil {
+			var unsupported *blockconvert.UnsupportedBlockStateError
+			if errors.As(err, &unsupported) {
+				return nil, &UnsupportedItemTypeError{Message: err.Error()}
+			}
+			return nil, &ItemTypeDeserializeError{Message: "Failed to deserialize item data: " + err.Error()}
+		}
+		//TODO: worth caching this or not?
+		return blockAsItem(block.GetRuntimeBlockStateRegistry().FromStateId(stateID)), nil
+	}
+	id := data.Name
+	deserializer, ok := d.deserializers[id]
+	if !ok {
+		return nil, &UnsupportedItemTypeError{Message: fmt.Sprintf("No deserializer found for ID %s", id)}
+	}
+	return deserializer(data), nil
+}

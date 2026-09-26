@@ -50,17 +50,8 @@ func nbtToBlockState(tag *nbt.CompoundTag) (bedrock.BlockStateData, error) {
 
 	states := map[string]any{}
 	if ok {
-		for propName, propTag := range statesTag.All() {
-			switch v := propTag.(type) {
-			case nbt.IntTag:
-				states[propName] = int32(v)
-			case nbt.ByteTag:
-				states[propName] = uint8(v)
-			case nbt.StringTag:
-				states[propName] = string(v)
-			default:
-				return bedrock.BlockStateData{}, fmt.Errorf("leveldb: unsupported NBT tag type %T for state property %q", propTag, propName)
-			}
+		if states, err = BlockStatesFromNBT(statesTag); err != nil {
+			return bedrock.BlockStateData{}, err
 		}
 	}
 
@@ -76,4 +67,23 @@ func BlockStateToNBT(data bedrock.BlockStateData) (*nbt.CompoundTag, error) {
 // NBTToBlockState is the exported form of nbtToBlockState.
 func NBTToBlockState(tag *nbt.CompoundTag) (bedrock.BlockStateData, error) {
 	return nbtToBlockState(tag)
+}
+
+// BlockStatesFromNBT converts a block state "states" compound into BlockStateData.States form
+// (int32, uint8 and string values).
+func BlockStatesFromNBT(statesTag *nbt.CompoundTag) (map[string]any, error) {
+	states := map[string]any{}
+	for propName, propTag := range statesTag.All() {
+		switch v := propTag.(type) {
+		case nbt.IntTag:
+			states[propName] = int32(v)
+		case nbt.ByteTag:
+			states[propName] = uint8(v)
+		case nbt.StringTag:
+			states[propName] = string(v)
+		default:
+			return nil, fmt.Errorf("leveldb: unsupported NBT tag type %T for state property %q", propTag, propName)
+		}
+	}
+	return states, nil
 }

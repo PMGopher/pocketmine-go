@@ -7,7 +7,7 @@ import (
 	"pocketmine-go/pocketmine/math"
 )
 
-const doublePitcherCropMaxAge = 1
+const DoublePitcherCropMaxAge = 1
 
 // DoublePitcherCrop is a port of pocketmine\block\DoublePitcherCrop.
 type DoublePitcherCrop struct {
@@ -18,7 +18,7 @@ type DoublePitcherCrop struct {
 func NewDoublePitcherCrop(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) *DoublePitcherCrop {
 	d := &DoublePitcherCrop{
 		DoublePlant:  DoublePlant{Flowable: Flowable{Transparent{NewBlock(idInfo, name, typeInfo)}}},
-		AgeComponent: NewAgeComponent(doublePitcherCropMaxAge),
+		AgeComponent: NewAgeComponent(DoublePitcherCropMaxAge),
 	}
 	d.Init(d)
 	return d
@@ -51,7 +51,7 @@ func (d *DoublePitcherCrop) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 
 // grow is a port of DoublePitcherCrop::grow.
 func (d *DoublePitcherCrop) grow(player Player) bool {
-	if d.Age >= doublePitcherCropMaxAge {
+	if d.Age >= DoublePitcherCropMaxAge {
 		return false
 	}
 
@@ -93,7 +93,7 @@ func (d *DoublePitcherCrop) grow(player Player) bool {
 // (return false) already matches this gap, so there's nothing to override here.
 
 // TicksRandomly is a port of DoublePitcherCrop::ticksRandomly - only the bottom half grows.
-func (d *DoublePitcherCrop) TicksRandomly() bool { return d.Age < doublePitcherCropMaxAge && !d.Top }
+func (d *DoublePitcherCrop) TicksRandomly() bool { return d.Age < DoublePitcherCropMaxAge && !d.Top }
 
 // OnRandomTick is a port of DoublePitcherCrop::onRandomTick - only the bottom half of the plant
 // can grow randomly.

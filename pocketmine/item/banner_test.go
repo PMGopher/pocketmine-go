@@ -3,6 +3,7 @@ package item
 import (
 	"testing"
 
+	"pocketmine-go/pocketmine/block"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 )
 
@@ -12,7 +13,7 @@ var (
 )
 
 func TestBannerDefaultsToBlack(t *testing.T) {
-	b := NewBanner(NewItemIdentifier(BANNER), "Banner")
+	b := NewBanner(NewItemIdentifier(BANNER), block.VanillaBlock("banner"), block.VanillaBlock("wall_banner"))
 	if b.GetColor() != blockutils.DyeColorBlack {
 		t.Errorf("GetColor() = %v, want Black", b.GetColor())
 	}
@@ -22,14 +23,14 @@ func TestBannerDefaultsToBlack(t *testing.T) {
 }
 
 func TestBannerPatternsRoundTripThroughNBT(t *testing.T) {
-	b := NewBanner(NewItemIdentifier(BANNER), "Banner")
+	b := NewBanner(NewItemIdentifier(BANNER), block.VanillaBlock("banner"), block.VanillaBlock("wall_banner"))
 	b.SetColor(blockutils.DyeColorRed)
 	b.SetPatterns([]blockutils.BannerPatternLayer{
 		blockutils.NewBannerPatternLayer(blockutils.BannerPatternTypeCreeper, blockutils.DyeColorWhite),
 		blockutils.NewBannerPatternLayer(blockutils.BannerPatternTypeSkull, blockutils.DyeColorBlue),
 	})
 
-	decoded := NewBanner(NewItemIdentifier(BANNER), "Banner")
+	decoded := NewBanner(NewItemIdentifier(BANNER), block.VanillaBlock("banner"), block.VanillaBlock("wall_banner"))
 	decoded.SetNamedTag(b.GetNamedTag())
 
 	patterns := decoded.GetPatterns()
@@ -45,7 +46,7 @@ func TestBannerPatternsRoundTripThroughNBT(t *testing.T) {
 }
 
 func TestBannerStateIdChangesWithColor(t *testing.T) {
-	b := NewBanner(NewItemIdentifier(BANNER), "Banner")
+	b := NewBanner(NewItemIdentifier(BANNER), block.VanillaBlock("banner"), block.VanillaBlock("wall_banner"))
 	black := b.GetStateId()
 	b.SetColor(blockutils.DyeColorRed)
 	if b.GetStateId() == black {
@@ -54,7 +55,7 @@ func TestBannerStateIdChangesWithColor(t *testing.T) {
 }
 
 func TestBannerCloneDeepCopiesPatterns(t *testing.T) {
-	b := NewBanner(NewItemIdentifier(BANNER), "Banner")
+	b := NewBanner(NewItemIdentifier(BANNER), block.VanillaBlock("banner"), block.VanillaBlock("wall_banner"))
 	b.SetPatterns([]blockutils.BannerPatternLayer{blockutils.NewBannerPatternLayer(blockutils.BannerPatternTypeCreeper, blockutils.DyeColorWhite)})
 
 	clone := b.Clone().(*Banner)

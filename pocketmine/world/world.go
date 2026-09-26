@@ -9,7 +9,6 @@ import (
 	entityevent "pocketmine-go/pocketmine/event/entity"
 	worldevent "pocketmine-go/pocketmine/event/world"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
@@ -26,6 +25,7 @@ import (
 	"pocketmine-go/pocketmine/scheduler"
 	"pocketmine-go/pocketmine/world/biome"
 	"pocketmine-go/pocketmine/world/format"
+	worldformatio "pocketmine-go/pocketmine/world/format/io"
 	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 	"pocketmine-go/pocketmine/world/generator"
 	"pocketmine-go/pocketmine/world/light"
@@ -109,11 +109,6 @@ type World struct {
 	// must be registered up front (see New's knownBlocks parameter); SetBlock also self-registers
 	// whatever it's given, so anything ever placed through it becomes readable too.
 	stateTemplates map[int32]block.Behavior
-
-	// stateByBlockKey is stateTemplates' reverse direction (persistent name+states -> internal
-	// state ID) - built alongside it in registerTemplate, needed to resolve a block state read
-	// back from a saved world file (see leveldb.StateResolver). Keyed by blockStateKey.
-	stateByBlockKey map[string]int32
 
 	// provider is this World's on-disk backing (see OpenProvider) - nil means pure in-memory, no
 	// different from this port's original design (every chunk generated fresh, nothing survives a
@@ -256,7 +251,6 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 		maxConcurrentChunkPopulationTasks: defaultMaxConcurrentChunkPopulationTasks,
 		knownUngeneratedChunks:            map[[2]int]bool{},
 		stateTemplates:                    map[int32]block.Behavior{},
-		stateByBlockKey:                   map[string]int32{},
 		lightFilters:                      map[int32]int{},
 		lightEmitters:                     map[int32]int{},
 		directSkyLightBlockers:            map[int32]bool{},
@@ -281,6 +275,9 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 	w.skyLightUpdate = light.NewSkyLightUpdate(w.subChunkExplorer, w.lightFilters, w.directSkyLightBlockers)
 	w.blockLightUpdate = light.NewBlockLightUpdate(w.subChunkExplorer, w.lightFilters, w.lightEmitters)
 
+	for _, blk := range block.GetRuntimeBlockStateRegistry().GetAllKnownStates() {
+		w.registerTemplate(blk)
+	}
 	for _, blk := range knownBlocks {
 		w.registerTemplate(blk)
 	}
@@ -314,61 +311,25 @@ func (w *World) GetChunk(chunkX, chunkZ int) (*format.Chunk, bool) {
 	return c, ok
 }
 
-// registerTemplate records blk as the reconstruction template for its state ID and warms the
-// BlockTranslator's cache for the same ID (see BlockTranslator.NetworkIDForCachedState's doc
-// comment on why chunk serialization needs that cache pre-warmed). Also records the reverse
-// (persistent name+states -> state ID) mapping a saved world's LoadChunk needs (see
-// stateByBlockKey's doc comment) - blocks with no registered BlockStateSerializer yet simply
-// can't be saved/loaded correctly, the same "not supported over the network yet" gap
-// InternalIDToNetworkID already has, just for disk instead of network.
+// registerTemplate records blk as the reconstruction template for its state ID, with the per-state
+// light, blast resistance and random tick tables (RuntimeBlockStateRegistry's static arrays). New
+// registers every state of RuntimeBlockStateRegistry; this also covers states that aren't in it
+// (e.g. UnknownBlock).
 func (w *World) registerTemplate(blk block.Behavior) {
 	stateID := int32(blk.GetStateId())
-	if _, ok := w.stateTemplates[stateID]; !ok {
-		w.stateTemplates[stateID] = blk.Clone()
-		w.registryVersion++
+	if _, ok := w.stateTemplates[stateID]; ok {
+		return
 	}
-	w.translator.InternalIDToNetworkID(blk)
+	w.stateTemplates[stateID] = blk.Clone()
+	w.registryVersion++
 
-	if data, err := convert.SerializeBlockState(blk); err == nil {
-		if _, exists := w.stateByBlockKey[blockStateKey(data)]; !exists {
-			w.stateByBlockKey[blockStateKey(data)] = stateID
-		}
-	}
-
-	if _, ok := w.lightFilters[stateID]; !ok {
-		w.registryVersion++
-		w.lightFilters[stateID] = min(15, blk.GetLightFilter()+light.BaseLightFilter)
-		w.lightEmitters[stateID] = blk.GetLightLevel()
-		w.directSkyLightBlockers[stateID] = blk.BlocksDirectSkyLight()
-	}
-
-	if _, ok := w.blastResistance[stateID]; !ok {
-		w.blastResistance[stateID] = blk.GetBreakInfo().GetBlastResistance()
-	}
-
+	w.lightFilters[stateID] = min(15, blk.GetLightFilter()+light.BaseLightFilter)
+	w.lightEmitters[stateID] = blk.GetLightLevel()
+	w.directSkyLightBlockers[stateID] = blk.BlocksDirectSkyLight()
+	w.blastResistance[stateID] = blk.GetBreakInfo().GetBlastResistance()
 	if blk.TicksRandomly() {
 		w.randomTickBlocks[stateID] = true
 	}
-}
-
-// blockStateKey builds a deterministic string key from a bedrock.BlockStateData's name and
-// states, for use as a map key (bedrock.BlockStateData itself isn't comparable - States is a
-// map). State property values are always int32, uint8 or string (see
-// convert/vanilla_block_mappings.go's registrations) - anything else is a programmer error there,
-// not something this needs to handle gracefully.
-func blockStateKey(data bedrock.BlockStateData) string {
-	names := make([]string, 0, len(data.States))
-	for name := range data.States {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	var b strings.Builder
-	b.WriteString(data.Name)
-	for _, name := range names {
-		fmt.Fprintf(&b, ";%s=%T:%v", name, data.States[name], data.States[name])
-	}
-	return b.String()
 }
 
 func chunkKey(chunkX, chunkZ int) [2]int { return [2]int{chunkX, chunkZ} }
@@ -465,19 +426,29 @@ func (w *World) fireOnChunkLoaded(chunkX, chunkZ int, chunk *format.Chunk) {
 	}
 }
 
-// resolveBlockState adapts stateByBlockKey to leveldb.StateResolver's shape.
+// resolveBlockState is BaseWorldProvider's palette deserialization: a saved block state to its
+// internal state ID through GlobalBlockStateHandlers' deserializer. States that can't be
+// deserialized become GlobalBlockStateHandlers::getUnknownBlockStateData() (the "update!" block),
+// like PHP (the block data upgrader for older saves isn't ported).
 func (w *World) resolveBlockState(data bedrock.BlockStateData) (int32, bool) {
-	stateID, ok := w.stateByBlockKey[blockStateKey(data)]
-	return stateID, ok
+	deserializer := worldformatio.GetBlockStateDeserializer()
+	stateID, err := deserializer.Deserialize(data)
+	if err != nil {
+		if w.logger != nil {
+			w.logger.Debug(fmt.Sprintf("Unknown block state %s: %v", data.Name, err))
+		}
+		stateID, err = deserializer.Deserialize(worldformatio.GetUnknownBlockStateData())
+		if err != nil {
+			return 0, false
+		}
+	}
+	return int32(stateID), true
 }
 
-// lookupBlockState adapts stateTemplates to leveldb.StateLookup's shape.
+// lookupBlockState is GlobalBlockStateHandlers::getSerializer()->serialize($stateId): the state data
+// saved for an internal state ID.
 func (w *World) lookupBlockState(stateID int32) (bedrock.BlockStateData, error) {
-	tpl, ok := w.stateTemplates[stateID]
-	if !ok {
-		return bedrock.BlockStateData{}, fmt.Errorf("world: no registered template for internal state %d", stateID)
-	}
-	return convert.SerializeBlockState(tpl)
+	return worldformatio.GetBlockStateSerializer().Serialize(int(stateID))
 }
 
 // OpenProvider opens (creating if necessary) a real Bedrock-compatible LevelDB world database at

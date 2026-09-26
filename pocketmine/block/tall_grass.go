@@ -12,10 +12,10 @@ type TallGrass struct {
 
 	// DoublePlantVariant mirrors the PHP constructor's `?Closure(): DoublePlant` - the double-tall
 	// plant this grows into when fertilized (nil for grass with no double variant).
-	DoublePlantVariant func() *DoublePlant
+	DoublePlantVariant func() Behavior
 }
 
-func NewTallGrass(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo, doublePlantVariant func() *DoublePlant) *TallGrass {
+func NewTallGrass(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo, doublePlantVariant func() Behavior) *TallGrass {
 	t := &TallGrass{Flowable: Flowable{Transparent{NewBlock(idInfo, name, typeInfo)}}, DoublePlantVariant: doublePlantVariant}
 	t.Init(t)
 	return t

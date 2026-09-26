@@ -398,6 +398,14 @@ func (w *World) DropItem(source math.Vector3, it item.Item, motion *math.Vector3
 	return DropItemFunc(w, source, it, motion, delay)
 }
 
+// DropBlockItem is World::dropItem($pos, $item) (default motion and delay) for blocks, which only
+// hold a block.Item.
+func (w *World) DropBlockItem(source math.Vector3, it block.Item) {
+	if real, ok := it.(item.Item); ok {
+		w.DropItem(source, real, nil, 10)
+	}
+}
+
 // DropExperience is a port of World::dropExperience: spawns experience orbs worth amount in total.
 func (w *World) DropExperience(pos math.Vector3, amount int) []Entity {
 	if DropExperienceFunc == nil {

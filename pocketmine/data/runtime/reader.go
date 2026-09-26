@@ -172,3 +172,28 @@ func (r *Reader) HorizontalAxis(axis *math.Axis) {
 func (r *Reader) GetOffset() int { return r.offset }
 
 var _ DataDescriber = (*Reader)(nil)
+
+// RailShape is a port of RuntimeDataReader::railShape: shapes 0-5 are straight
+// (RailConnectionInfo::CONNECTIONS), 6-9 curved (CURVE_CONNECTIONS).
+func (r *Reader) RailShape(railShape *int) {
+	result, err := r.ReadInt(4)
+	if err != nil {
+		panic(err)
+	}
+	if result < 0 || result > 9 {
+		panic(&InvalidSerializedRuntimeDataError{Message: fmt.Sprintf("Invalid rail shape %d", result)})
+	}
+	*railShape = result
+}
+
+// StraightOnlyRailShape is a port of RuntimeDataReader::straightOnlyRailShape.
+func (r *Reader) StraightOnlyRailShape(railShape *int) {
+	result, err := r.ReadInt(3)
+	if err != nil {
+		panic(err)
+	}
+	if result < 0 || result > 5 {
+		panic(&InvalidSerializedRuntimeDataError{Message: fmt.Sprintf("No rail shape matches meta %d", result)})
+	}
+	*railShape = result
+}

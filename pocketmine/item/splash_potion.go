@@ -49,3 +49,7 @@ func (s *SplashPotion) GetThrowForce() float64 { return 0.5 }
 func (s *SplashPotion) OnClickAir(player Player, directionVector math.Vector3, returnedItems *[]Item) ItemUseResult {
 	return throwProjectile(s, player, directionVector)
 }
+
+// IsWaterPotion reports whether this is a splash water bottle (getType() === PotionType::WATER),
+// see Potion.IsWaterPotion.
+func (s *SplashPotion) IsWaterPotion() bool { return s.PotionTypeValue == PotionTypeWater }

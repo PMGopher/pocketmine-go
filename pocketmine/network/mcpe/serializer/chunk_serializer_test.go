@@ -103,8 +103,8 @@ func TestSerializeSubChunkStructure(t *testing.T) {
 	tr := convert.NewBlockTranslator()
 	air := newTestAir()
 	stone := newTestStone()
-	airNetID := tr.InternalIDToNetworkID(air)
-	stoneNetID := tr.InternalIDToNetworkID(stone)
+	airNetID := tr.InternalIDToNetworkID(air.GetStateId())
+	stoneNetID := tr.InternalIDToNetworkID(stone.GetStateId())
 
 	sc := format.NewSubChunk(int32(air.GetStateId()), nil, format.NewPalettedBlockArray(1))
 	sc.SetBlockStateID(0, 0, 0, int32(stone.GetStateId()))

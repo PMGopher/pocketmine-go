@@ -19,7 +19,7 @@ type StraightOnlyRail struct {
 }
 
 func (s *StraightOnlyRail) DescribeBlockOnlyState(w runtime.DataDescriber) {
-	w.Int(3, &s.RailShapeValue)
+	w.StraightOnlyRailShape(&s.RailShapeValue)
 }
 
 func (s *StraightOnlyRail) GetShape() int { return s.RailShapeValue }

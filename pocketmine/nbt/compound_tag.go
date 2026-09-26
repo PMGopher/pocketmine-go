@@ -277,3 +277,4 @@ func (c *CompoundTag) All() iter.Seq2[string, Tag] {
 		}
 	}
 }
+

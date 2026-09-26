@@ -22,6 +22,17 @@ type BlockBreakInfo struct {
 	toolHarvestLevel     int
 	blastResistance      float64
 	explosionHarvestable bool
+
+	// breakTimeModifier stands in for the anonymous BreakInfo subclasses VanillaBlocksInputs
+	// declares to override getBreakTime (bamboo, leaves, wool): it gets the item and
+	// parent::getBreakTime()'s result.
+	breakTimeModifier func(item Item, breakTime float64) float64
+}
+
+// WithBreakTimeModifier sets a getBreakTime override (see breakTimeModifier) and returns b.
+func (b *BlockBreakInfo) WithBreakTimeModifier(modifier func(item Item, breakTime float64) float64) *BlockBreakInfo {
+	b.breakTimeModifier = modifier
+	return b
 }
 
 // NewBlockBreakInfo mirrors the constructor. Pass nil for blastResistance/explosionHarvestable
@@ -105,7 +116,11 @@ func (b *BlockBreakInfo) GetBreakTime(item Item) (float64, error) {
 		return 0, fmt.Errorf("item must have a positive mining efficiency, but got %v", efficiency)
 	}
 
-	return base / efficiency, nil
+	breakTime := base / efficiency
+	if b.breakTimeModifier != nil {
+		breakTime = b.breakTimeModifier(item, breakTime)
+	}
+	return breakTime, nil
 }
 
 func (b *BlockBreakInfo) IsExplosionHarvestable() bool { return b.explosionHarvestable }

@@ -368,6 +368,139 @@ func (ShulkerBoxCloseSound) Encode(pos math.Vector3, _ blockNetworkTranslator) [
 	return nonActorSound(packet.SoundEventShulkerBoxClosed, pos, false, -1)
 }
 
+// CauldronAddDyeSound is a port of pocketmine\world\sound\CauldronAddDyeSound.
+type CauldronAddDyeSound struct{}
+
+func (CauldronAddDyeSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronAddDye, 0, pos)
+}
+
+// CauldronCleanItemSound is a port of pocketmine\world\sound\CauldronCleanItemSound.
+type CauldronCleanItemSound struct{}
+
+func (CauldronCleanItemSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronCleanArmor, 0, pos)
+}
+
+// CauldronDyeItemSound is a port of pocketmine\world\sound\CauldronDyeItemSound.
+type CauldronDyeItemSound struct{}
+
+func (CauldronDyeItemSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronDyeArmor, 0, pos)
+}
+
+// CauldronEmptyLavaSound is a port of pocketmine\world\sound\CauldronEmptyLavaSound.
+type CauldronEmptyLavaSound struct{}
+
+func (CauldronEmptyLavaSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronTakeLava, 0, pos)
+}
+
+// CauldronEmptyPotionSound is a port of pocketmine\world\sound\CauldronEmptyPotionSound.
+type CauldronEmptyPotionSound struct{}
+
+func (CauldronEmptyPotionSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronTakePotion, 0, pos)
+}
+
+// CauldronEmptyPowderSnowSound is a port of pocketmine\world\sound\CauldronEmptyPowderSnowSound.
+type CauldronEmptyPowderSnowSound struct{}
+
+func (CauldronEmptyPowderSnowSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronTakePowderSnow, 0, pos)
+}
+
+// CauldronEmptyWaterSound is a port of pocketmine\world\sound\CauldronEmptyWaterSound.
+type CauldronEmptyWaterSound struct{}
+
+func (CauldronEmptyWaterSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronTakeWater, 0, pos)
+}
+
+// CauldronFillLavaSound is a port of pocketmine\world\sound\CauldronFillLavaSound.
+type CauldronFillLavaSound struct{}
+
+func (CauldronFillLavaSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronFillLava, 0, pos)
+}
+
+// CauldronFillPotionSound is a port of pocketmine\world\sound\CauldronFillPotionSound.
+type CauldronFillPotionSound struct{}
+
+func (CauldronFillPotionSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronFillPotion, 0, pos)
+}
+
+// CauldronFillPowderSnowSound is a port of pocketmine\world\sound\CauldronFillPowderSnowSound.
+type CauldronFillPowderSnowSound struct{}
+
+func (CauldronFillPowderSnowSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronFillPowderSnow, 0, pos)
+}
+
+// CauldronFillWaterSound is a port of pocketmine\world\sound\CauldronFillWaterSound.
+type CauldronFillWaterSound struct{}
+
+func (CauldronFillWaterSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventCauldronFillWater, 0, pos)
+}
+
+// ArmorEquipChainSound is a port of pocketmine\world\sound\ArmorEquipChainSound.
+type ArmorEquipChainSound struct{}
+
+func (ArmorEquipChainSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipChain, pos, false, -1)
+}
+
+// ArmorEquipCopperSound is a port of pocketmine\world\sound\ArmorEquipCopperSound.
+type ArmorEquipCopperSound struct{}
+
+func (ArmorEquipCopperSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipCopper, pos, false, -1)
+}
+
+// ArmorEquipDiamondSound is a port of pocketmine\world\sound\ArmorEquipDiamondSound.
+type ArmorEquipDiamondSound struct{}
+
+func (ArmorEquipDiamondSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipDiamond, pos, false, -1)
+}
+
+// ArmorEquipGenericSound is a port of pocketmine\world\sound\ArmorEquipGenericSound.
+type ArmorEquipGenericSound struct{}
+
+func (ArmorEquipGenericSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipGeneric, pos, false, -1)
+}
+
+// ArmorEquipGoldSound is a port of pocketmine\world\sound\ArmorEquipGoldSound.
+type ArmorEquipGoldSound struct{}
+
+func (ArmorEquipGoldSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipGold, pos, false, -1)
+}
+
+// ArmorEquipIronSound is a port of pocketmine\world\sound\ArmorEquipIronSound.
+type ArmorEquipIronSound struct{}
+
+func (ArmorEquipIronSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipIron, pos, false, -1)
+}
+
+// ArmorEquipLeatherSound is a port of pocketmine\world\sound\ArmorEquipLeatherSound.
+type ArmorEquipLeatherSound struct{}
+
+func (ArmorEquipLeatherSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipLeather, pos, false, -1)
+}
+
+// ArmorEquipNetheriteSound is a port of pocketmine\world\sound\ArmorEquipNetheriteSound.
+type ArmorEquipNetheriteSound struct{}
+
+func (ArmorEquipNetheriteSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventEquipNetherite, pos, false, -1)
+}
+
 // recordSoundTypes is a port of RecordSound::encode's match expression, verified against real PHP.
 var recordSoundTypes = map[blockutils.RecordType]string{
 	blockutils.RecordTypeDisk13:              packet.SoundEventRecord13,

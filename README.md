@@ -41,7 +41,7 @@ Stop with Ctrl+C or by typing `stop` in the console (players and worlds are save
 Roughly **750–850 of PocketMine-MP's 1,498 PHP classes (~50–57%)** have a Go counterpart. The range depends on how classes that were merged or renamed in Go are counted. The server
 "glue" is in place: `Server`, network sessions and packet handlers, events, the command map with
 most default commands, the console, query and UPnP, crafting and enchanting. The big remaining gaps
-are plugins, item NBT, container tiles and the full block/item network mappings.
+are plugins, item NBT and container tiles.
 
 | Area (PHP namespace, incl. sub-namespaces) | Ported / total PHP classes |
 |---|---|
@@ -129,7 +129,8 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Survival block breaking with correct break times
 - [ ] Block placing
 - [ ] Vanilla block registry **(partial)**, ~55 blocks registered
-- [ ] Block → network mappings **(partial)**, ~15 blocks can be sent to the client
+- [x] Block ↔ network mappings: full `data/bedrock/block/convert` (`BlockObjectToStateSerializer`, `BlockStateToObjectDeserializer`, reader/writer, `VanillaBlockMappings`); all 799 `VanillaBlocks` (11,125 states) round-trip. The 1.26.50-only properties (`minecraft:corner` on stairs, `minecraft:connection_*` on fences/panes/bars/tripwire) are written with neutral values
+- [x] Item ↔ network mappings: `data/bedrock/item` (`ItemSerializer`/`ItemDeserializer`, `ItemSerializerDeserializerRegistrar`, `BlockItemIdMap`) and the full `VanillaItems`
 - [ ] Cauldrons, flower pot
 - [ ] Block inventories for furnace, hopper, brewing stand, anvil, barrel, shulker box, ender chest
 - [ ] Redstone behaviour beyond what individual blocks implement
@@ -139,7 +140,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] 321 item type IDs
 - [x] Item → network ID translation
 - [ ] Vanilla item registry **(partial)**, ~76 items
-- [ ] Bow, arrows, snowball, egg, ender pearl, spawn eggs, and other projectile items **(partial)**: item use is wired through the packet handlers; only items with a network mapping can be held
+- [ ] Bow, arrows, snowball, egg, ender pearl, spawn eggs, and other projectile items **(partial)**: item use is wired through the packet handlers; buckets, flint and steel and spawn eggs' block interactions aren't ported yet
 - [x] Enchantments (all vanilla enchantments, protection/sharpness/knockback/fire aspect logic, armor EPF)
 - [ ] `/give`-style item name parsing (`StringToItemParser`)
 
@@ -162,9 +163,9 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Initial inventory contents sent to the client
 - [x] Player inventory, armor, offhand, ender chest
 - [x] Cursor inventory, inventory network sync (InventoryManager)
-- [x] Creative inventory (only items with a network mapping so far)
+- [x] Creative inventory (1,215 entries, 727 of them block items)
 - [x] Inventory transactions / item stack requests (moving, dropping, using items, crafting, enchanting)
-- [x] Crafting (shaped/shapeless recipes, `CraftingDataPacket`, `CraftingTransaction`) **(partial)**: only recipes whose items have a network mapping are loaded
+- [x] Crafting (shaped/shapeless recipes, `CraftingDataPacket`, `CraftingTransaction`) (recipes with potions/unknown items are skipped, like PHP)
 - [x] Enchanting table (options, bookshelves, `EnchantingTransaction`, lapis/XP cost)
 - [x] Block inventories (all 19) and opening crafting table, enchanting table, anvil, loom, stonecutter, smithing/cartography table and ender chest windows
 - [ ] Container tiles holding inventories (chest, barrel, furnace, hopper, brewing stand, shulker box): needs item NBT serialization to save their contents
@@ -192,7 +193,7 @@ All 77 classes under `pocketmine\entity` are ported, with their full logic.
 
 ## Roadmap
 
-1. **Make the world playable:** all block and item network mappings (blocks without one can't be placed or shown).
+1. ~~**Make the world playable:** all block and item network mappings~~: done.
 2. **Real server structure:** done (`Server`, network sessions and handlers, console, command map, events, permissions, query, UPnP, resource packs). Remaining: the 7 missing default commands.
 3. **Gameplay:** item NBT, container tiles, furnace/brewing ticks.
 4. **Plugins** (design decision pending, see AGENTS.md §6 Phase 4).

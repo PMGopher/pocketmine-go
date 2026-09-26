@@ -33,6 +33,7 @@ func init() {
 	block.NewItemBlockFunc = func(blk block.Behavior) block.Item {
 		return NewItemBlock(NewItemIdentifier(-blk.GetTypeId()), blk)
 	}
+	block.VanillaItemFunc = func(name string) block.Item { return VanillaItem(name) }
 }
 
 // Clone deep-copies the wrapped block too, not just the ItemBlock's own fields.

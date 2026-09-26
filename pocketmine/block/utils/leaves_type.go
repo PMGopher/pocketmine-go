@@ -45,3 +45,35 @@ func (l LeavesType) GetDisplayName() string {
 		panic("invalid LeavesType value")
 	}
 }
+
+// AllLeavesTypes is LeavesType::cases().
+var AllLeavesTypes = []LeavesType{LeavesTypeOak, LeavesTypeSpruce, LeavesTypeBirch, LeavesTypeJungle, LeavesTypeAcacia, LeavesTypeDarkOak, LeavesTypeMangrove, LeavesTypeAzalea, LeavesTypeFloweringAzalea, LeavesTypeCherry, LeavesTypePaleOak}
+
+// IDName is strtolower($case->name), e.g. "dark_oak" (used for registry names).
+func (t LeavesType) IDName() string {
+	switch t {
+	case LeavesTypeOak:
+		return "oak"
+	case LeavesTypeSpruce:
+		return "spruce"
+	case LeavesTypeBirch:
+		return "birch"
+	case LeavesTypeJungle:
+		return "jungle"
+	case LeavesTypeAcacia:
+		return "acacia"
+	case LeavesTypeDarkOak:
+		return "dark_oak"
+	case LeavesTypeMangrove:
+		return "mangrove"
+	case LeavesTypeAzalea:
+		return "azalea"
+	case LeavesTypeFloweringAzalea:
+		return "flowering_azalea"
+	case LeavesTypeCherry:
+		return "cherry"
+	case LeavesTypePaleOak:
+		return "pale_oak"
+	}
+	panic("invalid LeavesType value")
+}

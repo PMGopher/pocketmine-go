@@ -60,7 +60,7 @@ func (r *PotionContainerChangeRecipe) GetResultFor(input item.Item) item.Item {
 	if !ok || name != r.inputItemID {
 		return nil
 	}
-	result, ok := convert.DeserializeItemType(r.outputItemID, 0)
+	result, ok := convert.DeserializeItemType(r.outputItemID, 0, nil)
 	if !ok {
 		return nil
 	}

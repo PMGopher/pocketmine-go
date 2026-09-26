@@ -194,8 +194,8 @@ Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §
 
 | Area | State |
 |---|---|
-| block (+ tiles, block inventories, utils) | ~89% of classes ported, all 19 block inventories. **Only ~55 vanilla block singletons are registered and ~15 have network serializers**, so only a handful can actually appear in-game (no container block yet). Blocks open their windows through `block.OpenWindowFunc` (set by `player`). **Container tiles don't hold inventories yet** (chest, barrel, furnace, hopper, brewing stand, shulker box, campfire): `tile` can't import `inventory` (cycle), and their contents couldn't be saved without item NBT. |
-| item | 137/154 classes incl. enchantments, `EnchantingHelper`, `AvailableEnchantmentRegistry`, `ItemEnchantmentTagRegistry` (enchanting table options match PHP output, see `enchanting_helper_test.go`). ~85 vanilla item singletons. **Item NBT (de)serialization isn't ported** (blocks saving dropped items/tridents and Human inventories). |
+| block (+ tiles, block inventories, utils) | ~89% of classes ported, all 19 block inventories. **All 799 `VanillaBlocks` are registered** (port of `VanillaBlocksInputs.php`, 11,125 runtime states in `RuntimeBlockStateRegistry`) and serialize through the full `data/bedrock/block/convert` port (`VanillaBlockMappings`). The 1.26.50-only properties (`minecraft:corner` on stairs, `minecraft:connection_*` on fences/panes/bars/tripwire) are written with neutral values and ignored on read; real neighbour-based values would be a follow-up. Blocks open their windows through `block.OpenWindowFunc` (set by `player`). **Container tiles don't hold inventories yet** (chest, barrel, furnace, hopper, brewing stand, shulker box, campfire): `tile` can't import `inventory` (cycle), and their contents couldn't be saved without item NBT. |
+| item | 137/154 classes incl. enchantments, `EnchantingHelper`, `AvailableEnchantmentRegistry`, `ItemEnchantmentTagRegistry` (enchanting table options match PHP output, see `enchanting_helper_test.go`). **Full `VanillaItems`** (port of `VanillaItemsInputs.php`) and `data/bedrock/item` (`ItemSerializer`/`ItemDeserializer`, registrar, `BlockItemIdMap` derived from the vendored item list: block items are the entries with runtime ID < 256). **Item NBT (de)serialization isn't ported** (blocks saving dropped items/tridents and Human inventories). |
 | world core | World, ticking, scheduled/random updates, light, explosions, WorldManager (incl. `worlds:` from pocketmine.yml), ChunkListener, level.dat, LevelDB save/load: done. |
 | generators | Flat, Normal (all biomes), Nether done. Trees: only oak/spruce/birch. Generation, population and lighting run on the async pool's worker goroutines like PHP (`world/generator_executor.go`, `world_population.go`, `light_population_task.go`). |
 | entity | **All 77 `pocketmine\entity` classes ported with their logic.** Item use (bows, throwables, spawn eggs) is wired through the packet handlers, limited by which items have network mappings. |
@@ -204,7 +204,7 @@ Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §
 | network | **Complete above the wire**, incl. `CraftingDataCache` and enchanting options: `NetworkSession`, `RakLibInterface` (on gophertunnel), `InventoryManager`, `ChunkCache`, `CreativeInventoryCache`, broadcasters, rate limiter, `PreSpawn`/`InGame`/`Death` packet handlers, `ItemStackRequestExecutor`, query, UPnP, resource packs, `DataPacket*Event`. |
 | server core | **Complete except crash dumps**: `Server` (pocketmine.yml, language, ops/whitelist/bans, broadcast channels, TPS, title tick, query regeneration, memory manager, async pool, shutdown), console reader/sender, `MainLogger` + `server.log`, `server.lock`. |
 | command | Command map + **34 of 41 default commands** (`command/defaults`). Missing: give, clear, enchant, effect (need `StringToItemParser`/string-to-enchantment/effect parsers), particle, timings, dumpmemory. |
-| crafting | **All 25 `pocketmine\crafting` classes.** Recipes load from pmmp/BedrockData's JSON (`data/bedrock/assets/recipes`); recipes with an item that can't be deserialized are skipped (block items: no block item mappings yet; potions). `CraftingTransaction`/`EnchantingTransaction` are wired into `ItemStackRequestExecutor`. Furnace/brewing ticks aren't (no container tiles). |
+| crafting | **All 25 `pocketmine\crafting` classes.** Recipes load from pmmp/BedrockData's JSON (`data/bedrock/assets/recipes`); recipes with an item that can't be deserialized are skipped (like PHP). `CraftingTransaction`/`EnchantingTransaction` are wired into `ItemStackRequestExecutor`. Furnace/brewing ticks aren't (no container tiles). |
 | not started | plugin loading, crash dumps, region (Anvil/McRegion) world formats, block-state upgrader (old world compatibility), item NBT serialization. |
 
 ### How gophertunnel changes the login/spawn flow
@@ -234,10 +234,8 @@ autosave; `stop` or Ctrl+C shuts down cleanly.
 
 ### What a player cannot do yet
 
-Craft recipes that involve blocks (no block item mappings), smelt or brew (no container tiles), place
-crafting tables/enchanting tables/chests (not registered or mapped yet); hold or place blocks/items
-that have no network mapping; use plugins. Crafting with the 2x2 grid and enchanting work once the
-items exist.
+Smelt or brew, or store items in chests (no container tiles holding inventories); use buckets,
+flint and steel or spawn eggs on blocks (those item interactions aren't ported); use plugins.
 
 ### Known issues
 
@@ -251,9 +249,6 @@ items exist.
   seen, check `UpdateAbilities` ordering and leftover `MayFly`/`Flying` state.
 - Movement is still client-authoritative: `Player.HandleMovement` (port of
   `Player::handleMovement`) only rejects moves > 15 blocks per tick; no anti-fly.
-- Blocks the generator can place but that have no network serializer can't be sent to the client.
-  Keep `server.knownBlocks` and `convert/vanilla_block_mappings.go` in sync until the full
-  mappings are ported.
 - Chunk generation/population is asynchronous like PHP: `World.RequestChunkPopulation` /
   `OrderChunkPopulation` lock the chunk and its neighbours (`ChunkLockID`), a `PopulationTask`
   runs on an async worker with its own generator (`ThreadLocalGeneratorContext`) over a
@@ -272,12 +267,11 @@ items exist.
   interfaces (same idea as `block.Behavior`). Packages below `entity` get behaviour through small
   function hooks set in `init()` (e.g. `block.SpawnFallingBlockFunc`, `world.DropItemFunc`,
   `world.LoadEntityFunc`); grep for `Func =` to find them.
-- Worlds created by vanilla Bedrock or PocketMine-MP (PHP) will mostly fail to load: only the
-  block states this port knows are recognised, and there is no block-state upgrader.
+- Worlds created by vanilla Bedrock or PocketMine-MP (PHP) may fail to load: current
+  (1.26.50) block states are recognised, but there is no block-state upgrader for older ones.
 - The creative inventory is now built from the core `CreativeInventory`
-  (`CreativeInventoryCache`, like PHP) instead of the vendored 1.26.50 packet, so it only shows
-  items with a network mapping until the item/block mappings are complete (the network IDs have to
-  match the core inventory, or creative item requests would create the wrong item).
+  (`CreativeInventoryCache`, like PHP) instead of the vendored 1.26.50 packet, 1,215 entries
+  (727 block items).
 - Threading: packet handling and the tick share `Server`'s lock (`mcpe.Server` embeds
   `sync.Locker`). Code called from a packet handler or the tick already holds it; never call
   `Server.Lock` from there. `Server.Shutdown` is safe either way (the `stop` command calls it from
@@ -289,11 +283,11 @@ Ordered by what gets us to a **playable survival server** fastest. Each phase sh
 something a person can see working in the client.
 
 ### Phase 1: Make the existing world playable
-1. **All block ↔ network mappings.** Port `data/bedrock/block/convert/*` in full
+1. ~~**All block ↔ network mappings.**~~ Done. Port `data/bedrock/block/convert/*` in full
    (`BlockObjectToStateSerializer`, `BlockStateToObjectDeserializer`, `BlockStateReader/Writer`,
    property helpers) and the whole `VanillaBlockMappings`. Then register every block in
    `VanillaBlocks`. This unblocks everything else visual.
-2. **Finish `VanillaBlocks` / `VanillaItems`** from the `*Inputs.php` files, plus
+2. ~~**Finish `VanillaBlocks` / `VanillaItems`**~~ Done. Remaining:
    `StringToItemParser` (needed for `/give` and plugins).
 3. **Held item + hotbar**: handle `MobEquipment`, replace `bareHandItem`.
 4. **Block placing** via `InventoryTransaction` `UseItem` (click-block) → `World.UseItemOn`.
@@ -315,8 +309,7 @@ upload), crash dumps.
 - Container blocks: ~~block inventories~~ done. Remaining: container tiles holding their
   inventories (break the `tile` -> `inventory` cycle, e.g. with a hook like `block.OpenWindowFunc`),
   furnace/brewing stand/hopper ticks, missing tiles (FlowerPot, Cauldron, TileFactory).
-- ~~Crafting and enchanting~~: done. Remaining: smithing, block item mappings (most recipes need
-  them), anvil repairs.
+- ~~Crafting and enchanting~~: done. Remaining: smithing, anvil repairs.
 - ~~Entity systems, entities, enchantments~~: done (see §5). Remaining: item NBT serialization
   (then turn `CanSaveWithChunk` back on for ItemEntity/Trident and save Human inventories),
   death/respawn packet flow, game-mode switching, wiring item use (bow, throwables, spawn eggs,

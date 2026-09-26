@@ -24,7 +24,7 @@ func TestDoublePitcherCropTicksRandomlyOnlyOnBottomAndBelowMaxAge(t *testing.T) 
 	}
 
 	d.SetTop(false)
-	d.SetAge(doublePitcherCropMaxAge)
+	d.SetAge(DoublePitcherCropMaxAge)
 	if d.TicksRandomly() {
 		t.Error("expected a fully-grown bottom half not to tick randomly")
 	}
@@ -53,7 +53,7 @@ func TestDoublePitcherCropSetAgeRejectsOutOfRange(t *testing.T) {
 			t.Error("expected SetAge to panic for an out-of-range value")
 		}
 	}()
-	d.SetAge(doublePitcherCropMaxAge + 1)
+	d.SetAge(DoublePitcherCropMaxAge + 1)
 }
 
 func TestDoublePitcherCropGrowFromBottomRebuildsBothHalves(t *testing.T) {
@@ -99,7 +99,7 @@ func TestDoublePitcherCropGrowFromTopRebuildsBothHalves(t *testing.T) {
 func TestDoublePitcherCropGrowReturnsFalseAtMaxAge(t *testing.T) {
 	w := &pitcherCropGrowWorld{blocks: map[[3]int]Behavior{}}
 	d := newTestDoublePitcherCrop(w)
-	d.Age = doublePitcherCropMaxAge
+	d.Age = DoublePitcherCropMaxAge
 
 	if d.grow(nil) {
 		t.Error("expected grow to fail at max age")

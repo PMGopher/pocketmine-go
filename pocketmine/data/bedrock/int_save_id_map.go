@@ -33,3 +33,6 @@ func (m *IntSaveIdMap[T]) ToID(enum T) int {
 	}
 	return id
 }
+
+// NewIntSaveIdMap creates an empty IntSaveIdMap (for maps defined in other packages).
+func NewIntSaveIdMap[T comparable]() *IntSaveIdMap[T] { return newIntSaveIdMap[T]() }

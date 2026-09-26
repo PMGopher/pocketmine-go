@@ -26,7 +26,7 @@ func (r *Rail) Clone() Behavior {
 	return &c
 }
 
-func (r *Rail) DescribeBlockOnlyState(w runtime.DataDescriber) { w.Int(4, &r.RailShapeValue) }
+func (r *Rail) DescribeBlockOnlyState(w runtime.DataDescriber) { w.RailShape(&r.RailShapeValue) }
 
 func (r *Rail) GetShape() int { return r.RailShapeValue }
 

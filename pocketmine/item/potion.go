@@ -57,3 +57,7 @@ func (p *Potion) GetAdditionalEffects() []*effect.EffectInstance {
 	//TODO: check CustomPotionEffects NBT
 	return p.PotionTypeValue.GetEffects()
 }
+
+// IsWaterPotion reports whether this is a water bottle (getType() === PotionType::WATER); the
+// block package's cauldrons check it through a small interface since they can't import item.
+func (p *Potion) IsWaterPotion() bool { return p.PotionTypeValue == PotionTypeWater }

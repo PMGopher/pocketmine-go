@@ -7,7 +7,7 @@ import (
 	"pocketmine-go/pocketmine/math"
 )
 
-const pitcherCropMaxAge = 2
+const PitcherCropMaxAge = 2
 
 // PitcherCrop is a port of pocketmine\block\PitcherCrop.
 type PitcherCrop struct {
@@ -16,7 +16,7 @@ type PitcherCrop struct {
 }
 
 func NewPitcherCrop(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) *PitcherCrop {
-	p := &PitcherCrop{Flowable: Flowable{Transparent{NewBlock(idInfo, name, typeInfo)}}, AgeComponent: NewAgeComponent(pitcherCropMaxAge)}
+	p := &PitcherCrop{Flowable: Flowable{Transparent{NewBlock(idInfo, name, typeInfo)}}, AgeComponent: NewAgeComponent(PitcherCropMaxAge)}
 	p.Init(p)
 	return p
 }
@@ -63,11 +63,11 @@ func (p *PitcherCrop) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 
 // grow is a port of PitcherCrop::grow.
 func (p *PitcherCrop) grow(player Player) bool {
-	if p.Age > pitcherCropMaxAge {
+	if p.Age > PitcherCropMaxAge {
 		return false
 	}
 
-	if p.Age == pitcherCropMaxAge {
+	if p.Age == PitcherCropMaxAge {
 		up := p.self.(blockGeometry).GetSide(math.Up, 1)
 		if up.GetTypeId() != AIR {
 			return false

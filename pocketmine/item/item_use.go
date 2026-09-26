@@ -3,7 +3,6 @@ package item
 import (
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/entity/effect"
-	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -11,16 +10,6 @@ import (
 // This file holds the item side of the player item-use flow (Player::useHeldItem,
 // consumeHeldItem, releaseHeldItem): consumables, releasables, and the items that act on
 // onClickAir/onReleaseUsing.
-
-var vanillaAir Item
-
-// VanillaAir is a port of VanillaItems::AIR(): the empty item (air as an item block).
-func VanillaAir() Item {
-	if vanillaAir == nil {
-		vanillaAir = NewItemBlock(NewItemIdentifier(-block.AIR), block.VanillaAir())
-	}
-	return vanillaAir.Clone()
-}
 
 // Releasable is a port of pocketmine\item\Releasable: items which are used by holding right
 // click, then releasing it (bows, tridents, food, ...).
@@ -231,12 +220,3 @@ func (b *Bow) CanStartUsingItem(player Player) bool {
 	return ok && (!h.HasFiniteResources() || h.HasArrow())
 }
 
-var vanillaBow Item
-
-// VanillaBow is a port of VanillaItems::BOW().
-func VanillaBow() Item {
-	if vanillaBow == nil {
-		vanillaBow = NewBow(NewItemIdentifier(BOW), "Bow", enchantment.TagBow)
-	}
-	return vanillaBow.Clone()
-}

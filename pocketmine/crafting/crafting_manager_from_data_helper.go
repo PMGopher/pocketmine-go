@@ -8,9 +8,13 @@ import (
 
 	"pocketmine-go/pocketmine/block/tile"
 	craftingjson "pocketmine-go/pocketmine/crafting/json"
+	"pocketmine-go/pocketmine/data/bedrock"
+	blockconvert "pocketmine-go/pocketmine/data/bedrock/block/convert"
+	bedrockitem "pocketmine-go/pocketmine/data/bedrock/item"
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
+	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 )
 
 // SavedDataLoadingError is pocketmine\data\SavedDataLoadingException for recipe data.
@@ -60,9 +64,7 @@ func DeserializeItemStack(data craftingjson.ItemStackData) (item.Item, error) {
 }
 
 // deserializeItemStackFromFields is a port of
-// CraftingManagerFromDataHelper::deserializeItemStackFromFields. Block items (items with block
-// states) can't be deserialized yet (this port has no full block state deserializer), so they're
-// treated as unknown items, like any other item type GlobalItemDataHandlers doesn't know.
+// CraftingManagerFromDataHelper::deserializeItemStackFromFields.
 func deserializeItemStackFromFields(name string, meta, count *int, blockStatesRaw, nbtRaw *string) (item.Item, error) {
 	m, c := 0, 1
 	if meta != nil {
@@ -71,8 +73,30 @@ func deserializeItemStackFromFields(name string, meta, count *int, blockStatesRa
 	if count != nil {
 		c = *count
 	}
-	if blockStatesRaw != nil {
-		return nil, nil
+	var blockStateData *bedrock.BlockStateData
+	if blockName, ok := bedrockitem.GetBlockItemIdMap().LookupBlockID(name); ok {
+		if m != 0 {
+			return nil, &SavedDataLoadingError{Message: "Meta should not be specified for blockitems"}
+		}
+		states := map[string]any{}
+		if blockStatesRaw != nil {
+			raw, err := base64.StdEncoding.DecodeString(*blockStatesRaw)
+			if err != nil {
+				return nil, &SavedDataLoadingError{Message: fmt.Sprintf("invalid block states for %s: %v", name, err)}
+			}
+			root, _, err := nbt.NewLittleEndianSerializer().Read(raw, 0, 0)
+			if err != nil {
+				return nil, &SavedDataLoadingError{Message: fmt.Sprintf("invalid block states for %s: %v", name, err)}
+			}
+			tag, ok := root.GetTag().(*nbt.CompoundTag)
+			if !ok {
+				return nil, &SavedDataLoadingError{Message: fmt.Sprintf("block states for %s aren't a compound", name)}
+			}
+			if states, err = worldio.BlockStatesFromNBT(tag); err != nil {
+				return nil, &SavedDataLoadingError{Message: fmt.Sprintf("invalid block states for %s: %v", name, err)}
+			}
+		}
+		blockStateData = &bedrock.BlockStateData{Name: blockName, States: states, Version: blockconvert.CurrentBlockStateVersion}
 	}
 
 	var namedTag *nbt.CompoundTag
@@ -92,7 +116,7 @@ func deserializeItemStackFromFields(name string, meta, count *int, blockStatesRa
 		namedTag = tag
 	}
 
-	it, ok := convert.DeserializeItemType(name, m)
+	it, ok := convert.DeserializeItemType(name, m, blockStateData)
 	if !ok {
 		//probably unknown item
 		return nil, nil

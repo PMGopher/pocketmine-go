@@ -2,6 +2,7 @@ package convert
 
 import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
+	"pocketmine-go/pocketmine/block"
 
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/nbt"
@@ -22,20 +23,40 @@ func CoreItemStackToNet(it item.Item) protocol.ItemStack {
 	if it == nil || it.IsNull() {
 		return protocol.ItemStack{}
 	}
-	networkID, meta, blockRuntimeID, ok := sharedItemTranslator.ToNetworkID(it)
-	if !ok {
-		return protocol.ItemStack{}
+	var tag *nbt.CompoundTag
+	if named := it.GetNamedTag(); named.Count() > 0 {
+		tag = named
 	}
+
+	networkID, meta, blockRuntimeID, ok := sharedItemTranslator.ToNetworkIDQuiet(it)
+	if !ok {
+		//Display unmapped items as INFO_UPDATE, but stick something in their NBT to make sure they don't stack with
+		//other unmapped items.
+		infoUpdate, err := block.VanillaBlock("info_update").(interface{ AsItem() (block.Item, error) }).AsItem()
+		if err == nil {
+			networkID, meta, blockRuntimeID, _ = sharedItemTranslator.ToNetworkIDQuiet(infoUpdate.(item.Item))
+		}
+		if tag == nil {
+			tag = nbt.NewCompoundTag()
+		} else {
+			tag = tag.Clone()
+		}
+		tag.SetLong(pmIDTag, nbt.LongTag(it.GetStateId()))
+	}
+
 	stack := protocol.ItemStack{
 		ItemType:       protocol.ItemType{NetworkID: networkID, MetadataValue: uint32(meta)},
 		BlockRuntimeID: blockRuntimeID,
 		Count:          uint16(it.GetCount()),
 	}
-	if tag := it.GetNamedTag(); tag.Count() > 0 {
+	if tag != nil {
 		stack.NBTData = NbtToMap(tag)
 	}
 	return stack
 }
+
+// pmIDTag is TypeConverter::PM_ID_TAG.
+const pmIDTag = "___Id___"
 
 // ItemStackWrapperLegacy is a port of ItemStackWrapper::legacy: a stack network ID of 0 for an
 // empty slot and 1 otherwise (what PHP sends outside server-authoritative inventory requests).

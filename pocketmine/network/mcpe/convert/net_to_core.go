@@ -2,11 +2,8 @@ package convert
 
 import (
 	"fmt"
-	"sync"
-
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 
-	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/nbt"
 )
@@ -16,61 +13,24 @@ type TypeConversionError struct{ Message string }
 
 func (e *TypeConversionError) Error() string { return e.Message }
 
-var (
-	itemTypeByNameOnce sync.Once
-	itemTypeByName     map[string]int
-)
-
-// DeserializeItemType is ItemDeserializer::deserializeType for a saved item type name and meta:
-// ok is false for a type (or meta variant) that can't be deserialized yet (only the item types
-// itemTypeNames maps, without meta variants or block items - see ItemTranslator).
-func DeserializeItemType(name string, meta int) (item.Item, bool) {
-	itemTypeByNameOnce.Do(func() {
-		itemTypeByName = make(map[string]int, len(itemTypeNames))
-		for typeID, n := range itemTypeNames {
-			itemTypeByName[n] = typeID
-		}
-	})
-	typeID, ok := itemTypeByName[name]
-	if !ok || meta != 0 {
-		return nil, false
-	}
-	constructor, ok := coreItemConstructors[typeID]
-	if !ok {
-		return nil, false
-	}
-	return constructor(), true
-}
-
-// FromNetworkID is a port of ItemTranslator::fromNetworkId: the item for a network item ID and
-// meta. Only the item types itemTypeNames maps can be deserialized so far (no block items, no
-// meta variants - see ItemTranslator).
-func (t *ItemTranslator) FromNetworkID(networkID int32, meta int16, blockRuntimeID int32) (item.Item, error) {
-	name, ok := bedrock.ItemNameForRuntimeID(networkID)
-	if !ok {
-		return nil, &TypeConversionError{Message: fmt.Sprintf("Unknown network item ID %d", networkID)}
-	}
-	if blockRuntimeID != noBlockRuntimeID {
-		return nil, &TypeConversionError{Message: fmt.Sprintf("Unsupported network item %s (meta %d, block runtime ID %d)", name, meta, blockRuntimeID)}
-	}
-	it, ok := DeserializeItemType(name, int(meta))
-	if !ok {
-		return nil, &TypeConversionError{Message: fmt.Sprintf("Unsupported network item %s (meta %d, block runtime ID %d)", name, meta, blockRuntimeID)}
-	}
-	return it, nil
-}
-
 // NetItemStackToCore is a port of TypeConverter::netItemStackToCore.
-func NetItemStackToCore(stack protocol.ItemStack) (item.Item, error) {
+func NetItemStackToCore(stack protocol.ItemStack) (result item.Item, err error) {
 	if stack.NetworkID == 0 {
 		return item.VanillaAir(), nil
 	}
-	result, err := sharedItemTranslator.FromNetworkID(stack.NetworkID, int16(stack.MetadataValue), stack.BlockRuntimeID)
+	result, err = sharedItemTranslator.FromNetworkID(stack.NetworkID, int16(stack.MetadataValue), stack.BlockRuntimeID)
 	if err != nil {
 		return nil, err
 	}
 	result.SetCount(int(stack.Count))
 	if len(stack.NBTData) > 0 {
+		// Invalid values in the NBT (e.g. a firework flight duration of 0) make the item's setters
+		// panic, like PHP's exceptions; PHP turns them into "Bad itemstack NBT data".
+		defer func() {
+			if p := recover(); p != nil {
+				result, err = nil, &TypeConversionError{Message: fmt.Sprintf("Bad itemstack NBT data: %v", p)}
+			}
+		}()
 		result.SetNamedTag(MapToNbt(stack.NBTData))
 	}
 	return result, nil

@@ -74,3 +74,37 @@ func (w WoodType) GetAllSidedLogSuffix() (suffix string, ok bool) {
 	}
 	return "", false
 }
+
+// AllWoodTypes is WoodType::cases().
+var AllWoodTypes = []WoodType{WoodTypeOak, WoodTypeSpruce, WoodTypeBirch, WoodTypeJungle, WoodTypeAcacia, WoodTypeDarkOak, WoodTypeMangrove, WoodTypeCrimson, WoodTypeWarped, WoodTypeCherry, WoodTypePaleOak, WoodTypeBamboo}
+
+// IDName is strtolower($case->name), e.g. "dark_oak" (used for registry names).
+func (t WoodType) IDName() string {
+	switch t {
+	case WoodTypeOak:
+		return "oak"
+	case WoodTypeSpruce:
+		return "spruce"
+	case WoodTypeBirch:
+		return "birch"
+	case WoodTypeJungle:
+		return "jungle"
+	case WoodTypeAcacia:
+		return "acacia"
+	case WoodTypeDarkOak:
+		return "dark_oak"
+	case WoodTypeMangrove:
+		return "mangrove"
+	case WoodTypeCrimson:
+		return "crimson"
+	case WoodTypeWarped:
+		return "warped"
+	case WoodTypeCherry:
+		return "cherry"
+	case WoodTypePaleOak:
+		return "pale_oak"
+	case WoodTypeBamboo:
+		return "bamboo"
+	}
+	panic("invalid WoodType value")
+}

@@ -50,7 +50,7 @@ func TestPitcherCropSetAgeRejectsOutOfRange(t *testing.T) {
 			t.Error("expected SetAge to panic for an out-of-range value")
 		}
 	}()
-	p.SetAge(pitcherCropMaxAge + 1)
+	p.SetAge(PitcherCropMaxAge + 1)
 }
 
 func TestPitcherCropCollisionBoxShrinksAfterAgeZero(t *testing.T) {
@@ -114,7 +114,7 @@ func (w *pitcherCropGrowWorld) SetBlock(pos Position, blk Behavior) error {
 func TestPitcherCropGrowAtMaxAgeBecomesDoublePitcherCropWhenSpaceAboveIsFree(t *testing.T) {
 	w := &pitcherCropGrowWorld{blocks: map[[3]int]Behavior{}}
 	p := newTestPitcherCrop(w)
-	p.Age = pitcherCropMaxAge
+	p.Age = PitcherCropMaxAge
 
 	if !p.grow(nil) {
 		t.Fatal("expected grow to succeed at max age with free space above")
@@ -138,7 +138,7 @@ func TestPitcherCropGrowAtMaxAgeFailsWhenSpaceAboveIsBlocked(t *testing.T) {
 	blocker.SetPosition(w, 1, 3, 3)
 	w.blocks[[3]int{1, 3, 3}] = blocker
 	p := newTestPitcherCrop(w)
-	p.Age = pitcherCropMaxAge
+	p.Age = PitcherCropMaxAge
 
 	if p.grow(nil) {
 		t.Error("expected grow to fail at max age when the space above is blocked")
@@ -171,7 +171,7 @@ func TestPitcherCropOnInteractIgnoresNonFertilizerItems(t *testing.T) {
 func TestPitcherCropOnInteractAtMaxAgeBecomesDoublePitcherCropWithBoneMeal(t *testing.T) {
 	w := &pitcherCropGrowWorld{blocks: map[[3]int]Behavior{}}
 	p := newTestPitcherCrop(w)
-	p.Age = pitcherCropMaxAge
+	p.Age = PitcherCropMaxAge
 	boneMeal := fakeItem{typeID: itemTypeIDsBoneMeal}
 
 	if !p.OnInteract(boneMeal, math.Up, math.Vector3{}, nil, nil) {

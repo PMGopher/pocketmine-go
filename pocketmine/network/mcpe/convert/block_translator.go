@@ -1,77 +1,89 @@
+// Package convert is a port of pocketmine\network\mcpe\convert: translating this port's own
+// blocks and items into the Bedrock network forms clients expect.
 package convert
 
 import (
-	"pocketmine-go/pocketmine/block"
+	"sync"
+
 	"pocketmine-go/pocketmine/data/bedrock"
+	ids "pocketmine-go/pocketmine/data/bedrock/block"
+	blockconvert "pocketmine-go/pocketmine/data/bedrock/block/convert"
+	worldio "pocketmine-go/pocketmine/world/format/io"
 )
 
-// BlockTranslator is a port of pocketmine\network\mcpe\convert\BlockTranslator, minus the reverse
-// direction (InternalIdToNetworkStateData/network->internal) - nothing in this port needs to go
-// from a network runtime ID back to a Behavior yet (that would need a registry of every internal
-// state a given block type can have, the inverse of BlockStateSerializer, not built yet either).
+// BlockTranslator is a port of pocketmine\network\mcpe\convert\BlockTranslator: internal block
+// state IDs to network runtime IDs (positions in the vendored canonical_block_states.nbt), through
+// the block state serializer (GlobalBlockStateHandlers). Safe for concurrent use.
 type BlockTranslator struct {
-	networkIDCache  map[int]int32
-	fallbackStateID int32
+	serializer *blockconvert.BlockObjectToStateSerializer
+
+	mu             sync.RWMutex
+	networkIDCache map[int]int32
+
+	fallbackStateData bedrock.BlockStateData
+	fallbackStateID   int32
 }
 
-// NewBlockTranslator is a port of BlockTranslator::__construct. Panics if
-// "minecraft:info_update" (the vanilla fallback state for unrecognised blockstates) isn't in the
-// vendored canonical_block_states.nbt - matching the PHP original's AssumptionFailedError, since
-// that would mean the vendored asset itself is broken/mismatched.
+// NewBlockTranslator is a port of BlockTranslator::__construct, with the dictionary being the
+// vendored palette and the serializer GlobalBlockStateHandlers::getSerializer().
 func NewBlockTranslator() *BlockTranslator {
-	fallbackID, ok := bedrock.RuntimeIDFor("minecraft:info_update", map[string]any{})
+	fallback := bedrock.BlockStateData{Name: ids.INFO_UPDATE, States: map[string]any{}, Version: blockconvert.CurrentBlockStateVersion}
+	fallbackID, ok := bedrock.RuntimeIDFor(fallback.Name, fallback.States)
 	if !ok {
-		panic("convert: minecraft:info_update should always exist in canonical_block_states.nbt")
+		panic(ids.INFO_UPDATE + " should always exist")
 	}
 	return &BlockTranslator{
-		networkIDCache:  map[int]int32{},
-		fallbackStateID: fallbackID,
+		serializer:        worldio.GetBlockStateSerializer(),
+		networkIDCache:    map[int]int32{},
+		fallbackStateData: fallback,
+		fallbackStateID:   fallbackID,
 	}
 }
 
-// InternalIDToNetworkID is a port of BlockTranslator::internalIdToNetworkId. Falls back to
-// minecraft:info_update (matching the PHP original's BlockStateSerializeException handling)
-// whenever the block type has no registered BlockStateSerializer yet, or the serializer's output
-// doesn't match any canonical blockstate - both are the same "not supported over the network yet"
-// case from the caller's perspective.
-func (t *BlockTranslator) InternalIDToNetworkID(blk block.Behavior) int32 {
-	internalStateID := blk.GetStateId()
-	if networkID, ok := t.networkIDCache[internalStateID]; ok {
+// InternalIDToNetworkID is a port of BlockTranslator::internalIdToNetworkId.
+func (t *BlockTranslator) InternalIDToNetworkID(internalStateID int) int32 {
+	t.mu.RLock()
+	networkID, ok := t.networkIDCache[internalStateID]
+	t.mu.RUnlock()
+	if ok {
 		return networkID
 	}
 
-	networkID := t.fallbackStateID
-	if stateData, err := SerializeBlockState(blk); err == nil {
-		if id, ok := bedrock.RuntimeIDFor(stateData.Name, stateData.States); ok {
-			networkID = id
+	blockStateData, err := t.serializer.Serialize(internalStateID)
+	if err == nil {
+		var found bool
+		networkID, found = bedrock.RuntimeIDFor(blockStateData.Name, blockStateData.States)
+		if !found {
+			panic("Unmapped blockstate returned by blockstate serializer: " + blockStateData.Name)
 		}
+	} else {
+		//TODO: this will swallow any error caused by invalid block properties; this is not ideal, but it should be
+		//covered by unit tests, so this is probably a safe assumption.
+		networkID = t.fallbackStateID
 	}
 
+	t.mu.Lock()
 	t.networkIDCache[internalStateID] = networkID
+	t.mu.Unlock()
 	return networkID
 }
 
-// FallbackStateID is a port of BlockTranslator::getFallbackStateData, returning the runtime ID
-// directly (via minecraft:info_update) instead of the full BlockStateData - nothing here needs the
-// full state data, only the ID, unlike the PHP original's persistent (NBT-based) serialization
-// path.
-func (t *BlockTranslator) FallbackStateID() int32 { return t.fallbackStateID }
-
-// NetworkIDForCachedState looks up a network runtime ID for a bare internal state ID that was
-// already translated via InternalIDToNetworkID at least once. This has no direct PHP equivalent -
-// PHP's internalIdToNetworkId always takes a bare int state ID and can reconstruct a Block from it
-// via a global block factory; this port's Chunk/SubChunk/PalettedBlockArray (deliberately) only
-// ever store compact int32 state IDs, not live block.Behavior instances, so chunk serialization
-// - which only has those bare IDs on hand - can't call InternalIDToNetworkID directly. In
-// practice this is never a cache miss: every ID a chunk can contain was placed there by generator
-// code that had a real Behavior in hand and called InternalIDToNetworkID with it first (that's
-// how the world/generator package's Flat generator populates a chunk), warming this exact cache
-// entry as a side effect. Falls back to the same minecraft:info_update state as
-// InternalIDToNetworkID for the one case that isn't true today: a chunk touched by a
-// BlockTranslator instance different from the one serializing it.
+// NetworkIDForCachedState is InternalIDToNetworkID for the int32 state IDs chunks store (the
+// interface world/sound and world/particle use).
 func (t *BlockTranslator) NetworkIDForCachedState(internalStateID int32) int32 {
-	if networkID, ok := t.networkIDCache[int(internalStateID)]; ok {
-		return networkID
-	}
-	return t.fallbackStateID
+	return t.InternalIDToNetworkID(int(internalStateID))
 }
+
+// InternalIDToNetworkStateData is a port of BlockTranslator::internalIdToNetworkStateData.
+func (t *BlockTranslator) InternalIDToNetworkStateData(internalStateID int) bedrock.BlockStateData {
+	//we don't directly use the blockstate serializer here - we can't assume that the network blockstate NBT is the
+	//same as the disk blockstate NBT, in case we decide to have different world version than network version (or in
+	//case someone wants to implement multi version).
+	return bedrock.BlockStates()[t.InternalIDToNetworkID(internalStateID)]
+}
+
+// GetFallbackStateData is a port of BlockTranslator::getFallbackStateData.
+func (t *BlockTranslator) GetFallbackStateData() bedrock.BlockStateData { return t.fallbackStateData }
+
+// FallbackStateID returns the network runtime ID of GetFallbackStateData.
+func (t *BlockTranslator) FallbackStateID() int32 { return t.fallbackStateID }

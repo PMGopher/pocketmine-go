@@ -41,3 +41,9 @@ func (c *SizeCalculator) Axis(axis *math.Axis) { c.addBits(2) }
 func (c *SizeCalculator) HorizontalAxis(axis *math.Axis) { c.addBits(1) }
 
 var _ DataDescriber = (*SizeCalculator)(nil)
+
+// RailShape is a port of RuntimeDataSizeCalculator::railShape.
+func (s *SizeCalculator) RailShape(railShape *int) { s.Int(4, railShape) }
+
+// StraightOnlyRailShape is a port of RuntimeDataSizeCalculator::straightOnlyRailShape.
+func (s *SizeCalculator) StraightOnlyRailShape(railShape *int) { s.Int(3, railShape) }

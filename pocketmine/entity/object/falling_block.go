@@ -201,7 +201,7 @@ func (f *FallingBlock) GetPickedItem() item.Item { return blockAsItem(f.block) }
 func (f *FallingBlock) SyncNetworkData(properties *entity.MetadataCollection) {
 	f.Entity.SyncNetworkData(properties)
 
-	properties.SetInt(entity.MetadataVariant, f.GetWorld().Translator().InternalIDToNetworkID(f.block))
+	properties.SetInt(entity.MetadataVariant, f.GetWorld().Translator().InternalIDToNetworkID(f.block.GetStateId()))
 }
 
 func (f *FallingBlock) GetOffsetPosition(v math.Vector3) math.Vector3 {

@@ -144,3 +144,9 @@ func (w *Writer) GetValue() int  { return w.value }
 func (w *Writer) GetOffset() int { return w.offset }
 
 var _ DataDescriber = (*Writer)(nil)
+
+// RailShape is a port of RuntimeDataWriter::railShape.
+func (w *Writer) RailShape(railShape *int) { w.Int(4, railShape) }
+
+// StraightOnlyRailShape is a port of RuntimeDataWriter::straightOnlyRailShape.
+func (w *Writer) StraightOnlyRailShape(railShape *int) { w.Int(3, railShape) }

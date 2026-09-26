@@ -68,3 +68,9 @@ func DyeColorFromInvertedID(id int) (DyeColor, bool) {
 	}
 	return DyeColor(raw), true
 }
+
+// AllDyeColors is DyeColor::cases().
+var AllDyeColors = []DyeColor{
+	DyeColorWhite, DyeColorOrange, DyeColorMagenta, DyeColorLightBlue, DyeColorYellow, DyeColorLime, DyeColorPink, DyeColorGray,
+	DyeColorLightGray, DyeColorCyan, DyeColorPurple, DyeColorBlue, DyeColorBrown, DyeColorGreen, DyeColorRed, DyeColorBlack,
+}

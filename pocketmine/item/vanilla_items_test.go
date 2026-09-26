@@ -35,17 +35,21 @@ func TestVanillaCharcoalAndCoalAreDistinctTypeIDsSharingTheCoalStruct(t *testing
 	}
 }
 
-func TestVanillaRecordsReturnsAllTwentyDiscsWithDistinctTypeIDs(t *testing.T) {
-	records := VanillaRecords()
-	if len(records) != 20 {
-		t.Fatalf("VanillaRecords() returned %d entries, want 20", len(records))
-	}
-	seen := map[int]bool{}
-	for _, r := range records {
-		if seen[r.GetTypeId()] {
-			t.Errorf("duplicate record type ID %d", r.GetTypeId())
+func TestVanillaItemsHaveDistinctTypeIDs(t *testing.T) {
+	seen := map[int]string{}
+	records := 0
+	for _, name := range GetVanillaItemNames() {
+		it := VanillaItem(name)
+		if other, ok := seen[it.GetTypeId()]; ok {
+			t.Errorf("%s and %s share type ID %d", name, other, it.GetTypeId())
 		}
-		seen[r.GetTypeId()] = true
+		seen[it.GetTypeId()] = name
+		if _, ok := it.(*Record); ok {
+			records++
+		}
+	}
+	if records != 20 {
+		t.Errorf("%d music discs registered, want 20", records)
 	}
 }
 

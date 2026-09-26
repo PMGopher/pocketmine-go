@@ -49,7 +49,7 @@ func TestChangedBlocksAreSentToChunkPlayersAtTheEndOfTheTick(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("got %d UpdateBlock packets, want 1", len(updates))
 	}
-	want := uint32(w.Translator().InternalIDToNetworkID(block.VanillaStone()))
+	want := uint32(w.Translator().InternalIDToNetworkID(block.VanillaStone().GetStateId()))
 	if updates[0].Position != (protocol.BlockPos{1, 10, 2}) || updates[0].NewBlockRuntimeID != want {
 		t.Errorf("UpdateBlock = %+v, want stone at 1,10,2", updates[0])
 	}

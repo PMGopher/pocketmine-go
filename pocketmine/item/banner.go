@@ -1,6 +1,7 @@
 package item
 
 import (
+	"pocketmine-go/pocketmine/block"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/nbt"
@@ -12,25 +13,24 @@ const (
 	bannerTagPatternName  = "Pattern"
 )
 
-// Banner is a port of pocketmine\item\Banner. In PHP this extends ItemBlockWallOrFloor, whose
-// GetBlock needs RuntimeBlockStateRegistry (the full block registry, not ported) - since GetBlock
-// isn't part of Item here at all yet (see the Item interface's doc comment), this embeds ItemBase
-// directly instead of porting that base class.
+// Banner is a port of pocketmine\item\Banner.
 type Banner struct {
-	ItemBase
+	ItemBlockWallOrFloor
 
 	Color    blockutils.DyeColor
 	Patterns []blockutils.BannerPatternLayer
 }
 
-func NewBanner(identifier ItemIdentifier, name string) *Banner {
-	b := &Banner{Color: blockutils.DyeColorBlack}
-	b.Init(b, identifier, name)
+func NewBanner(identifier ItemIdentifier, floorVariant, wallVariant block.Behavior) *Banner {
+	b := &Banner{ItemBlockWallOrFloor: ItemBlockWallOrFloor{FloorVariant: floorVariant, WallVariant: wallVariant}, Color: blockutils.DyeColorBlack}
+	b.Init(b, identifier, floorVariant.GetName())
 	return b
 }
 
 func (b *Banner) Clone() Item {
 	c := *b
+	c.FloorVariant = b.FloorVariant.Clone()
+	c.WallVariant = b.WallVariant.Clone()
 	c.Patterns = append([]blockutils.BannerPatternLayer(nil), b.Patterns...)
 	c.rebind(&c)
 	return &c

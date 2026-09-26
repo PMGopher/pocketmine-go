@@ -2,6 +2,8 @@ package item
 
 import (
 	"pocketmine-go/pocketmine/block"
+	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/math"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 )
 
@@ -9,12 +11,6 @@ import (
 // coral-type/dead state (the same struct backing FloorCoralFan/WallCoralFan block state), matching
 // PHP's own reuse of CoralTypeTrait for both Block and Item.
 //
-// GetBlock (needs VanillaBlocks.CORAL_FAN()/WALL_CORAL_FAN(), the unported block registry) isn't
-// ported - GetBlock isn't part of Item here at all yet (see the Item interface's doc comment). Its
-// PHP GetFuelTime/GetMaxStackSize both delegate to GetBlock().GetFuelTime()/GetMaxStackSize(), but
-// neither FloorCoralFan nor WallCoralFan override those in this port (confirmed by grep), so
-// ItemBase's own defaults (0 and 64) already produce the same effective values without needing
-// GetBlock at all.
 type CoralFan struct {
 	ItemBase
 	block.CoralComponent
@@ -33,3 +29,29 @@ func (c *CoralFan) Clone() Item {
 }
 
 func (c *CoralFan) describeState(w runtime.DataDescriber) { c.DescribeCoral(w) }
+
+// coralSetter is the part of FloorCoralFan/WallCoralFan GetBlockForFace sets.
+type coralSetter interface {
+	SetCoralType(coralType blockutils.CoralType)
+	SetDead(dead bool)
+}
+
+// GetBlockForFace is a port of CoralFan::getBlock: a wall fan when clicking a side face.
+func (c *CoralFan) GetBlockForFace(clickedFace *math.Facing) block.Behavior {
+	var blk block.Behavior
+	if clickedFace != nil && math.FacingAxis(*clickedFace) != math.AxisY {
+		blk = block.VanillaBlock("wall_coral_fan")
+	} else {
+		blk = block.VanillaBlock("coral_fan")
+	}
+	setter := blk.(coralSetter)
+	setter.SetCoralType(c.CoralType)
+	setter.SetDead(c.Dead)
+	return blk
+}
+
+func (c *CoralFan) GetBlock() block.Behavior { return c.GetBlockForFace(nil) }
+
+func (c *CoralFan) GetFuelTime() int { return c.GetBlock().GetFuelTime() }
+
+func (c *CoralFan) GetMaxStackSize() int { return c.GetBlock().GetMaxStackSize() }
