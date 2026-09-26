@@ -126,9 +126,18 @@ func (a *AmethystCluster) OnProjectileHit(projectile Projectile, hitResult math.
 
 func (a *AmethystCluster) IsAffectedBySilkTouch() bool { return true }
 
-// GetDropsForCompatibleTool/GetDropsForIncompatibleTool should return amethyst shards scaled via
-// FortuneDropHelper — needs real Item construction from the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so these return nil for now.
-func (a *AmethystCluster) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of AmethystCluster::getDropsForCompatibleTool.
+func (a *AmethystCluster) GetDropsForCompatibleTool(item Item) []Item {
+	if a.Stage == AmethystClusterStageCluster {
+		return itemDrops(vanillaItemCount("amethyst_shard", FortuneWeighted(item, 4, 4)))
+	}
+	return nil
+}
 
-func (a *AmethystCluster) GetDropsForIncompatibleTool(item Item) []Item { return nil }
+// GetDropsForIncompatibleTool is a port of AmethystCluster::getDropsForIncompatibleTool.
+func (a *AmethystCluster) GetDropsForIncompatibleTool(item Item) []Item {
+	if a.Stage == AmethystClusterStageCluster {
+		return itemDrops(vanillaItemCount("amethyst_shard", FortuneWeighted(item, 2, 2)))
+	}
+	return nil
+}

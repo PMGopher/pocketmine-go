@@ -179,3 +179,7 @@ func (s *SplashPotion) SyncNetworkData(properties *entity.MetadataCollection) {
 	properties.SetShort(entity.MetadataPotionAuxValue, int16(item.PotionTypeIdMapInstance.ToID(s.potionType)))
 	properties.SetGenericFlag(entity.FlagLinger, s.linger)
 }
+
+// IsWaterPotion reports `$projectile->getPotionType() === PotionType::WATER`, for blocks that react
+// to water splash potions (Campfire::onProjectileHit).
+func (s *SplashPotion) IsWaterPotion() bool { return s.potionType == item.PotionTypeWater }

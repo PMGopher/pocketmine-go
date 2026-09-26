@@ -12,10 +12,6 @@ const (
 )
 
 // Bell is a port of pocketmine\block\tile\Bell.
-//
-// createFakeUpdatePacket (the ring-animation hack) needs BlockActorDataPacket, from the unported
-// network/mcpe/protocol, so it's not ported here - see block.Bell.Ring's doc comment for the
-// block-side half of the same gap.
 type Bell struct {
 	SpawnableBase
 
@@ -69,4 +65,28 @@ func (b *Bell) WriteSaveData(tag *nbt.CompoundTag) {
 	tag.SetByte(BellTagRinging, ringing)
 	tag.SetInt(BellTagDirection, nbt.IntTag(b.Facing))
 	tag.SetInt(BellTagTicks, nbt.IntTag(b.Ticks))
+}
+
+// CreateFakeUpdateCompound is a port of Bell::createFakeUpdatePacket: the spawn compound of a
+// ringing bell hit on bellHitFace, which the block sends as a BlockActorDataPacket (this package
+// has no network code; see block.BroadcastTileDataFunc).
+func (b *Bell) CreateFakeUpdateCompound(bellHitFace math.Facing) *nbt.CompoundTag {
+	tag := b.GetSpawnCompound(b)
+	tag.SetByte(BellTagRinging, 1)
+	var direction int
+	switch bellHitFace {
+	case math.South:
+		direction = 0
+	case math.West:
+		direction = 1
+	case math.North:
+		direction = 2
+	case math.East:
+		direction = 3
+	default:
+		panic("Unreachable")
+	}
+	tag.SetInt(BellTagDirection, nbt.IntTag(direction))
+	tag.SetInt(BellTagTicks, 0)
+	return tag
 }

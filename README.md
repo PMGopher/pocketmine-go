@@ -104,15 +104,18 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 
 ### World
 - [x] Chunks, sub-chunks, paletted block storage, heightmaps
-- [x] LevelDB world save/load, `level.dat`
+- [x] LevelDB world save/load (vanilla layout: `db/` folder, zlib-raw compression), `level.dat`: every chunk version, sub-chunk versions 0-9, legacy terrain, 2D/3D biomes, tiles and entities
+- [x] Loading worlds made by vanilla Bedrock (tested with BDS 1.26.52) or PHP PocketMine-MP
 - [x] Sky and block lighting
 - [x] World tick: time, weather, scheduled and neighbour updates, random ticks
 - [x] Chunk loading/unloading, chunk loaders, chunk listeners
 - [x] Explosions
 - [x] Multi-world manager (`WorldManager`, `worlds:` in pocketmine.yml)
-- [x] Particles (all types) and sounds **(partial)**, 49 of 113 sound types
-- [ ] Block-state / item upgraders (loading worlds from vanilla or older PMMP)
-- [ ] Region formats (Anvil, McRegion, PMAnvil) and world conversion
+- [x] Particles (all types) and sounds (all 111 sound types)
+- [x] Block-state and item upgraders (`BlockDataUpgrader`, `ItemDataUpgrader` with pmmp's upgrade schemas): old block states and items are upgraded on load
+- [x] Region formats (Anvil, McRegion, PMAnvil) and automatic conversion to LevelDB (`FormatConverter`, backup in `backups/worlds`)
+- [x] Item NBT (de)serialization: containers, dropped items, tridents and player inventories are saved
+- [x] Liquids flow (water, lava, `MinimumCostFlowCalculator`, obsidian/cobblestone/basalt forming), fire spreads and burns blocks
 - [x] Async chunk generation / population / lighting (worker goroutines, like PHP's `AsyncGeneratorExecutor`, `PopulationTask` and `LightPopulationTask`)
 
 ### World generation
@@ -120,19 +123,20 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Normal generator (noise terrain, all PMMP biomes)
 - [x] Nether generator
 - [x] Ores, tall grass, ground cover populators
-- [x] Trees **(partial)**: oak, spruce, birch. Acacia, jungle, azalea and nether trees missing.
+- [x] Trees: oak, spruce, birch, jungle, acacia, azalea, nether fungi (`TreeFactory`); saplings and bone meal grow them
 
 ### Blocks
-- [x] ~260 block classes ported with their behaviour (state, placement rules, drops, random ticks, ...)
+- [x] All block classes ported with their behaviour (state, placement rules, drops with Fortune/Silk Touch, random ticks, bone meal, hoes/shovels/axes, ...)
 - [x] 800 block type IDs
-- [x] Most tiles (chest, furnace, hopper, sign, banner, bed, ...)
+- [x] All tiles (`TileFactory`), saved and loaded with their chunk and sent to clients (in sub-chunks and with block updates)
 - [x] Survival block breaking with correct break times
-- [ ] Block placing
-- [ ] Vanilla block registry **(partial)**, ~55 blocks registered
+- [x] Block placing
+- [x] Vanilla block registry (all 799 `VanillaBlocks`)
 - [x] Block ↔ network mappings: full `data/bedrock/block/convert` (`BlockObjectToStateSerializer`, `BlockStateToObjectDeserializer`, reader/writer, `VanillaBlockMappings`); all 799 `VanillaBlocks` (11,125 states) round-trip. The 1.26.50-only properties (`minecraft:corner` on stairs, `minecraft:connection_*` on fences/panes/bars/tripwire) are written with neutral values
 - [x] Item ↔ network mappings: `data/bedrock/item` (`ItemSerializer`/`ItemDeserializer`, `ItemSerializerDeserializerRegistrar`, `BlockItemIdMap`) and the full `VanillaItems`
-- [ ] Cauldrons, flower pot
-- [ ] Block inventories for furnace, hopper, brewing stand, anvil, barrel, shulker box, ender chest
+- [x] Cauldrons (water, lava, potions, dyed water), flower pot
+- [x] Container blocks keep their items (chest, double chest, barrel, furnace, hopper, brewing stand, shulker box, campfire, chiseled bookshelf), furnace smelting and brewing
+- [x] Beds (sleeping), respawn anchor, dragon egg, jukebox, lectern, item frames, cake with candles, banners with patterns, bells
 - [ ] Redstone behaviour beyond what individual blocks implement
 
 ### Items
@@ -168,14 +172,15 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Crafting (shaped/shapeless recipes, `CraftingDataPacket`, `CraftingTransaction`) (recipes with potions/unknown items are skipped, like PHP)
 - [x] Enchanting table (options, bookshelves, `EnchantingTransaction`, lapis/XP cost)
 - [x] Block inventories (all 19) and opening crafting table, enchanting table, anvil, loom, stonecutter, smithing/cartography table and ender chest windows
-- [ ] Container tiles holding inventories (chest, barrel, furnace, hopper, brewing stand, shulker box): needs item NBT serialization to save their contents
-- [ ] Furnace smelting and brewing ticks (the recipes are loaded), smithing
+- [x] Container tiles holding inventories (chest, barrel, furnace, hopper, brewing stand, shulker box), saved with the world
+- [x] Furnace smelting and brewing
+- [ ] Smithing
 
 ### Entities
 All 77 classes under `pocketmine\entity` are ported, with their full logic.
 - [x] Entity, Living, Human (movement/collision physics, fire, air supply, knockback, armor, death)
 - [x] EntityFactory + entity NBT save/load (LevelDB `actorprefix` storage)
-- [x] Item drops (`ItemEntity`) **(partial)**: item NBT serialization isn't ported, so dropped items aren't saved with the chunk
+- [x] Item drops (`ItemEntity`), saved with the chunk
 - [x] Falling blocks, primed TNT, experience orbs, paintings, end crystals, firework rockets, area effect clouds
 - [x] Projectiles (arrow, snowball, egg, ender pearl, XP bottle, ice bomb, splash potion, trident)
 - [x] Effects (all 27 vanilla effects, EffectManager)
@@ -195,9 +200,9 @@ All 77 classes under `pocketmine\entity` are ported, with their full logic.
 
 1. ~~**Make the world playable:** all block and item network mappings~~: done.
 2. **Real server structure:** done (`Server`, network sessions and handlers, console, command map, events, permissions, query, UPnP, resource packs). Remaining: the 7 missing default commands.
-3. **Gameplay:** item NBT, container tiles, furnace/brewing ticks.
+3. ~~**Gameplay:** item NBT, container tiles, furnace/brewing ticks~~: done. Remaining: smithing, buckets/flint and steel/spawn eggs on blocks.
 4. **Plugins** (design decision pending, see AGENTS.md §6 Phase 4).
-5. **Everything else:** world upgraders, crash dumps.
+5. **Everything else:** crash dumps.
 
 Details in [AGENTS.md](AGENTS.md#6-plan--roadmap).
 
@@ -205,7 +210,8 @@ Details in [AGENTS.md](AGENTS.md#6-plan--roadmap).
 
 - Some testers report floating up into the sky right after spawning. Under investigation. See
   [AGENTS.md → Known issues](AGENTS.md#known-issues).
-- Worlds from vanilla Bedrock or PHP PocketMine-MP won't load correctly yet.
+- Blocks that PocketMine-MP 5.44.4 itself doesn't implement (moss, kelp, seagrass, dripstone, ...)
+  load as the "update!" block when a vanilla world is opened, exactly like in PHP.
 
 ## Credits
 

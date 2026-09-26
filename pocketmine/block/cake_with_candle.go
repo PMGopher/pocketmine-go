@@ -42,11 +42,12 @@ func (c *CakeWithCandle) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	}
 }
 
-// GetCandle should return VanillaBlocks.CANDLE() - needs the unported block registry, so this
-// returns a bare, unpositioned Candle instead (enough for GetDropsForCompatibleTool below, which
-// only reads its type through AsItem's still-unported machinery anyway).
-func (c *CakeWithCandle) GetCandle() *Candle {
-	return &Candle{Count: candleMinCount}
+// GetCandle is a port of CakeWithCandle::getCandle (CakeWithDyedCandle overrides it).
+func (c *CakeWithCandle) GetCandle() Behavior { return VanillaBlock("candle") }
+
+// candle is $this->getCandle() through self, so CakeWithDyedCandle's override is used.
+func (c *CakeWithCandle) candle() Behavior {
+	return c.self.(interface{ GetCandle() Behavior }).GetCandle()
 }
 
 // GetResidue is a port of CakeWithCandle::getResidue.
@@ -67,9 +68,21 @@ func (c *CakeWithCandle) OnInteract(item Item, face math.Facing, clickVector mat
 	return c.BaseCake.OnInteract(item, face, clickVector, player, returnedItems)
 }
 
-func (c *CakeWithCandle) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of CakeWithCandle::getDropsForCompatibleTool.
+func (c *CakeWithCandle) GetDropsForCompatibleTool(item Item) []Item {
+	if it := asItemOrNil(c.candle()); it != nil {
+		return []Item{it}
+	}
+	return nil
+}
 
-// OnConsume is a port of CakeWithCandle::onConsume, minus the world.dropItem(candle) call, which
-// needs World.DropItem (not in the ported World interface - same recurring gap as
-// SweetBerryBush's doc comment). The residue swap (delegated to BaseCake.OnConsume) is real.
-func (c *CakeWithCandle) OnConsume(consumer effect.Living) { c.BaseCake.OnConsume(consumer) }
+// GetPickedItem is a port of CakeWithCandle::getPickedItem.
+func (c *CakeWithCandle) GetPickedItem(addUserData bool) Item { return asItemOrNil(VanillaCake()) }
+
+// OnConsume is a port of CakeWithCandle::onConsume.
+func (c *CakeWithCandle) OnConsume(consumer effect.Living) {
+	c.BaseCake.OnConsume(consumer)
+	if world, err := c.position.GetWorld(); err == nil {
+		dropItem(world, c.position.Add(0.5, 0.5, 0.5), asItemOrNil(c.candle()))
+	}
+}

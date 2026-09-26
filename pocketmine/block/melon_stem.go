@@ -3,9 +3,6 @@ package block
 import "pocketmine-go/pocketmine/math"
 
 // MelonStem is a port of pocketmine\block\MelonStem.
-//
-// AsItem should return VanillaItems.MELON_SEEDS() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.
 type MelonStem struct {
 	Stem
 }

@@ -67,9 +67,14 @@ func (c *CocoaBlock) Place(tx BlockTransaction, item Item, blockReplace Behavior
 	return false
 }
 
-// OnInteract's fertilizer-driven grow needs a Fertilizer item marker and BlockEventHelper,
-// neither ported yet. Block's default OnInteract (return false) already matches this gap, so
-// there's nothing to override here.
+// OnInteract is a port of CocoaBlock::onInteract (bone meal is the only Fertilizer).
+func (c *CocoaBlock) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if item.GetTypeId() == itemTypeIDsBoneMeal && c.grow(player) {
+		item.Pop()
+		return true
+	}
+	return false
+}
 
 func (c *CocoaBlock) OnNearbyBlockChange() {
 	if !c.canAttachTo(c.self.(blockGeometry).GetSide(math.Opposite(c.Facing), 1)) {
@@ -98,6 +103,11 @@ func (c *CocoaBlock) grow(player Player) bool {
 	return false
 }
 
-// GetDropsForCompatibleTool/AsItem should return VanillaItems.COCOA_BEANS() (scaled when mature)
-// — needs the unported item package (see Block.GetDropsForCompatibleTool's doc comment), so both
-// are left as Block's defaults for now.
+// GetDropsForCompatibleTool is a port of CocoaBlock::getDropsForCompatibleTool.
+func (c *CocoaBlock) GetDropsForCompatibleTool(item Item) []Item {
+	count := 1
+	if c.Age == CocoaBlockMaxAge {
+		count = mtRand(2, 3)
+	}
+	return itemDrops(vanillaItemCount("cocoa_beans", count))
+}

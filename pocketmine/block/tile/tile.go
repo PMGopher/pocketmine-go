@@ -8,6 +8,7 @@
 package tile
 
 import (
+	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/nbt"
 )
@@ -31,7 +32,7 @@ type World interface {
 // container tiles) reads the item's whole NBT as save data rather than just its
 // custom-block-data subset.
 type Item interface {
-	GetCustomBlockData() (*nbt.CompoundTag, bool)
+	GetCustomBlockData() *nbt.CompoundTag
 	GetNamedTag() *nbt.CompoundTag
 	HasCustomName() bool
 	GetCustomName() string
@@ -58,9 +59,10 @@ func (p Position) GetWorld() (World, bool) {
 }
 
 // Tile is a port of pocketmine\block\tile\Tile. Concrete tile types embed TileBase and implement
-// ReadSaveData/WriteSaveData/SaveID (SaveID is the Go equivalent of registering a save name with
-// TileFactory - see TileBase.SaveNBT's doc comment for why the registry itself isn't ported).
+// ReadSaveData/WriteSaveData/SaveID (SaveID is the save name TileFactory::getSaveId returns for
+// the tile's class: the first name TileFactory registers for it).
 type Tile interface {
+	SaveNBT() *nbt.CompoundTag
 	ReadSaveData(nbt *nbt.CompoundTag) error
 	WriteSaveData(nbt *nbt.CompoundTag)
 	SaveID() string
@@ -93,17 +95,15 @@ func (t *TileBase) GetPosition() Position { return t.position }
 
 func (t *TileBase) IsClosed() bool { return t.closed }
 
-// SaveNBT is a port of Tile::saveNBT. The PHP original looks up the save ID via
-// TileFactory::getSaveId(get_class($this)) - TileFactory's registry (and the reverse direction,
-// constructing a tile from a save ID) isn't ported, so each concrete tile type provides its save
-// ID directly via SaveID() instead of a runtime class-name lookup. VersionInfo::TAG_WORLD_DATA_VERSION
-// isn't set here since VersionInfo's world data version constant isn't ported yet.
+// SaveNBT is a port of Tile::saveNBT. PHP looks the save ID up with
+// TileFactory::getSaveId(get_class($this)); each tile type returns it from SaveID() instead.
 func (t *TileBase) SaveNBT() *nbt.CompoundTag {
 	n := nbt.NewCompoundTag()
 	n.SetString(TagID, nbt.StringTag(t.self.SaveID()))
 	n.SetInt(TagX, nbt.IntTag(t.position.FloorX()))
 	n.SetInt(TagY, nbt.IntTag(t.position.FloorY()))
 	n.SetInt(TagZ, nbt.IntTag(t.position.FloorZ()))
+	n.SetLong(pocketmine.TagWorldDataVersion, nbt.LongTag(pocketmine.WorldDataVersion))
 	t.self.WriteSaveData(n)
 	return n
 }
@@ -118,7 +118,7 @@ func (t *TileBase) GetCleanedNBT() *nbt.CompoundTag {
 }
 
 func (t *TileBase) CopyDataFromItem(item Item) {
-	if blockNbt, ok := item.GetCustomBlockData(); ok {
+	if blockNbt := item.GetCustomBlockData(); blockNbt != nil {
 		// Best-effort, matching the PHP original's @internal contract (readSaveData errors were
 		// only ever wrapped and rethrown as a RuntimeException here, not handled).
 		_ = t.self.ReadSaveData(blockNbt)
@@ -137,6 +137,11 @@ func (t *TileBase) OnBlockDestroyed() {
 func (t *TileBase) Close() {
 	if t.closed {
 		return
+	}
+	// Tiles that override close() (containers remove their inventory's viewers first) implement
+	// CloseHook.
+	if hook, ok := t.self.(interface{ CloseHook() }); ok {
+		hook.CloseHook()
 	}
 	t.closed = true
 	if world, ok := t.position.GetWorld(); ok {

@@ -62,9 +62,7 @@ func (b *Barrel) Place(tx BlockTransaction, item Item, blockReplace Behavior, bl
 	return b.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract is a port of Barrel::onInteract, minus actually opening the inventory window
-// (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc comment for the same
-// gap). The CanOpenWith lock check that would gate it is fully real.
+// OnInteract is a port of Barrel::onInteract.
 func (b *Barrel) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return true
@@ -84,7 +82,7 @@ func (b *Barrel) OnInteract(item Item, face math.Facing, clickVector math.Vector
 	if !tileBarrel.CanOpenWith(item.GetCustomName()) {
 		return true
 	}
-	// player.SetCurrentWindow(tileBarrel.GetInventory()) - not ported, see doc comment above.
+	openTileWindow(player, tileBarrel.GetInventory())
 	return true
 }
 

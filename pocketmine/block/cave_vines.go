@@ -2,6 +2,7 @@ package block
 
 import (
 	"math/rand"
+	"pocketmine-go/pocketmine/world/sound"
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
@@ -83,16 +84,20 @@ func (c *CaveVines) Place(tx BlockTransaction, item Item, blockReplace Behavior,
 	return c.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract is a port of CaveVines::onInteract, minus the berry-picking branch: it needs
-// World.DropItem (not in the ported World interface) and AsItem() producing a real Item, so this
-// reports the interaction as handled without actually picking, rather than silently clearing the
-// berries with no drop. The fertilizer-growth branch is fully real; bone meal is checked by item
-// type ID, same structural-marker convention as Crops.OnInteract.
+// OnInteract is a port of CaveVines::onInteract.
 func (c *CaveVines) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if c.Berries {
+		world, err := c.position.GetWorld()
+		if err != nil {
+			return true
+		}
+		dropItem(world, c.position.Vector3, asItemOrNil(c.self))
+		world.AddSound(c.position.Vector3, sound.GlowBerriesPickSound{})
+		c.Berries = false
+		_ = world.SetBlock(c.position, c.self)
 		return true
 	}
-	if item.GetTypeId() != itemTypeIDsBoneMeal {
+	if !isFertilizer(item) {
 		return false
 	}
 	newState := c.self.Clone().(*CaveVines)

@@ -2,7 +2,9 @@ package block
 
 import (
 	"fmt"
+	"pocketmine-go/pocketmine/block/tile"
 	"pocketmine-go/pocketmine/item/enchantment"
+	"pocketmine-go/pocketmine/nbt"
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
@@ -237,6 +239,47 @@ func (b *Block) GetPosition() Position { return b.position }
 
 func (b *Block) ReadStateFromWorld() Behavior { return b.self }
 
+// WriteStateToWorld is a port of Block::writeStateToWorld.
+func (b *Block) WriteStateToWorld() {
+	world, err := b.position.GetWorld()
+	if err != nil {
+		panic("Block::writeStateToWorld() needs a world position")
+	}
+	chunk, ok := world.GetOrLoadChunkAtPosition(b.position)
+	if !ok {
+		panic("World::setBlock() should have loaded the chunk before calling this method")
+	}
+	x, y, z := b.position.FloorX(), b.position.FloorY(), b.position.FloorZ()
+	chunk.SetBlockStateID(x&0xf, y, z&0xf, b.self.GetStateId())
+
+	oldTile, hasOld := world.GetTile(b.position)
+	if hasOld {
+		if !b.idInfo.HasTile() || !b.idInfo.IsTileType(oldTile) {
+			oldTile.Close()
+			hasOld = false
+		} else if spawnable, ok := oldTile.(interface{ ClearSpawnCompoundCache() }); ok {
+			spawnable.ClearSpawnCompoundCache() // destroy old network cache
+		}
+	}
+	if !hasOld && b.idInfo.HasTile() {
+		if tileWorld, ok := world.(tile.World); ok {
+			if t, ok := b.idInfo.NewTileInstance(tileWorld, b.position.Vector3); ok {
+				world.AddTile(t)
+			}
+		}
+	}
+}
+
+// tileAt is $this->position->getWorld()->getTile($this->position), for WriteStateToWorld and
+// ReadStateFromWorld overrides.
+func (b *Block) tileAt() (Tile, bool) {
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return nil, false
+	}
+	return world.GetTile(b.position)
+}
+
 // SetPosition is the Go equivalent of the internal position() method.
 func (b *Block) SetPosition(world World, x, y, z int) {
 	b.position = NewPosition(float64(x), float64(y), float64(z), world)
@@ -323,13 +366,15 @@ func (b *Block) IsSolid() bool { return true }
 func (b *Block) CanBeFlowedInto() bool { return false }
 func (b *Block) CanClimb() bool        { return false }
 
-// GetDrops mirrors Block::getDrops(). The PHP original also checks
-// `$item->hasEnchantment(VanillaEnchantments::SILK_TOUCH())` before taking the silk-touch branch;
-// Item doesn't expose enchantment queries yet (the enchantment package isn't ported), so the
-// silk-touch branch is never taken here until that's wired up.
-// enchantedItem is the part of item.Item the silk touch checks need.
+// enchantedItem is the part of item.Item the enchantment checks need.
 type enchantedItem interface {
 	HasEnchantment(e enchantment.Enchantment, level int) bool
+}
+
+// hasEnchantment is `$item->hasEnchantment($enchantment)`.
+func hasEnchantment(it Item, e enchantment.Enchantment) bool {
+	enchanted, ok := it.(enchantedItem)
+	return ok && enchanted.HasEnchantment(e, -1)
 }
 
 func hasSilkTouch(it Item) bool {
@@ -358,42 +403,47 @@ func GetXpDropForTool(blk Behavior, item Item) int {
 }
 
 // GetDropsForCompatibleTool/GetSilkTouchDrops are ports of Block's defaults, both matching PHP's
-// `return [$this->asItem()];`. AsItem() errors when NewItemBlockFunc is nil (the item package
+// `return [$this->asItem()];` (through self, so asItem() overrides apply). AsItem() errors when
+// NewItemBlockFunc is nil (the item package
 // isn't linked into the running program - notably, block's own test suite never can: item already
 // imports block, so block's internal tests importing item back would be a real Go import cycle);
 // on error these just fall back to no drops, exactly like their previous permanent stub did,
 // rather than panicking over a condition that's normal for those tests.
 func (b *Block) GetDropsForCompatibleTool(item Item) []Item {
-	asItem, err := b.AsItem()
-	if err != nil {
-		return nil
-	}
-	return []Item{asItem}
+	return itemDrops(asItemOrNil(b.self))
 }
 
 func (b *Block) GetDropsForIncompatibleTool(item Item) []Item { return nil }
 
 func (b *Block) GetSilkTouchDrops(item Item) []Item {
-	asItem, err := b.AsItem()
-	if err != nil {
-		return nil
-	}
-	return []Item{asItem}
+	return itemDrops(asItemOrNil(b.self))
 }
 
 func (b *Block) GetXpDropAmount() int { return 0 }
 
 func (b *Block) IsAffectedBySilkTouch() bool { return false }
 
-// GetPickedItem is a simplified port of Block::getPickedItem(): the addUserData branch (copying a
-// tile's cleaned NBT onto the item) is skipped, since the Tile marker interface doesn't expose
-// GetCleanedNBT yet - same gap category as everywhere else Tile is too narrow. See
-// GetDropsForCompatibleTool's doc comment for why AsItem() failing falls back to nil rather than
-// panicking.
+// GetPickedItem is a port of Block::getPickedItem (see GetDropsForCompatibleTool's doc comment
+// for why a failing asItem() gives nil rather than panicking).
 func (b *Block) GetPickedItem(addUserData bool) Item {
-	asItem, err := b.AsItem()
-	if err != nil {
+	asItem := asItemOrNil(b.self)
+	if asItem == nil {
 		return nil
+	}
+	if addUserData {
+		if t, ok := b.tileAt(); ok {
+			if cleaned, ok := t.(interface{ GetCleanedNBT() *nbt.CompoundTag }); ok {
+				if tag := cleaned.GetCleanedNBT(); tag != nil {
+					if dataItem, ok := asItem.(interface {
+						SetCustomBlockData(compound *nbt.CompoundTag)
+						SetLore(lines []string)
+					}); ok {
+						dataItem.SetCustomBlockData(tag)
+						dataItem.SetLore([]string{"+(DATA)"})
+					}
+				}
+			}
+		}
 	}
 	return asItem
 }
@@ -484,4 +534,19 @@ func (b *Block) CalculateIntercept(pos1, pos2 math.Vector3) (math.RayTraceResult
 	}
 
 	return currentHit, found
+}
+
+// asTileItem converts an item held by a block to the tile package's Item (nil for none): every real
+// item implements it.
+func asTileItem(it any) tile.Item {
+	if it == nil {
+		return nil
+	}
+	if nuller, ok := it.(interface{ IsNull() bool }); ok && nuller.IsNull() {
+		return nil
+	}
+	if ti, ok := it.(tile.Item); ok {
+		return ti
+	}
+	return nil
 }

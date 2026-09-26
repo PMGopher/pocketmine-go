@@ -77,8 +77,8 @@ func TestSoulFireBreaksWithoutSoulSandOrSoulSoil(t *testing.T) {
 
 	s.OnNearbyBlockChange()
 
-	if len(w.breakCalls) != 1 {
-		t.Fatalf("expected UseBreakOn to be called once, got %d", len(w.breakCalls))
+	if w.lastSetBlock == nil || w.lastSetBlock.GetTypeId() != AIR {
+		t.Fatalf("expected the soul fire to be replaced with air, got %v", w.lastSetBlock)
 	}
 }
 

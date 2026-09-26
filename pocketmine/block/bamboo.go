@@ -129,15 +129,27 @@ func (b *Bamboo) seekToTop() *Bamboo {
 	return top
 }
 
-// OnInteract's fertilizer/bamboo-item-driven grow needs Fertilizer/item.Bamboo item markers, not
-// ported yet. Block's default OnInteract (return false) already matches this gap, so there's
-// nothing to override here.
+// OnInteract is a port of Bamboo::onInteract: bone meal grows 1-2 blocks up to the natural
+// height, a bamboo item grows 1 block with no height limit.
+func (b *Bamboo) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if isFertilizer(item) {
+		top := b.seekToTop()
+		topPos := top.position
+		if top.grow(bambooMaxHeight(topPos.FloorX(), topPos.FloorZ()), mtRand(1, 2), player) {
+			item.Pop()
+			return true
+		}
+	} else if item.GetTypeId() == itemTypeIDsBamboo {
+		if b.seekToTop().grow(int(^uint(0)>>1), 1, player) {
+			item.Pop()
+			return true
+		}
+	}
+	return false
+}
 
-// grow is a port of Bamboo::grow. Only ever called with a nil player currently (OnRandomTick,
-// below) - OnInteract's player-driven grow needs a Fertilizer item marker not ported yet, same as
-// everywhere else that gap shows up, so this doesn't take a player parameter until something
-// actually needs to pass one.
-func (b *Bamboo) grow(maxHeight int, growAmount int) bool {
+// grow is a port of Bamboo::grow.
+func (b *Bamboo) grow(maxHeight int, growAmount int, player Player) bool {
 	world, err := b.position.GetWorld()
 	if err != nil {
 		return false
@@ -199,7 +211,7 @@ func (b *Bamboo) grow(maxHeight int, growAmount int) bool {
 		tx.AddBlockAt(pos.FloorX(), pos.FloorY()-(idx-growAmount), pos.FloorZ(), newBlock)
 	}
 
-	ev := blockevent.NewStructureGrowEvent(b.self, tx, nil)
+	ev := blockevent.NewStructureGrowEvent(b.self, tx, eventPlayer(player))
 	event.Call(ev)
 	if ev.IsCancelled() {
 		return false
@@ -219,7 +231,7 @@ func (b *Bamboo) OnRandomTick() {
 		b.Ready = false
 		pos := b.position.AsVector3()
 		maxHeight := bambooMaxHeight(pos.FloorX(), pos.FloorZ())
-		if world.GetFullLightAt(pos.FloorX(), pos.FloorY(), pos.FloorZ()) < 9 || !b.grow(maxHeight, 1) {
+		if world.GetFullLightAt(pos.FloorX(), pos.FloorY(), pos.FloorZ()) < 9 || !b.grow(maxHeight, 1, nil) {
 			if err := world.SetBlock(b.position, b.self); err != nil {
 				panic(err)
 			}
@@ -231,6 +243,3 @@ func (b *Bamboo) OnRandomTick() {
 		}
 	}
 }
-
-// AsItem should return VanillaItems.BAMBOO() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.

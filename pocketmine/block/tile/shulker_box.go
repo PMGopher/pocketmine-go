@@ -7,14 +7,8 @@ import (
 
 const ShulkerBoxTagFacing = "facing"
 
-// ShulkerBox is a port of pocketmine\block\tile\ShulkerBox, minus its inventory/Container half -
-// see ContainerComponent's doc comment for why the inventory package can't be imported here.
-// Facing, name, and lock are all fully real.
-//
-// onBlockDestroyedHook is overridden as a no-op in the PHP original (shulker boxes retain their
-// contents when destroyed, unlike other containers) - moot here anyway since
-// ContainerComponent's onBlockDestroyedHook isn't ported for any container tile (see its doc
-// comment), so there's nothing to override.
+// ShulkerBox is a port of pocketmine\block\tile\ShulkerBox. Unlike other containers it keeps its
+// contents when destroyed (its onBlockDestroyedHook is a no-op): they go into the dropped item.
 type ShulkerBox struct {
 	SpawnableBase
 	NameableComponent
@@ -42,14 +36,34 @@ func (s *ShulkerBox) SetFacing(facing int) { s.Facing = facing }
 
 func (s *ShulkerBox) ReadSaveData(tag *nbt.CompoundTag) error {
 	s.LoadName(tag)
+	s.loadItems(s, tag)
 	s.Facing = int(tag.GetByteOr(ShulkerBoxTagFacing, nbt.ByteTag(s.Facing)))
 	return nil
 }
 
 func (s *ShulkerBox) WriteSaveData(tag *nbt.CompoundTag) {
 	s.SaveName(tag)
+	s.saveItems(s, tag)
 	tag.SetByte(ShulkerBoxTagFacing, nbt.ByteTag(s.Facing))
 }
+
+// GetCleanedNBT is a port of ShulkerBox::getCleanedNBT: the facing isn't kept in the item.
+func (s *ShulkerBox) GetCleanedNBT() *nbt.CompoundTag {
+	tag := s.TileBase.GetCleanedNBT()
+	if tag != nil {
+		tag.RemoveTag(ShulkerBoxTagFacing)
+	}
+	return tag
+}
+
+// GetInventory is a port of ShulkerBox::getInventory.
+func (s *ShulkerBox) GetInventory() Inventory { return s.realInventory(s) }
+
+// GetRealInventory is a port of ShulkerBox::getRealInventory.
+func (s *ShulkerBox) GetRealInventory() Inventory { return s.realInventory(s) }
+
+// CloseHook is ShulkerBox::close's removal of the inventory's viewers.
+func (s *ShulkerBox) CloseHook() { s.removeAllViewers() }
 
 func (s *ShulkerBox) AddAdditionalSpawnData(tag *nbt.CompoundTag) {
 	tag.SetByte(ShulkerBoxTagFacing, nbt.ByteTag(s.Facing))

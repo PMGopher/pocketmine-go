@@ -5,6 +5,9 @@ package convert
 import (
 	"sync"
 
+	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/nbt"
+
 	"pocketmine-go/pocketmine/data/bedrock"
 	ids "pocketmine-go/pocketmine/data/bedrock/block"
 	blockconvert "pocketmine-go/pocketmine/data/bedrock/block/convert"
@@ -87,3 +90,17 @@ func (t *BlockTranslator) GetFallbackStateData() bedrock.BlockStateData { return
 
 // FallbackStateID returns the network runtime ID of GetFallbackStateData.
 func (t *BlockTranslator) FallbackStateID() int32 { return t.fallbackStateID }
+
+var (
+	hookTranslatorOnce sync.Once
+	hookTranslator     *BlockTranslator
+)
+
+// init gives the tile package TypeConverter::getInstance()->getBlockTranslator()
+// ->internalIdToNetworkStateData() for FlowerPot's spawn data.
+func init() {
+	tile.NetworkBlockStateNbtFunc = func(b tile.Block) *nbt.CompoundTag {
+		hookTranslatorOnce.Do(func() { hookTranslator = NewBlockTranslator() })
+		return hookTranslator.InternalIDToNetworkStateData(b.GetStateId()).ToNbt()
+	}
+}

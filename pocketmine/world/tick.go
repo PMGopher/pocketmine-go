@@ -1,17 +1,22 @@
 package world
 
 import (
+	"fmt"
 	stdmath "math"
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/event"
 	blockevent "pocketmine-go/pocketmine/event/block"
+	worldevent "pocketmine-go/pocketmine/event/world"
+	"pocketmine-go/pocketmine/nbt"
+	"pocketmine-go/pocketmine/network/mcpe/convert"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/format"
-	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 )
 
 // Time-of-day constants, a port of World::TIME_DAY/TIME_NOON/TIME_SUNSET/TIME_NIGHT/
@@ -359,11 +364,19 @@ func (w *World) unloadChunk(chunkX, chunkZ int, safe bool) bool {
 		return false
 	}
 
-	if w.provider != nil {
-		if err := worldio.SaveChunk(w.provider, int32(chunkX), int32(chunkZ), chunk, w.lookupBlockState); err != nil {
+	if event.HasHandlers[worldevent.ChunkUnloadEvent]() {
+		ev := worldevent.NewChunkUnloadEvent(w, chunkX, chunkZ, chunk)
+		event.Call(ev)
+		if ev.IsCancelled() {
 			return false
 		}
-		if err := worldio.SaveEntities(w.provider, int32(chunkX), int32(chunkZ), w.saveChunkEntities(chunkX, chunkZ)); err != nil {
+	}
+
+	if w.provider != nil && w.autoSave {
+		if err := w.provider.SaveChunk(chunkX, chunkZ, w.chunkData(chunkX, chunkZ, chunk), chunk.GetTerrainDirtyFlags()); err != nil {
+			if w.logger != nil {
+				w.logger.Error(fmt.Sprintf("Failed to save chunk x=%d z=%d: %v", chunkX, chunkZ, err))
+			}
 			return false
 		}
 	}
@@ -525,23 +538,51 @@ func (w *World) sendChangedBlocks() {
 	w.changedBlocks = nil
 }
 
-// CreateBlockUpdatePackets is a port of World::createBlockUpdatePackets. Not ported: the tile
-// parts (the render-update workaround state and BlockActorDataPacket), since tiles aren't sent to
-// clients yet.
+// CreateBlockUpdatePackets is a port of World::createBlockUpdatePackets.
 func (w *World) CreateBlockUpdatePackets(blocks []math.Vector3) []packet.Packet {
 	packets := make([]packet.Packet, 0, len(blocks))
 	for _, b := range blocks {
 		x, y, z := b.FloorX(), b.FloorY(), b.FloorZ()
-		stateID := int32(block.VanillaAir().GetStateId())
-		if chunk := w.generateChunkOnly(x>>4, z>>4); chunk != nil {
-			stateID = chunk.GetBlockStateID(x&0xf, y, z&0xf)
+		fullBlock := w.GetBlockAt(x, y, z)
+		blockPosition := protocol.BlockPos{int32(x), int32(y), int32(z)}
+
+		t, hasTile := w.GetTileAt(x, y, z)
+		var spawnCompound *nbt.CompoundTag
+		if hasTile {
+			spawnCompound, hasTile = tile.SerializedSpawnCompound(t)
+		}
+		if idInfo, ok := fullBlock.(interface{ GetIdInfo() *block.BlockIdentifier }); hasTile && ok && idInfo.GetIdInfo().IsTileType(t) {
+			if fakeStateProperties := tile.RenderUpdateBugWorkaroundStateProperties(t, fullBlock); len(fakeStateProperties) > 0 {
+				originalStateData := w.translator.InternalIDToNetworkStateData(fullBlock.GetStateId())
+				states := make(map[string]any, len(originalStateData.States)+len(fakeStateProperties))
+				for k, v := range originalStateData.States {
+					states[k] = v
+				}
+				for k, v := range fakeStateProperties {
+					states[k] = v
+				}
+				fakeID, ok := bedrock.RuntimeIDFor(originalStateData.Name, states)
+				if !ok {
+					panic(fmt.Sprintf("Unmapped fake blockstate data: %s %v", originalStateData.Name, states))
+				}
+				packets = append(packets, &packet.UpdateBlock{
+					Position:          blockPosition,
+					NewBlockRuntimeID: uint32(fakeID),
+					Flags:             packet.BlockUpdateNetwork,
+					Layer:             0, // UpdateBlockPacket::DATA_LAYER_NORMAL
+				})
+			}
 		}
 		packets = append(packets, &packet.UpdateBlock{
-			Position:          protocol.BlockPos{int32(x), int32(y), int32(z)},
-			NewBlockRuntimeID: uint32(w.translator.NetworkIDForCachedState(stateID)),
+			Position:          blockPosition,
+			NewBlockRuntimeID: uint32(w.translator.InternalIDToNetworkID(fullBlock.GetStateId())),
 			Flags:             packet.BlockUpdateNetwork,
 			Layer:             0, // UpdateBlockPacket::DATA_LAYER_NORMAL
 		})
+
+		if hasTile {
+			packets = append(packets, &packet.BlockActorData{Position: blockPosition, NBTData: convert.NbtToMap(spawnCompound)})
+		}
 	}
 	return packets
 }

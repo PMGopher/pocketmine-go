@@ -50,13 +50,40 @@ func (t *TallGrass) GetFlameEncouragement() int { return 60 }
 
 func (t *TallGrass) GetFlammability() int { return 100 }
 
-// GetDropsForIncompatibleTool's wheat-seed chance (TallGrassTrait, via FortuneDropHelper) needs
-// the unported item package for real Item construction - see Gravel's GetDropsForCompatibleTool
-// doc comment for the same category of gap - so this returns nil for now.
-func (t *TallGrass) GetDropsForIncompatibleTool(item Item) []Item { return nil }
+// GetDropsForIncompatibleTool is a port of TallGrassTrait::getDropsForIncompatibleTool.
+func (t *TallGrass) GetDropsForIncompatibleTool(item Item) []Item {
+	return tallGrassDropsForIncompatibleTool(item)
+}
 
-// OnInteract should grow into DoublePlantVariant when fertilized - needs a Fertilizer item
-// marker, not ported yet, so this is a no-op for now (same gap category as Azalea's OnInteract).
+// tallGrassDropsForIncompatibleTool is TallGrassTrait::getDropsForIncompatibleTool.
+func tallGrassDropsForIncompatibleTool(item Item) []Item {
+	if FortuneBonusChanceDivisor(item, 8, 2) {
+		return itemDrops(vanillaItem("wheat_seeds"))
+	}
+	return nil
+}
+
+// OnInteract is a port of TallGrass::onInteract: bone meal grows it into its double plant.
 func (t *TallGrass) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	world, err := t.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	upX, upY, upZ := t.position.FloorX(), t.position.FloorY()+1, t.position.FloorZ()
+	if !world.IsInWorld(upX, upY, upZ) || t.self.(blockGeometry).GetSide(math.Up, 1).GetTypeId() != AIR {
+		return false
+	}
+	if item.GetTypeId() == itemTypeIDsBoneMeal && t.DoublePlantVariant != nil {
+		if doubleVariant := t.DoublePlantVariant(); doubleVariant != nil {
+			bottom := doubleVariant.Clone()
+			bottom.(interface{ SetTop(bool) }).SetTop(false)
+			top := doubleVariant.Clone()
+			top.(interface{ SetTop(bool) }).SetTop(true)
+			_ = world.SetBlock(t.position, bottom)
+			_ = world.SetBlock(NewPosition(float64(upX), float64(upY), float64(upZ), world), top)
+			item.Pop()
+			return true
+		}
+	}
 	return false
 }

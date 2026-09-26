@@ -1,11 +1,6 @@
 package block
 
 // Carrot is a port of pocketmine\block\Carrot.
-//
-// GetDropsForCompatibleTool/AsItem should return VanillaItems.CARROT() (scaled via
-// FortuneDropHelper when mature) — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so both are left as Crops'/Block's defaults for
-// now.
 type Carrot struct {
 	Crops
 }
@@ -23,4 +18,13 @@ func (c *Carrot) Clone() Behavior {
 	cl := *c
 	cl.rebind(&cl)
 	return &cl
+}
+
+// GetDropsForCompatibleTool is a port of Carrot::getDropsForCompatibleTool.
+func (c *Carrot) GetDropsForCompatibleTool(item Item) []Item {
+	count := 1
+	if c.Age >= CropsMaxAge {
+		count = FortuneBinomial(item, 1, 3, 4.0/7)
+	}
+	return itemDrops(vanillaItemCount("carrot", count))
 }

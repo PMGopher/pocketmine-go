@@ -5,9 +5,7 @@ import (
 	"pocketmine-go/pocketmine/nbt"
 )
 
-// Barrel is a port of pocketmine\block\tile\Barrel, minus its inventory/Container half - see
-// ContainerComponent's doc comment for why the inventory package can't be imported here. Name and
-// lock are fully real; there's no other state to port.
+// Barrel is a port of pocketmine\block\tile\Barrel.
 type Barrel struct {
 	SpawnableBase
 	NameableComponent
@@ -29,10 +27,26 @@ func (b *Barrel) GetName() string { return b.NameableComponent.GetName(b) }
 
 func (b *Barrel) ReadSaveData(tag *nbt.CompoundTag) error {
 	b.LoadName(tag)
+	b.loadItems(b, tag)
 	return nil
 }
 
-func (b *Barrel) WriteSaveData(tag *nbt.CompoundTag) { b.SaveName(tag) }
+func (b *Barrel) WriteSaveData(tag *nbt.CompoundTag) {
+	b.SaveName(tag)
+	b.saveItems(b, tag)
+}
+
+// OnBlockDestroyedHook is ContainerTrait::onBlockDestroyedHook.
+func (b *Barrel) OnBlockDestroyedHook() { b.dropContents(b) }
+
+// GetInventory is a port of Barrel::getInventory.
+func (b *Barrel) GetInventory() Inventory { return b.realInventory(b) }
+
+// GetRealInventory is a port of Barrel::getRealInventory.
+func (b *Barrel) GetRealInventory() Inventory { return b.realInventory(b) }
+
+// CloseHook is Barrel::close's removal of the inventory's viewers.
+func (b *Barrel) CloseHook() { b.removeAllViewers() }
 
 // CopyDataFromItem must be defined here rather than relying on promotion - see
 // NameableComponent.ApplyItemCustomName's doc comment for why.

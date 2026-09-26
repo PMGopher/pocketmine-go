@@ -79,6 +79,3 @@ func (t *TorchflowerCrop) OnRandomTick() {
 		Grow(t.self, t.getNextState(), nil)
 	}
 }
-
-// AsItem should return VanillaItems.TORCHFLOWER_SEEDS() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.

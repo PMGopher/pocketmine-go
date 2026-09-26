@@ -19,10 +19,10 @@ func (l *LapisOre) Clone() Behavior {
 	return &c
 }
 
-// GetDropsForCompatibleTool should return lapis lazuli scaled via FortuneDropHelper — needs real
-// Item construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (l *LapisOre) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of LapisOre::getDropsForCompatibleTool.
+func (l *LapisOre) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("lapis_lazuli", FortuneWeighted(item, 4, 9)))
+}
 
 func (l *LapisOre) IsAffectedBySilkTouch() bool { return true }
 

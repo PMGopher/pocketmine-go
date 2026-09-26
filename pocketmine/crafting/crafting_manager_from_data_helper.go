@@ -14,7 +14,6 @@ import (
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
-	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 )
 
 // SavedDataLoadingError is pocketmine\data\SavedDataLoadingException for recipe data.
@@ -92,7 +91,7 @@ func deserializeItemStackFromFields(name string, meta, count *int, blockStatesRa
 			if !ok {
 				return nil, &SavedDataLoadingError{Message: fmt.Sprintf("block states for %s aren't a compound", name)}
 			}
-			if states, err = worldio.BlockStatesFromNBT(tag); err != nil {
+			if states, err = bedrock.BlockStatesFromNbt(tag); err != nil {
 				return nil, &SavedDataLoadingError{Message: fmt.Sprintf("invalid block states for %s: %v", name, err)}
 			}
 		}

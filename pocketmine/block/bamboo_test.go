@@ -71,7 +71,7 @@ func TestBambooSaplingGrowReplacesSelfAndSpaceAbove(t *testing.T) {
 	placeReplaceableAt(w, 1, 3, 3)
 	b := newTestBambooSapling(w)
 
-	if !b.grow() {
+	if !b.grow(nil) {
 		t.Fatal("expected grow to succeed")
 	}
 	if len(w.setCalls) != 2 {
@@ -99,7 +99,7 @@ func TestBambooSaplingGrowFailsWhenSpaceAboveIsNotReplaceable(t *testing.T) {
 	w := newBTWorld()
 	b := newTestBambooSapling(w)
 
-	if b.grow() {
+	if b.grow(nil) {
 		t.Error("expected grow to fail without replaceable space above")
 	}
 	if len(w.setCalls) != 0 {
@@ -155,7 +155,7 @@ func TestBambooGrowFromHeightOneAddsOneSmallLeavesBlockAbove(t *testing.T) {
 	placeReplaceableAt(w, 1, 3, 3) // space above must be replaceable
 	b := newTestBambooForGrow(w)
 
-	if !b.grow(12, 1) {
+	if !b.grow(12, 1, nil) {
 		t.Fatal("expected grow to succeed")
 	}
 	if len(w.setCalls) != 1 {
@@ -177,7 +177,7 @@ func TestBambooGrowFailsWhenSpaceAboveIsNotReplaceable(t *testing.T) {
 	w := newBTWorld() // default filler above is not replaceable
 	b := newTestBambooForGrow(w)
 
-	if b.grow(12, 1) {
+	if b.grow(12, 1, nil) {
 		t.Error("expected grow to fail without replaceable space above")
 	}
 	if len(w.setCalls) != 0 {
@@ -194,7 +194,7 @@ func TestBambooGrowFailsAtMaxHeight(t *testing.T) {
 	w.blocks[[3]int{1, 1, 3}] = below
 	b := newTestBambooForGrow(w)
 
-	if b.grow(2, 1) {
+	if b.grow(2, 1, nil) {
 		t.Error("expected grow to fail once the stack reaches maxHeight")
 	}
 	if len(w.setCalls) != 0 {

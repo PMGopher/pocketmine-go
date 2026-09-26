@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -52,11 +53,6 @@ type HumanHooks interface {
 }
 
 // Human is a port of pocketmine\entity\Human (also PHP's ProjectileSource and InventoryHolder).
-//
-// Not ported: persisting inventory contents (the Inventory/OffHandItem/EnderChestInventory NBT) -
-// that needs Item::nbtSerialize/nbtDeserialize, i.e. GlobalItemDataHandlers' item
-// serializer/deserializer registry, which isn't ported. Everything else Human saves (food, XP,
-// selected slot, skin) is.
 type Human struct {
 	Living
 
@@ -248,7 +244,33 @@ func (h *Human) InitEntity(tag *nbt.CompoundTag) {
 	h.enderInventory = inventory.NewPlayerEnderInventory(h.hself, 27)
 	h.hself.InitHumanData(tag)
 
-	// Inventory/OffHandItem/EnderChestInventory contents aren't loaded - see Human's doc comment.
+	if inventoryTag, ok, _ := tag.GetListTag(tagInventory); ok {
+		inventoryItems := map[int]item.Item{}
+		armorInventoryItems := map[int]item.Item{}
+		for _, t := range inventoryTag.Values() {
+			itemTag, ok := t.(*nbt.CompoundTag)
+			if !ok {
+				continue
+			}
+			slot := int(itemTag.GetByteOr("Slot", 0))
+			switch {
+			case slot >= 0 && slot < 9: // Hotbar
+				// Old hotbar saving stuff, ignore it
+			case slot >= 100 && slot < 104: // Armor
+				armorSlot := slot - 100
+				armorInventoryItems[armorSlot] = item.SafeNbtDeserialize(itemTag, fmt.Sprintf("Human armor slot %d", armorSlot), nil)
+			case slot >= 9 && slot < h.inventory.GetSize()+9:
+				inventorySlot := slot - 9
+				inventoryItems[inventorySlot] = item.SafeNbtDeserialize(itemTag, fmt.Sprintf("Human inventory slot %d", inventorySlot), nil)
+			}
+		}
+		populateInventoryFromListTag(h.inventory, inventoryItems)
+		populateInventoryFromListTag(h.armorInventory, armorInventoryItems)
+	}
+
+	if offHand, ok, _ := tag.GetCompoundTag(tagOffHandItem); ok {
+		h.offHandInventory.SetItem(0, item.SafeNbtDeserialize(offHand, "Human off-hand item", nil))
+	}
 
 	h.offHandInventory.GetListeners().Add(inventory.OnAnyChange(func(inventory.Inventory) {
 		BroadcastPackets(h.GetViewers(), mobOffHandItemChangePacket(h))
@@ -261,6 +283,19 @@ func (h *Human) InitEntity(tag *nbt.CompoundTag) {
 		selectedSlot = 0
 	}
 	h.inventory.SetHeldItemIndex(selectedSlot)
+	if enderTag, ok, _ := tag.GetListTag(tagEnderChestInventory); ok {
+		enderChestInventoryItems := map[int]item.Item{}
+		for _, t := range enderTag.Values() {
+			itemTag, ok := t.(*nbt.CompoundTag)
+			if !ok {
+				continue
+			}
+			slot := int(itemTag.GetByteOr("Slot", 0))
+			enderChestInventoryItems[slot] = item.SafeNbtDeserialize(itemTag, fmt.Sprintf("Human ender chest slot %d", slot), nil)
+		}
+		populateInventoryFromListTag(h.enderInventory, enderChestInventoryItems)
+	}
+
 	onHeldItemIndexChange := inventory.HeldItemIndexChangeListener(func(int) { syncHeldItem() })
 	h.inventory.GetHeldItemIndexChangeListeners().Add(&onHeldItemIndexChange)
 
@@ -388,7 +423,46 @@ func (h *Human) SaveNBT() *nbt.CompoundTag {
 	tag.SetInt(tagLifetimeXpTotal, nbt.IntTag(h.xpManager.GetLifetimeTotalXp()))
 	tag.SetInt(tagXpSeed, nbt.IntTag(h.xpSeed))
 
+	var inventoryTags []nbt.Tag
+	// Normal inventory
+	hotbarSize := h.inventory.GetHotbarSize()
+	slotCount := h.inventory.GetSize() + hotbarSize
+	for slot := hotbarSize; slot < slotCount; slot++ {
+		if it := h.inventory.GetItem(slot - 9); !it.IsNull() {
+			if itemTag, err := item.NbtSerialize(it, slot); err == nil {
+				inventoryTags = append(inventoryTags, itemTag)
+			}
+		}
+	}
+	// Armor
+	for slot := 100; slot < 104; slot++ {
+		if it := h.armorInventory.GetItem(slot - 100); !it.IsNull() {
+			if itemTag, err := item.NbtSerialize(it, slot); err == nil {
+				inventoryTags = append(inventoryTags, itemTag)
+			}
+		}
+	}
+	inventoryList, _ := nbt.NewListTag(inventoryTags, nbt.TagCompound)
+	tag.SetTag(tagInventory, inventoryList)
+
 	tag.SetInt(tagSelectedInventorySlot, nbt.IntTag(h.inventory.GetHeldItemIndex()))
+
+	if offHandItem := h.offHandInventory.GetItem(0); !offHandItem.IsNull() {
+		if itemTag, err := item.NbtSerialize(offHandItem, -1); err == nil {
+			tag.SetTag(tagOffHandItem, itemTag)
+		}
+	}
+
+	var enderTags []nbt.Tag
+	for slot := 0; slot < h.enderInventory.GetSize(); slot++ {
+		if it := h.enderInventory.GetItem(slot); !it.IsNull() {
+			if itemTag, err := item.NbtSerialize(it, slot); err == nil {
+				enderTags = append(enderTags, itemTag)
+			}
+		}
+	}
+	enderList, _ := nbt.NewListTag(enderTags, nbt.TagCompound)
+	tag.SetTag(tagEnderChestInventory, enderList)
 
 	tag.SetTag(tagSkin, nbt.NewCompoundTag().
 		SetString(tagSkinName, nbt.StringTag(h.skin.GetSkinID())).
@@ -471,4 +545,13 @@ func (h *Human) OnDispose() {
 	h.offHandInventory.RemoveAllViewers()
 	h.enderInventory.RemoveAllViewers()
 	h.Living.OnDispose()
+}
+
+// populateInventoryFromListTag is a port of Human::populateInventoryFromListTag: sets the contents
+// without notifying the inventory's listeners.
+func populateInventoryFromListTag(inv inventory.Inventory, items map[int]item.Item) {
+	listeners := inv.GetListeners().ToSlice()
+	inv.GetListeners().Clear()
+	inv.SetContents(items)
+	inv.GetListeners().Add(listeners...)
 }

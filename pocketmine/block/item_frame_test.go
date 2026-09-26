@@ -21,9 +21,9 @@ type dualItem struct {
 	fakeItem
 }
 
-func (dualItem) GetCustomBlockData() (*nbt.CompoundTag, bool) { return nil, false }
-func (dualItem) GetNamedTag() *nbt.CompoundTag                { return nbt.NewCompoundTag() }
-func (dualItem) HasCustomName() bool                          { return false }
+func (dualItem) GetCustomBlockData() *nbt.CompoundTag { return nil }
+func (dualItem) GetNamedTag() *nbt.CompoundTag        { return nbt.NewCompoundTag() }
+func (dualItem) HasCustomName() bool                  { return false }
 
 // supportedNeighbor/unsupportedNeighbor are minimal Behaviors distinguished only by GetSupportType,
 // for exercising itemFrameCanBeSupportedAt.
@@ -79,15 +79,32 @@ func TestItemFrameOnInteractRotationWrapsAround(t *testing.T) {
 	}
 }
 
-func TestItemFrameOnInteractDoesNothingWhenEmpty(t *testing.T) {
+func TestItemFrameOnInteractWithEmptyHandDoesNothingWhenEmpty(t *testing.T) {
 	w := &fakeWorld{}
 	i := newTestItemFrame(w)
 
-	if !i.OnInteract(fakeItem{}, math.Up, math.Vector3{}, nil, nil) {
+	if !i.OnInteract(fakeItem{null: true}, math.Up, math.Vector3{}, nil, nil) {
 		t.Fatal("expected OnInteract to return true even when empty")
 	}
 	if w.lastSetBlock != nil {
-		t.Error("expected no state change when the frame is empty (insertion isn't ported)")
+		t.Error("expected no state change when clicking an empty frame with an empty hand")
+	}
+}
+
+func TestItemFrameOnInteractInsertsHeldItem(t *testing.T) {
+	w := &fakeWorld{}
+	i := newTestItemFrame(w)
+	old := PopItemFunc
+	PopItemFunc = func(it Item, count int) Item { return fakeItem{typeID: 42, count: count} }
+	t.Cleanup(func() { PopItemFunc = old })
+
+	i.OnInteract(fakeItem{typeID: 42, count: 5}, math.Up, math.Vector3{}, nil, nil)
+
+	if i.FramedItem == nil || i.FramedItem.GetTypeId() != 42 {
+		t.Errorf("FramedItem = %v, want the popped held item", i.FramedItem)
+	}
+	if w.lastSetBlock == nil {
+		t.Error("expected the frame to be updated in the world")
 	}
 }
 

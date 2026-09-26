@@ -1,8 +1,9 @@
 package blockutils
 
-// RecordType is a port of pocketmine\block\utils\RecordType. GetTranslatableName isn't ported -
-// it needs KnownTranslationFactory, a generated translation-string file not part of this port
-// yet. GetSoundId is deprecated in the PHP original too and always returns 0.
+import "pocketmine-go/pocketmine/lang"
+
+// RecordType is a port of pocketmine\block\utils\RecordType. GetSoundId is deprecated in the PHP
+// original too and always returns 0.
 type RecordType int
 
 const (
@@ -55,3 +56,31 @@ func (t RecordType) GetSoundName() string { return recordTypeSoundNames[t] }
 
 // GetSoundId is deprecated in the PHP original and always returns 0.
 func (t RecordType) GetSoundId() int { return 0 }
+
+var recordTypeTranslationKeys = map[RecordType]string{
+	RecordTypeDisk13:              lang.KeyItemRecord13Desc,
+	RecordTypeDisk5:               lang.KeyItemRecord5Desc,
+	RecordTypeDiskCat:             lang.KeyItemRecordCatDesc,
+	RecordTypeDiskBlocks:          lang.KeyItemRecordBlocksDesc,
+	RecordTypeDiskChirp:           lang.KeyItemRecordChirpDesc,
+	RecordTypeDiskCreator:         lang.KeyItemRecordCreatorDesc,
+	RecordTypeDiskCreatorMusicBox: lang.KeyItemRecordCreatorMusicBoxDesc,
+	RecordTypeDiskFar:             lang.KeyItemRecordFarDesc,
+	RecordTypeDiskLavaChicken:     lang.KeyItemRecordLavaChickenDesc,
+	RecordTypeDiskMall:            lang.KeyItemRecordMallDesc,
+	RecordTypeDiskMellohi:         lang.KeyItemRecordMellohiDesc,
+	RecordTypeDiskOtherside:       lang.KeyItemRecordOthersideDesc,
+	RecordTypeDiskPigstep:         lang.KeyItemRecordPigstepDesc,
+	RecordTypeDiskPrecipice:       lang.KeyItemRecordPrecipiceDesc,
+	RecordTypeDiskRelic:           lang.KeyItemRecordRelicDesc,
+	RecordTypeDiskStal:            lang.KeyItemRecordStalDesc,
+	RecordTypeDiskStrad:           lang.KeyItemRecordStradDesc,
+	RecordTypeDiskWard:            lang.KeyItemRecordWardDesc,
+	RecordTypeDisk11:              lang.KeyItemRecord11Desc,
+	RecordTypeDiskWait:            lang.KeyItemRecordWaitDesc,
+}
+
+// GetTranslatableName is a port of RecordType::getTranslatableName.
+func (t RecordType) GetTranslatableName() *lang.Translatable {
+	return lang.NewTranslatable(recordTypeTranslationKeys[t], nil)
+}

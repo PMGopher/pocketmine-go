@@ -35,9 +35,7 @@ const (
 //
 // spawnPotentials/spawnData are kept as raw NBT (not deserialized into a structured form) -
 // matching the PHP original's own TODOs, which note PC/PE formats differ and full deserialization
-// isn't implemented upstream either. The legacy numeric EntityId tag needs
-// LegacyEntityIdToStringIdMap (an unported data table), so that branch falls back to the default
-// entity type ID, documented below.
+// isn't implemented upstream either.
 type MonsterSpawner struct {
 	SpawnableBase
 
@@ -75,14 +73,26 @@ func NewMonsterSpawner(world World, pos math.Vector3) *MonsterSpawner {
 	return m
 }
 
+// LegacyEntityIdToStringFunc is LegacyEntityIdToStringIdMap::getInstance()->legacyToString(), set
+// by world/format/io (this package can't import data/bedrock).
+var LegacyEntityIdToStringFunc func(legacy int) (string, bool)
+
+func isIntTag(t nbt.Tag) bool {
+	_, ok := t.(nbt.IntTag)
+	return ok
+}
+
 func (m *MonsterSpawner) SaveID() string { return "MobSpawner" }
 
 func (m *MonsterSpawner) ReadSaveData(tag *nbt.CompoundTag) error {
-	if _, ok := tag.GetTag(monsterSpawnerTagLegacyEntityTypeID); ok {
-		// TODO: LegacyEntityIdToStringIdMap isn't ported, so this always falls back to the
-		// default entity type ID instead of resolving the legacy numeric ID (same category of
-		// gap as everywhere else an unported data table is needed).
+	if legacyIDTag, ok := tag.GetTag(monsterSpawnerTagLegacyEntityTypeID); ok && isIntTag(legacyIDTag) {
+		// TODO (from PHP): this will cause unexpected results when there's no mapping for the entity
 		m.EntityTypeID = ":"
+		if LegacyEntityIdToStringFunc != nil {
+			if id, ok := LegacyEntityIdToStringFunc(int(legacyIDTag.(nbt.IntTag))); ok {
+				m.EntityTypeID = id
+			}
+		}
 	} else if idTag, ok := tag.GetTag(monsterSpawnerTagEntityTypeID); ok {
 		if strTag, ok := idTag.(nbt.StringTag); ok {
 			m.EntityTypeID = string(strTag)

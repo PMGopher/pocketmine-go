@@ -43,10 +43,26 @@ func (r *RedMushroomBlock) SetMushroomBlockType(mushroomBlockType blockutils.Mus
 
 func (r *RedMushroomBlock) IsAffectedBySilkTouch() bool { return true }
 
-// GetDropsForCompatibleTool should return [VanillaBlocks.RED_MUSHROOM().AsItem().SetCount(mt_rand(0,2))]
-// — needs the unported block registry and real Item construction (see
-// Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-//
-// GetSilkTouchDrops/GetPickedItem have the same gap and already default to nil on Block, so
-// there's nothing to override for them here.
-func (r *RedMushroomBlock) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of RedMushroomBlock::getDropsForCompatibleTool.
+func (r *RedMushroomBlock) GetDropsForCompatibleTool(item Item) []Item {
+	return mushroomDrops("red_mushroom")
+}
+
+// mushroomDrops is VanillaBlocks::X_MUSHROOM()->asItem()->setCount(mt_rand(0, 2)).
+func mushroomDrops(name string) []Item {
+	drop := asItemOrNil(VanillaBlock(name))
+	if drop == nil {
+		return nil
+	}
+	drop.SetCount(mtRand(0, 2))
+	return []Item{drop}
+}
+
+// GetPickedItem is a port of RedMushroomBlock::getPickedItem: always the all-cap variant.
+func (r *RedMushroomBlock) GetPickedItem(addUserData bool) Item {
+	allCap := r.self.Clone()
+	allCap.(interface {
+		SetMushroomBlockType(blockutils.MushroomBlockType)
+	}).SetMushroomBlockType(blockutils.MushroomBlockTypeAllCap)
+	return asItemOrNil(allCap)
+}

@@ -18,11 +18,7 @@ type WritableBookBase interface {
 	PageExists(pageID int) bool
 }
 
-// Lectern is a port of pocketmine\block\Lectern, minus cloning the book on every get/set (block.Item
-// has no Clone() method - same deviation as ItemFrame.GetFramedItem/SetFramedItem) and actually
-// dropping the ejected book into the world on OnAttack (World.DropItem isn't in the ported World
-// interface - see SweetBerryBush's doc comment for the same gap). Turning pages, placement-
-// facing, and the producing-signal state machine are all fully real.
+// Lectern is a port of pocketmine\block\Lectern.
 type Lectern struct {
 	Transparent
 	HorizontalFacingComponent
@@ -103,16 +99,29 @@ func (l *Lectern) GetViewedPage() int { return l.ViewedPage }
 
 func (l *Lectern) SetViewedPage(viewedPage int) { l.ViewedPage = viewedPage }
 
-// GetBook returns the book directly (no defensive clone - see type doc comment).
-func (l *Lectern) GetBook() WritableBookBase { return l.Book }
+// GetBook is a port of Lectern::getBook: a copy of the book, or nil.
+func (l *Lectern) GetBook() WritableBookBase {
+	if l.Book == nil {
+		return nil
+	}
+	if book, ok := cloneItem(l.Book).(WritableBookBase); ok {
+		return book
+	}
+	return l.Book
+}
 
-// SetBook is a port of Lectern::setBook, minus cloning/re-counting the incoming book (see type
-// doc comment).
+// SetBook is a port of Lectern::setBook: stores a copy of one book from the stack.
 func (l *Lectern) SetBook(book WritableBookBase) {
 	if book == nil || book.IsNull() {
 		l.Book = nil
 	} else {
 		l.Book = book
+		if clone, ok := cloneItem(book).(WritableBookBase); ok {
+			if counted, ok := clone.(interface{ SetCount(count int) }); ok {
+				counted.SetCount(1)
+			}
+			l.Book = clone
+		}
 	}
 	l.ViewedPage = 0
 }
@@ -138,10 +147,12 @@ func (l *Lectern) OnInteract(item Item, face math.Facing, clickVector math.Vecto
 	return true
 }
 
-// OnAttack is a port of Lectern::onAttack, minus actually dropping the ejected book into the
-// world (see type doc comment).
+// OnAttack is a port of Lectern::onAttack.
 func (l *Lectern) OnAttack(item Item, face math.Facing, player Player) bool {
 	if l.Book != nil {
+		if world, err := l.position.GetWorld(); err == nil {
+			dropItem(world, l.position.Add(0, 1, 0), l.Book)
+		}
 		l.SetBook(nil)
 		l.setSelf()
 	}
@@ -190,4 +201,15 @@ func (l *Lectern) setSelf() {
 		return
 	}
 	_ = world.SetBlock(l.position, l.self)
+}
+
+// WriteStateToWorld is a port of Lectern::writeStateToWorld.
+func (l *Lectern) WriteStateToWorld() {
+	l.Block.WriteStateToWorld()
+	if t, ok := l.tileAt(); ok {
+		if tileLectern, ok := t.(*tile.Lectern); ok {
+			tileLectern.SetViewedPage(l.ViewedPage)
+			tileLectern.SetBook(asTileItem(l.Book))
+		}
+	}
 }

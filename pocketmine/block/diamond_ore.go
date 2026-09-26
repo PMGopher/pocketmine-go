@@ -19,10 +19,10 @@ func (d *DiamondOre) Clone() Behavior {
 	return &c
 }
 
-// GetDropsForCompatibleTool should return a diamond scaled via FortuneDropHelper — needs real
-// Item construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (d *DiamondOre) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of DiamondOre::getDropsForCompatibleTool.
+func (d *DiamondOre) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("diamond", FortuneWeighted(item, 1, 1)))
+}
 
 func (d *DiamondOre) IsAffectedBySilkTouch() bool { return true }
 

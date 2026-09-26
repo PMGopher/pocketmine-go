@@ -2,6 +2,7 @@ package block
 
 import (
 	"fmt"
+	"reflect"
 
 	"pocketmine-go/pocketmine/block/tile"
 	"pocketmine-go/pocketmine/math"
@@ -26,6 +27,7 @@ type Tile = tile.Tile
 type BlockIdentifier struct {
 	blockTypeID int
 	newTile     TileFactory
+	tileType    reflect.Type
 }
 
 // TileFactory creates the tile of a block (PHP's tile class-string plus `new $tileClass($world, $pos)`).
@@ -49,4 +51,16 @@ func (b *BlockIdentifier) NewTileInstance(world tile.World, pos math.Vector3) (t
 		return nil, false
 	}
 	return b.newTile(world, pos), true
+}
+
+// IsTileType is `$tile instanceof $this->getTileClass()`: whether t is this block type's tile
+// class (same concrete type as the tiles NewTileInstance builds).
+func (b *BlockIdentifier) IsTileType(t Tile) bool {
+	if b.newTile == nil || t == nil {
+		return false
+	}
+	if b.tileType == nil {
+		b.tileType = reflect.TypeOf(b.newTile(nil, math.Vector3{}))
+	}
+	return reflect.TypeOf(t) == b.tileType
 }

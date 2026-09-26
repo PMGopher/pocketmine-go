@@ -19,9 +19,6 @@ const (
 )
 
 // Trident is a port of pocketmine\entity\projectile\Trident.
-//
-// Like ItemEntity, saving the trident item isn't ported (Item::nbtSerialize), so thrown tridents
-// aren't saved with their chunk (CanSaveWithChunk is false).
 type Trident struct {
 	Projectile
 
@@ -59,12 +56,12 @@ func (t *Trident) InitEntity(tag *nbt.CompoundTag) {
 	t.spawnedInCreative = tag.GetByteOr(tagSpawnedInCreative, 0) == 1
 }
 
-// CanSaveWithChunk: see Trident's doc comment.
-func (t *Trident) CanSaveWithChunk() bool { return false }
-
-// SaveNBT is a port of Trident::saveNBT, minus the Trident item tag (see Trident's doc comment).
+// SaveNBT is a port of Trident::saveNBT.
 func (t *Trident) SaveNBT() *nbt.CompoundTag {
 	tag := t.Projectile.SaveNBT()
+	if itemTag, err := item.NbtSerialize(t.item, -1); err == nil {
+		tag.SetTag(TagTridentItem, itemTag)
+	}
 	creative := nbt.ByteTag(0)
 	if t.spawnedInCreative {
 		creative = 1

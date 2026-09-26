@@ -46,9 +46,7 @@ func (l *Lava) getAdjacentBlocksExceptDown() []Behavior {
 	return result
 }
 
-// checkForHarden is a port of Lava::checkForHarden. BLUE_ICE isn't ported as its own singleton
-// yet, so the soul-soil/Basalt branch checks the raw type ID (BLUE_ICE below), matching the PHP
-// original's getTypeId() === BlockTypeIds::BLUE_ICE comparison exactly.
+// checkForHarden is a port of Lava::checkForHarden.
 func (l *Lava) checkForHarden() bool {
 	if l.Falling {
 		return false

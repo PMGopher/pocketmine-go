@@ -23,7 +23,7 @@ func (n *NetherQuartzOre) IsAffectedBySilkTouch() bool { return true }
 
 func (n *NetherQuartzOre) GetXpDropAmount() int { return rand.Intn(4) + 2 } // 2-5
 
-// GetDropsForCompatibleTool's FortuneDropHelper-weighted nether quartz count needs the unported
-// item package for real Item construction (see Gravel's GetDropsForCompatibleTool doc comment for
-// the same category of gap), so this returns nil for now.
-func (n *NetherQuartzOre) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of NetherQuartzOre::getDropsForCompatibleTool.
+func (n *NetherQuartzOre) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("nether_quartz", FortuneWeighted(item, 1, 1)))
+}

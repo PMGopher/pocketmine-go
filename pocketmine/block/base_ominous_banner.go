@@ -1,6 +1,7 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	"pocketmine-go/pocketmine/math"
 )
@@ -8,10 +9,6 @@ import (
 // BaseOminousBanner is a port of pocketmine\block\BaseOminousBanner. Like BaseBanner, this isn't
 // meant to be instantiated directly - a concrete leaf type (OminousFloorBanner,
 // OminousWallBanner) must embed it, implement Clone, and satisfy bannerShaper.
-//
-// WriteStateToWorld's tile sync (forcing the tile.Banner to White/no-patterns/Ominous on
-// placement) is skipped: there's no WriteStateToWorld hook in Behavior yet, same documented gap
-// as BaseBanner/block.Note/RedstoneComparator.
 type BaseOminousBanner struct {
 	Transparent
 }
@@ -45,5 +42,14 @@ func (b *BaseOminousBanner) OnNearbyBlockChange() {
 	}
 }
 
-// AsItem should return VanillaItems.OMINOUS_BANNER() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.
+// WriteStateToWorld is a port of BaseOminousBanner::writeStateToWorld.
+func (b *BaseOminousBanner) WriteStateToWorld() {
+	b.Block.WriteStateToWorld()
+	if t, ok := b.tileAt(); ok {
+		if bannerTile, ok := t.(*tile.Banner); ok {
+			bannerTile.SetBaseColor(blockutils.DyeColorWhite)
+			bannerTile.SetPatterns(nil)
+			bannerTile.SetType(tile.BannerTypeOminous)
+		}
+	}
+}

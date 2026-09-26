@@ -3,10 +3,6 @@ package block
 import runtime "pocketmine-go/pocketmine/data/runtime"
 
 // Tripwire is a port of pocketmine\block\Tripwire.
-//
-// AsItem() should return VanillaItems.String() (a real item, not this block reduced to item
-// form) — needs the unported item package/block registry, so it's left as Block's default for
-// now (see Block.GetDropsForCompatibleTool's doc comment for the same category of gap).
 type Tripwire struct {
 	Flowable
 

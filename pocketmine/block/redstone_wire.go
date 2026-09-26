@@ -49,7 +49,3 @@ func (r *RedstoneWire) OnNearbyBlockChange() {
 		r.Flowable.OnNearbyBlockChange()
 	}
 }
-
-// GetDropsForCompatibleTool/AsItem should return VanillaItems.REDSTONE_DUST() — needs the
-// unported item package (see Block.GetDropsForCompatibleTool's doc comment), so both are left as
-// Block's defaults for now.

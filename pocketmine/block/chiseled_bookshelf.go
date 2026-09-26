@@ -130,12 +130,47 @@ func (c *ChiseledBookshelf) Place(tx BlockTransaction, item Item, blockReplace B
 	return c.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract is a port of ChiseledBookshelf::onInteract, minus the actual inventory interaction
-// (see type doc comment). The wrong-face early return is real; everything past it needs the
-// gapped inventory, so it's left unhandled.
+// ChiseledBookshelfInteractFunc is the inventory part of ChiseledBookshelf::onInteract, set by
+// block/inventory (the tile inventory and book item types can't be seen here): a book in the slot
+// is taken out (returned), otherwise a held book (writable/written, plain or enchanted) is put in
+// (stored). changed is false if nothing happened.
+var ChiseledBookshelfInteractFunc func(inv tile.Inventory, slot int, held Item) (returned Item, stored, changed bool)
+
+// OnInteract is a port of ChiseledBookshelf::onInteract.
 func (c *ChiseledBookshelf) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if face != c.Facing {
 		return false
+	}
+
+	x := clickVector.X
+	if math.FacingAxis(face) == math.AxisX {
+		x = clickVector.Z
+	}
+	if math.IsPositive(math.RotateY(face, true)) {
+		x = 1 - x
+	}
+	slot := blockutils.ChiseledBookshelfSlotFromBlockFaceCoordinates(x, clickVector.Y)
+	t, ok := c.tileAt()
+	if !ok {
+		return false
+	}
+	tileShelf, ok := t.(*tile.ChiseledBookshelf)
+	if !ok || ChiseledBookshelfInteractFunc == nil {
+		return false
+	}
+
+	returned, stored, changed := ChiseledBookshelfInteractFunc(tileShelf.GetInventory(), int(slot), item)
+	if !changed {
+		return true
+	}
+	if returned != nil && returnedItems != nil {
+		*returnedItems = append(*returnedItems, returned)
+	}
+	c.SetSlot(slot, stored)
+	c.LastInteractedSlot = &slot
+
+	if world, err := c.position.GetWorld(); err == nil {
+		_ = world.SetBlock(c.position, c.self)
 	}
 	return true
 }
@@ -145,3 +180,13 @@ func (c *ChiseledBookshelf) OnInteract(item Item, face math.Facing, clickVector 
 func (c *ChiseledBookshelf) GetDropsForCompatibleTool(item Item) []Item { return nil }
 
 func (c *ChiseledBookshelf) IsAffectedBySilkTouch() bool { return true }
+
+// WriteStateToWorld is a port of ChiseledBookshelf::writeStateToWorld.
+func (c *ChiseledBookshelf) WriteStateToWorld() {
+	c.Block.WriteStateToWorld()
+	if t, ok := c.tileAt(); ok {
+		if tileShelf, ok := t.(*tile.ChiseledBookshelf); ok {
+			tileShelf.SetLastInteractedSlot(c.LastInteractedSlot)
+		}
+	}
+}

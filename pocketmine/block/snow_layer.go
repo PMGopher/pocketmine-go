@@ -90,10 +90,10 @@ func (s *SnowLayer) OnRandomTick() {
 	}
 }
 
-// GetDropsForCompatibleTool should return [VanillaItems.SNOWBALL().SetCount(max(1, Layers/2))] —
-// needs real Item construction from the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-func (s *SnowLayer) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of SnowLayer::getDropsForCompatibleTool.
+func (s *SnowLayer) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("snowball", max(1, s.Layers/2)))
+}
 
 // OnNearbyBlockChange is FallableTrait::onNearbyBlockChange.
 func (s *SnowLayer) OnNearbyBlockChange() { FallableOnNearbyBlockChange(s.self) }

@@ -10,7 +10,6 @@ import (
 	playerevent "pocketmine-go/pocketmine/event/player"
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/math"
-	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/world/particle"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -277,7 +276,7 @@ func (w *World) UseItemOn(vector math.Vector3, it item.Item, face math.Facing, c
 		if t, ok := w.GetTileAt(entry.X, entry.Y, entry.Z); ok {
 			//TODO: seal this up inside block placement
 			if copier, ok := t.(interface{ CopyDataFromItem(item tile.Item) }); ok {
-				copier.CopyDataFromItem(tileItem{it})
+				copier.CopyDataFromItem(it)
 			}
 		}
 
@@ -292,12 +291,4 @@ func (w *World) UseItemOn(vector math.Vector3, it item.Item, face math.Facing, c
 	it.Pop()
 
 	return true
-}
-
-// tileItem adapts item.Item to tile.Item, whose GetCustomBlockData also reports presence.
-type tileItem struct{ item.Item }
-
-func (t tileItem) GetCustomBlockData() (*nbt.CompoundTag, bool) {
-	tag := t.Item.GetCustomBlockData()
-	return tag, tag != nil
 }

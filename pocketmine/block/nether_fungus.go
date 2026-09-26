@@ -3,19 +3,17 @@ package block
 import "pocketmine-go/pocketmine/math"
 
 // NetherFungus is a port of pocketmine\block\NetherFungus.
-//
-// The PHP constructor's $treeType param is omitted here: it's only ever used by grow() (via
-// TreeFactory), which needs the unported world-gen tree subsystem and is a documented no-op
-// below, so there's nothing to store it for yet.
 type NetherFungus struct {
 	Flowable
 
+	// TreeType is the huge fungus it grows into.
+	TreeType TreeType
 	// NyliumTypeID is the type id of the nylium block this fungus can grow on.
 	NyliumTypeID int
 }
 
-func NewNetherFungus(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo, nyliumTypeID int) *NetherFungus {
-	n := &NetherFungus{Flowable: Flowable{Transparent{NewBlock(idInfo, name, typeInfo)}}, NyliumTypeID: nyliumTypeID}
+func NewNetherFungus(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo, treeType TreeType, nyliumTypeID int) *NetherFungus {
+	n := &NetherFungus{Flowable: Flowable{Transparent{NewBlock(idInfo, name, typeInfo)}}, TreeType: treeType, NyliumTypeID: nyliumTypeID}
 	n.Init(n)
 	return n
 }
@@ -48,6 +46,15 @@ func (n *NetherFungus) OnNearbyBlockChange() {
 	}
 }
 
-// OnInteract's fertilizer-driven grow needs a Fertilizer item marker, StructureGrowEvent, and the
-// world-gen tree subsystem (TreeFactory/TreeType), none ported yet. Block's default OnInteract
-// (return false) already matches this gap, so there's nothing to override here.
+// OnInteract is a port of NetherFungus::onInteract: bone meal has a 40% chance (always in
+// creative) to grow a huge fungus if it's on its nylium.
+func (n *NetherFungus) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if isFertilizer(item) {
+		item.Pop()
+		if n.self.(blockGeometry).GetSide(math.Down, 1).GetTypeId() == n.NyliumTypeID && (player == nil || !hasFiniteResources(player) || mtRand(1, 100) <= 40) {
+			growStructure(n.self, n.TreeType, player)
+		}
+		return true
+	}
+	return false
+}

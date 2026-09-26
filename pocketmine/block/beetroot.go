@@ -1,10 +1,6 @@
 package block
 
 // Beetroot is a port of pocketmine\block\Beetroot.
-//
-// GetDropsForCompatibleTool/AsItem should return VanillaItems.BEETROOT_SEEDS()/BEETROOT() — needs
-// the unported item package (see Block.GetDropsForCompatibleTool's doc comment), so both are left
-// as Crops'/Block's defaults for now.
 type Beetroot struct {
 	Crops
 }
@@ -22,4 +18,19 @@ func (b *Beetroot) Clone() Behavior {
 	c := *b
 	c.rebind(&c)
 	return &c
+}
+
+// GetDropsForCompatibleTool is a port of Beetroot::getDropsForCompatibleTool.
+func (b *Beetroot) GetDropsForCompatibleTool(item Item) []Item {
+	if b.Age >= CropsMaxAge {
+		var drops []Item
+		if beetroot := vanillaItem("beetroot"); beetroot != nil {
+			drops = append(drops, beetroot)
+		}
+		if seeds := vanillaItemCount("beetroot_seeds", FortuneBinomial(item, 0, 3, 4.0/7)); seeds != nil {
+			drops = append(drops, seeds)
+		}
+		return drops
+	}
+	return itemDrops(vanillaItem("beetroot_seeds"))
 }

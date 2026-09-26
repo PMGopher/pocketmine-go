@@ -19,10 +19,16 @@ func (a *Azalea) Clone() Behavior {
 	return &c
 }
 
-// OnInteract should grow into a tree (TreeFactory/TreeType.AZALEA) when fertilized — needs a
-// Fertilizer item marker and the whole world-gen tree subsystem, none ported yet, so this is a
-// no-op for now.
+// OnInteract is a port of Azalea::onInteract: bone meal has a 45% chance to grow an azalea tree
+// (always in creative).
 func (a *Azalea) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if isFertilizer(item) {
+		item.Pop()
+		if player == nil || !hasFiniteResources(player) || mtRand(1, 100) <= 45 {
+			growStructure(a.self, TreeTypeAzalea, player)
+		}
+		return true
+	}
 	return false
 }
 

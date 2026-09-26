@@ -2,7 +2,11 @@ package block
 
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/world/format"
+	"pocketmine-go/pocketmine/world/particle"
 )
 
 // DragonEgg is a port of pocketmine\block\DragonEgg.
@@ -29,26 +33,54 @@ func (d *DragonEgg) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone
 }
 
-// Teleport is a port of DragonEgg::teleport. It needs the unported BlockTeleportEvent, particle
-// system (DragonEggTeleportParticle) and the block registry (VanillaBlocks) to pick a random
-// nearby Air block and move itself there, so this is a no-op for now - see
-// Block.GetDropsForCompatibleTool's doc comment for the same category of gap.
-func (d *DragonEgg) Teleport() {}
+// Teleport is a port of DragonEgg::teleport.
+func (d *DragonEgg) Teleport() {
+	world, err := d.position.GetWorld()
+	if err != nil {
+		return
+	}
+	const yMin = format.MinSubChunkIndex * format.SubChunkEdgeLength
+	const yMax = (format.MaxSubChunkIndex + 1) * format.SubChunkEdgeLength
+	x, y, z := d.position.FloorX(), d.position.FloorY(), d.position.FloorZ()
+	for tries := 0; tries < 16; tries++ {
+		blk := world.GetBlockAt(x+mtRand(-16, 16), max(yMin, min(yMax-1, y+mtRand(-8, 8))), z+mtRand(-16, 16))
+		if blk.GetTypeId() != AIR {
+			continue
+		}
+		ev := blockevent.NewBlockTeleportEvent(d.self, blk.GetPosition().Vector3)
+		event.Call(ev)
+		if ev.IsCancelled() {
+			break
+		}
+		blockPos := ev.GetTo()
+		if p, err := particle.NewDragonEggTeleportParticle(int(d.position.X-blockPos.X), int(d.position.Y-blockPos.Y), int(d.position.Z-blockPos.Z)); err == nil {
+			if w, ok := world.(interface {
+				AddParticle(pos math.Vector3, p particle.Particle)
+			}); ok {
+				w.AddParticle(d.position.Vector3, p)
+			}
+		}
+		_ = world.SetBlock(d.position, VanillaAir())
+		_ = world.SetBlock(NewPosition(blockPos.X, blockPos.Y, blockPos.Z, world), d.self)
+		break
+	}
+}
 
 func (d *DragonEgg) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	d.Teleport()
 	return true
 }
 
-// OnAttack should also teleport unless the attacking player is in creative mode - GameMode isn't
-// on the minimal Player interface yet, so this always teleports for now (same gap as Teleport
-// itself being a no-op).
+// OnAttack is a port of DragonEgg::onAttack: creative players break the egg instead.
 func (d *DragonEgg) OnAttack(item Item, face math.Facing, player Player) bool {
-	if player != nil {
-		d.Teleport()
-		return true
+	if player == nil {
+		return false
 	}
-	return false
+	if p, ok := player.(interface{ IsCreativeLiteral() bool }); ok && p.IsCreativeLiteral() {
+		return false
+	}
+	d.Teleport()
+	return true
 }
 
 // OnNearbyBlockChange is FallableTrait::onNearbyBlockChange.

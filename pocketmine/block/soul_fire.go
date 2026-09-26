@@ -32,14 +32,11 @@ func soulFireCanBeSupportedBy(blk Behavior) bool {
 	return id == SOUL_SAND || id == SOUL_SOIL
 }
 
-// OnNearbyBlockChange is a port of SoulFire::onNearbyBlockChange. The PHP original replaces
-// itself with VanillaBlocks.AIR() specifically; this uses UseBreakOn as the practical equivalent
-// (breaking via the world, rather than constructing an Air instance from the unported block
-// registry) - same simplification used wherever else a block "becomes air".
+// OnNearbyBlockChange is a port of SoulFire::onNearbyBlockChange.
 func (s *SoulFire) OnNearbyBlockChange() {
 	if !soulFireCanBeSupportedBy(s.self.(blockGeometry).GetSide(math.Down, 1)) {
 		if world, err := s.position.GetWorld(); err == nil {
-			world.UseBreakOn(s.position.AsVector3())
+			_ = world.SetBlock(s.position, VanillaAir())
 		}
 	}
 }

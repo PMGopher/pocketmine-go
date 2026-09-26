@@ -1,15 +1,15 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
 const PotionCauldronPotionFillAmount = 2
 
-// PotionCauldron is a port of pocketmine\block\PotionCauldron. The potion item is kept on the
-// block; saving it in the Cauldron tile (readStateFromWorld/writeStateToWorld) isn't ported (no
-// Cauldron tile yet).
+// PotionCauldron is a port of pocketmine\block\PotionCauldron. The potion item is saved in the
+// Cauldron tile.
 type PotionCauldron struct {
 	FillableCauldron
 
@@ -80,5 +80,30 @@ func (p *PotionCauldron) OnNearbyBlockChange() {
 		cauldron.SetFillLevel(FillableCauldronMaxFillLevel)
 		_ = world.SetBlock(p.position, cauldron)
 		world.AddSound(p.position.Add(0.5, 0.5, 0.5), cauldron.GetFillSound())
+	}
+}
+
+// ReadStateFromWorld is a port of PotionCauldron::readStateFromWorld.
+func (p *PotionCauldron) ReadStateFromWorld() Behavior {
+	p.Block.ReadStateFromWorld()
+	p.potionItem = nil
+	if t, ok := p.tileAt(); ok {
+		if cauldronTile, ok := t.(*tile.Cauldron); ok {
+			if potion, ok := cauldronTile.GetPotionItem().(Item); ok {
+				p.potionItem = potion
+			}
+		}
+	}
+	return p.self
+}
+
+// WriteStateToWorld is a port of PotionCauldron::writeStateToWorld.
+func (p *PotionCauldron) WriteStateToWorld() {
+	p.Block.WriteStateToWorld()
+	if t, ok := p.tileAt(); ok {
+		if cauldronTile, ok := t.(*tile.Cauldron); ok {
+			cauldronTile.SetCustomWaterColor(nil)
+			cauldronTile.SetPotionItem(asTileItem(p.potionItem))
+		}
 	}
 }

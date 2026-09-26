@@ -10,10 +10,11 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/nbt"
-	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
+	worldformatio "pocketmine-go/pocketmine/world/format/io"
 )
 
 // Difficulty constants, a port of World::DIFFICULTY_*.
@@ -489,18 +490,6 @@ func (w *World) closeChunkEntities(chunkX, chunkZ int) {
 	}
 }
 
-// initChunkEntities is the entity half of World::initChunk: recreate every entity saved with a
-// freshly loaded chunk through EntityFactory (LoadEntityFunc). Unknown or corrupted entity data is
-// skipped, as in PHP (which logs it).
-func (w *World) initChunkEntities(entityNBT []*nbt.CompoundTag) {
-	if LoadEntityFunc == nil {
-		return
-	}
-	for _, tag := range entityNBT {
-		_, _ = LoadEntityFunc(w, tag)
-	}
-}
-
 // GetCurrentTick returns the tick number of the tick World is on (the currentTick of the last
 // DoTick call) - what PHP entities read as Server::getTick().
 func (w *World) GetCurrentTick() int64 { return w.currentTick }
@@ -520,30 +509,44 @@ func (w *World) GetBlockAtIfLoaded(x, y, z int) block.Behavior {
 	return air
 }
 
-// SerializeBlockState is the GlobalBlockStateHandlers::getSerializer()->serialize($stateId)->toNbt()
-// step entities use to save a block (FallingBlock): the block's persistent state as NBT.
+// SerializeBlockState is GlobalBlockStateHandlers::getSerializer()->serialize($stateId)->toNbt(),
+// which entities use to save a block (FallingBlock).
 func (w *World) SerializeBlockState(blk block.Behavior) (*nbt.CompoundTag, error) {
 	w.registerTemplate(blk)
 	data, err := w.lookupBlockState(int32(blk.GetStateId()))
 	if err != nil {
 		return nil, err
 	}
-	return worldio.BlockStateToNBT(data)
+	return data.ToNbt(), nil
 }
 
-// DeserializeBlockState is the reverse of SerializeBlockState (GlobalBlockStateHandlers'
-// deserializer + RuntimeBlockStateRegistry::fromStateId). Only states of block types registered
-// with this World can be resolved; the block-state upgrader for older save data isn't ported.
+// DeserializeBlockState is the reverse of SerializeBlockState: GlobalBlockStateHandlers'
+// upgrader (upgradeBlockStateNbt, so blocks saved by older versions load too), deserializer and
+// RuntimeBlockStateRegistry::fromStateId.
 func (w *World) DeserializeBlockState(tag *nbt.CompoundTag) (block.Behavior, error) {
-	data, err := worldio.NBTToBlockState(tag)
+	data, err := worldformatio.GetBlockDataUpgrader().UpgradeBlockStateNbt(tag)
 	if err != nil {
 		return nil, err
 	}
-	stateID, ok := w.resolveBlockState(data)
-	if !ok {
-		return nil, fmt.Errorf("world: unknown block state %s", data.Name)
+	return w.blockFromStateData(data)
+}
+
+// DeserializeLegacyBlock is the legacy (numeric ID + meta) form of DeserializeBlockState:
+// GlobalBlockStateHandlers::getUpgrader()->upgradeIntIdMeta().
+func (w *World) DeserializeLegacyBlock(id, meta int) (block.Behavior, error) {
+	data, err := worldformatio.GetBlockDataUpgrader().UpgradeIntIdMeta(id, meta)
+	if err != nil {
+		return nil, err
 	}
-	tpl, ok := w.stateTemplates[stateID]
+	return w.blockFromStateData(data)
+}
+
+func (w *World) blockFromStateData(data bedrock.BlockStateData) (block.Behavior, error) {
+	stateID, err := worldformatio.GetBlockStateDeserializer().Deserialize(data)
+	if err != nil {
+		return nil, err
+	}
+	tpl, ok := w.stateTemplates[int32(stateID)]
 	if !ok {
 		return nil, fmt.Errorf("world: no block registered for state %d", stateID)
 	}

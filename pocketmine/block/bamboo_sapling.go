@@ -53,13 +53,19 @@ func (b *BambooSapling) OnNearbyBlockChange() {
 	}
 }
 
-// OnInteract's fertilizer/bamboo-item-driven grow needs Fertilizer/item.Bamboo item markers, not
-// ported yet. Block's default OnInteract (return false) already matches this gap, so there's
-// nothing to override here.
+// OnInteract is a port of BambooSapling::onInteract.
+func (b *BambooSapling) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if isFertilizer(item) || item.GetTypeId() == itemTypeIDsBamboo {
+		if b.grow(player) {
+			item.Pop()
+			return true
+		}
+	}
+	return false
+}
 
-// grow is a port of BambooSapling::grow. Only ever called with a nil player currently
-// (OnRandomTick, below) - same reasoning as Bamboo.grow not taking a player parameter yet.
-func (b *BambooSapling) grow() bool {
+// grow is a port of BambooSapling::grow.
+func (b *BambooSapling) grow(player Player) bool {
 	world, err := b.position.GetWorld()
 	if err != nil {
 		return false
@@ -75,7 +81,7 @@ func (b *BambooSapling) grow() bool {
 	tx.AddBlock(b.position, bamboo)
 	tx.AddBlock(b.position.GetSide(math.Up, 1), above)
 
-	ev := blockevent.NewStructureGrowEvent(b.self, tx, nil)
+	ev := blockevent.NewStructureGrowEvent(b.self, tx, eventPlayer(player))
 	event.Call(ev)
 	if ev.IsCancelled() {
 		return false
@@ -97,7 +103,7 @@ func (b *BambooSapling) OnRandomTick() {
 	if b.Ready {
 		b.Ready = false
 		pos := b.position.AsVector3()
-		if world.GetFullLightAt(pos.FloorX(), pos.FloorY(), pos.FloorZ()) < 9 || !b.grow() {
+		if world.GetFullLightAt(pos.FloorX(), pos.FloorY(), pos.FloorZ()) < 9 || !b.grow(nil) {
 			if err := world.SetBlock(b.position, b.self); err != nil {
 				panic(err)
 			}
@@ -109,6 +115,3 @@ func (b *BambooSapling) OnRandomTick() {
 		}
 	}
 }
-
-// AsItem should return VanillaItems.BAMBOO() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.

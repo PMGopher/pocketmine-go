@@ -7,6 +7,7 @@ import (
 	stdmath "math"
 	"os"
 	"path/filepath"
+	blockinventory "pocketmine-go/pocketmine/block/inventory"
 	"runtime"
 	"slices"
 	"strconv"
@@ -364,6 +365,8 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 	if s.craftingManager, err = crafting.MakeCraftingManager(bedrock.Recipes, bedrock.RecipesDir); err != nil {
 		return nil, fmt.Errorf("loading recipes: %w", err)
 	}
+	// Furnaces, brewing stands and campfires reach the crafting manager through $world->getServer().
+	blockinventory.CraftingManagerFunc = s.GetCraftingManager
 
 	if s.resourceManager, err = resourcepacks.NewResourcePackManager(filepath.Join(s.dataPath, "resource_packs"), logger); err != nil {
 		return nil, err
@@ -371,6 +374,7 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 
 	s.worldManager = world.NewWorldManager(filepath.Join(s.dataPath, "worlds"), convert.NewBlockTranslator(), knownBlocks())
 	s.worldManager.SetLogger(logger)
+	s.worldManager.SetLanguage(s.language)
 	s.worldManager.SetAsyncPool(s.asyncPool)
 	s.worldManager.SetPopulationQueueSize(s.configGroup.GetPropertyInt(YmlChunkGenerationPopulationQueueSize, 2))
 	s.worldManager.SetAutoSave(s.configGroup.GetConfigBool(PropertyAutoSave, s.worldManager.GetAutoSave()))
@@ -461,7 +465,7 @@ func (s *Server) startupPrepareWorlds() bool {
 				//TODO: this probably should be an error
 				continue
 			}
-			if _, err := s.worldManager.LoadWorld(name); err == nil {
+			if _, err := s.worldManager.LoadWorld(name, true); err == nil {
 				continue
 			}
 			if s.worldManager.IsWorldGenerated(name) {
@@ -511,9 +515,9 @@ func (s *Server) startupPrepareWorlds() bool {
 			defaultName = "world"
 			s.configGroup.SetConfigString(PropertyDefaultWorldName, "world")
 		}
-		if _, err := s.worldManager.LoadWorld(defaultName); err != nil {
+		if _, err := s.worldManager.LoadWorld(defaultName, true); err != nil {
 			if s.worldManager.IsWorldGenerated(defaultName) {
-				s.logger.Error(err.Error())
+				// WorldManager.LoadWorld already logged why.
 				s.logger.Emergency(s.language.Translate(lang.KnownTranslationFactory.PocketmineLevelDefaultError()))
 				return false
 			}

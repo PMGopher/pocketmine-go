@@ -36,10 +36,13 @@ type Behavior interface {
 	GetName() string
 
 	// ReadStateFromWorld lets a block compute extra state derived from its surroundings (e.g.
-	// Fence/Wall/Thin's neighbor connections) right after being read from/placed in the world.
-	// Called externally by World once it exists; not invoked automatically by anything in this
-	// package yet.
+	// Fence/Wall/Thin's neighbor connections) or its tile, right after World::getBlockAt reads it.
+	// It may return a different block to use instead (e.g. an ominous banner).
 	ReadStateFromWorld() Behavior
+	// WriteStateToWorld is a port of Block::writeStateToWorld: World::setBlockAt's write of the
+	// block's state into the chunk and creation (or reuse) of its tile; overrides also copy their
+	// tile-backed state into the tile.
+	WriteStateToWorld()
 
 	// State encoding — must always describe the same fields in the same order regardless of
 	// current state (see data/runtime's DataDescriber for why these take pointers).

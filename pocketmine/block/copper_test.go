@@ -30,7 +30,7 @@ func TestCopperAxeScrapesOxidationThenRemovesWax(t *testing.T) {
 	c.SetOxidation(blockutils.CopperOxidationWeathered)
 	c.SetWaxed(true)
 
-	axe := &fakeAxeItem{}
+	axe := &fakeAxeItem{fakeItem: fakeItem{toolType: ToolTypeAxe}}
 
 	// Waxed: an axe should remove the wax first, without touching oxidation.
 	if !c.OnInteract(axe, 0, math.Vector3{}, nil, nil) {

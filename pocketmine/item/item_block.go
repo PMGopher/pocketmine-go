@@ -34,6 +34,19 @@ func init() {
 		return NewItemBlock(NewItemIdentifier(-blk.GetTypeId()), blk)
 	}
 	block.VanillaItemFunc = func(name string) block.Item { return VanillaItem(name) }
+	block.PopItemFunc = func(it block.Item, count int) block.Item {
+		if real, ok := it.(Item); ok {
+			return real.PopCount(count)
+		}
+		it.Pop()
+		return nil
+	}
+	block.CloneItemFunc = func(it block.Item) block.Item {
+		if real, ok := it.(Item); ok {
+			return real.Clone()
+		}
+		return it
+	}
 }
 
 // Clone deep-copies the wrapped block too, not just the ItemBlock's own fields.

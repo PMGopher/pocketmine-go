@@ -19,7 +19,7 @@ func (c *CopperOre) Clone() Behavior {
 
 func (c *CopperOre) IsAffectedBySilkTouch() bool { return true }
 
-// GetDropsForCompatibleTool's FortuneDropHelper-weighted raw copper count needs the unported item
-// package for real Item construction (see Gravel's GetDropsForCompatibleTool doc comment for the
-// same category of gap), so this returns nil for now.
-func (c *CopperOre) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of CopperOre::getDropsForCompatibleTool.
+func (c *CopperOre) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("raw_copper", FortuneWeighted(item, 2, 5)))
+}

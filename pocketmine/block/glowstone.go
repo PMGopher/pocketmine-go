@@ -19,9 +19,9 @@ func (g *Glowstone) Clone() Behavior {
 
 func (g *Glowstone) GetLightLevel() int { return 15 }
 
-// GetDropsForCompatibleTool should return glowstone dust scaled via FortuneDropHelper — needs
-// real Item construction from the unported item package (see Block.GetDropsForCompatibleTool's
-// doc comment), so this returns nil for now.
-func (g *Glowstone) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Glowstone::getDropsForCompatibleTool.
+func (g *Glowstone) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("glowstone_dust", min(4, FortuneDiscrete(item, 2, 4))))
+}
 
 func (g *Glowstone) IsAffectedBySilkTouch() bool { return true }

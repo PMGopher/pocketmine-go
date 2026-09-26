@@ -28,9 +28,9 @@ type dualWritableBook struct {
 	fakeWritableBook
 }
 
-func (dualWritableBook) GetCustomBlockData() (*nbt.CompoundTag, bool) { return nil, false }
-func (dualWritableBook) GetNamedTag() *nbt.CompoundTag                { return nbt.NewCompoundTag() }
-func (dualWritableBook) HasCustomName() bool                          { return false }
+func (dualWritableBook) GetCustomBlockData() *nbt.CompoundTag { return nil }
+func (dualWritableBook) GetNamedTag() *nbt.CompoundTag        { return nbt.NewCompoundTag() }
+func (dualWritableBook) HasCustomName() bool                  { return false }
 
 func TestLecternPlaceFacesOppositePlayer(t *testing.T) {
 	w := &fakeWorld{}

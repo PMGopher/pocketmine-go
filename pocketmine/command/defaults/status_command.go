@@ -3,6 +3,7 @@ package defaults
 import (
 	"fmt"
 	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"time"
 
@@ -12,8 +13,10 @@ import (
 	"pocketmine-go/pocketmine/utils"
 )
 
-// StatusCommand is a port of pocketmine\command\defaults\StatusCommand. "Threads" counts
-// goroutines.
+// StatusCommand is a port of pocketmine\command\defaults\StatusCommand. PHP's thread count and
+// main-thread/total/virtual memory lines describe the PHP process; this server runs on Go, so they
+// are replaced by figures that fit Go: goroutines, OS threads, the Go heap in use, the process's
+// resident memory (RSS) and the memory the Go runtime reserved from the OS.
 type StatusCommand struct{ VanillaCommand }
 
 func NewStatusCommand() *StatusCommand {
@@ -37,12 +40,17 @@ func formatBandwidth(bytes float64) *lang.Translatable {
 	return lang.KnownTranslationFactory.PocketmineCommandStatusNetworkStat(strval(round2(bytes / 1024))).Prefix(utils.Red)
 }
 
+func formatMemoryString(bytes uint64) string {
+	return fmt.Sprintf("%.2f MB.", round2(float64(bytes)/1024/1024))
+}
+
 func formatMemory(bytes uint64) *lang.Translatable {
 	return lang.KnownTranslationFactory.PocketmineCommandStatusMemoryStat(fmt.Sprintf("%.2f", round2(float64(bytes)/1024/1024))).Prefix(utils.Red)
 }
 
 func (c *StatusCommand) Execute(sender command.Sender, commandLabel string, args []string) (any, error) {
-	reserved, vmRSS, vmSize := utils.AdvancedMemoryUsage()
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
 
 	server := srv(sender)
 	sender.SendMessage(lang.KnownTranslationFactory.PocketmineCommandStatusHeader().Format(
@@ -85,11 +93,14 @@ func (c *StatusCommand) Execute(sender command.Sender, commandLabel string, args
 	statusSend(sender, lang.KnownTranslationFactory.PocketmineCommandStatusNetworkUpload(formatBandwidth(bandwidth.GetSend().GetAverageBytes())))
 	statusSend(sender, lang.KnownTranslationFactory.PocketmineCommandStatusNetworkDownload(formatBandwidth(bandwidth.GetReceive().GetAverageBytes())))
 
-	statusSend(sender, lang.KnownTranslationFactory.PocketmineCommandStatusThreads(utils.Red+strconv.Itoa(runtime.NumGoroutine())))
-
-	statusSend(sender, lang.KnownTranslationFactory.PocketmineCommandStatusMemoryMainThread(formatMemory(reserved)))
-	statusSend(sender, lang.KnownTranslationFactory.PocketmineCommandStatusMemoryTotal(formatMemory(vmRSS)))
-	statusSend(sender, lang.KnownTranslationFactory.PocketmineCommandStatusMemoryVirtual(formatMemory(vmSize)))
+	sender.SendMessage(utils.Gold + "Goroutines: " + utils.Red + strconv.Itoa(runtime.NumGoroutine()))
+	sender.SendMessage(utils.Gold + "OS threads: " + utils.Red + strconv.Itoa(pprof.Lookup("threadcreate").Count()))
+	sender.SendMessage(utils.Gold + "Go heap memory: " + utils.Red + formatMemoryString(mem.HeapAlloc))
+	if rss, ok := utils.ProcessRSS(); ok {
+		sender.SendMessage(utils.Gold + "Memory in RAM (RSS): " + utils.Red + formatMemoryString(rss))
+	}
+	sender.SendMessage(utils.Gold + "Memory reserved by Go: " + utils.Red + formatMemoryString(mem.Sys))
+	sender.SendMessage(utils.Gold + "Garbage collections: " + utils.Red + numberFormat(int(mem.NumGC)))
 
 	if globalLimit := server.GetMemoryManager().GetGlobalMemoryLimit(); globalLimit > 0 {
 		statusSend(sender, lang.KnownTranslationFactory.PocketmineCommandStatusMemoryManager(formatMemory(globalLimit)))

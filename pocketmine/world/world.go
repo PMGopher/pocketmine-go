@@ -1,20 +1,23 @@
-// Package world is a port of a slice of pocketmine\world\World, including a real on-disk
-// LevelDB-backed WorldProvider (see OpenProvider/SaveAll) - not in-memory-only any more.
+// Package world is a port of pocketmine\world: World, WorldManager and the tick, backed by a
+// world/format/io WorldProvider (LevelDB by default, see SetProvider/SaveAll).
 package world
 
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
+
 	"pocketmine-go/pocketmine/event"
 	entityevent "pocketmine-go/pocketmine/event/entity"
 	worldevent "pocketmine-go/pocketmine/event/world"
-	"sort"
-	"time"
+	"pocketmine-go/pocketmine/nbt"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
-	goleveldb "github.com/syndtr/goleveldb/leveldb"
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/data/bedrock"
@@ -110,10 +113,13 @@ type World struct {
 	// whatever it's given, so anything ever placed through it becomes readable too.
 	stateTemplates map[int32]block.Behavior
 
-	// provider is this World's on-disk backing (see OpenProvider) - nil means pure in-memory, no
-	// different from this port's original design (every chunk generated fresh, nothing survives a
-	// restart).
-	provider *goleveldb.DB
+	// provider is World::$provider (see SetProvider). nil means a purely in-memory world (tests):
+	// every chunk is generated and nothing is saved.
+	provider worldformatio.WritableWorldProvider
+	// inDynamicStateRecalculation is World::$inDynamicStateRecalculation (see GetBlockAt).
+	inDynamicStateRecalculation bool
+	// autoSave is World::$autoSave: whether chunks are saved when unloaded (WorldManager sets it).
+	autoSave bool
 
 	// lightFilters/lightEmitters/directSkyLightBlockers are the light engine's per-block-state
 	// lookup tables (see pocketmine/world/light), built in registerTemplate from every registered
@@ -240,6 +246,7 @@ const unloadGraceTicks = 30 * 20
 // for why.
 func New(gen generator.Generator, translator *convert.BlockTranslator, knownBlocks []block.Behavior) *World {
 	w := &World{
+		autoSave:   true,
 		generator:  gen,
 		translator: translator,
 		chunks:     map[[2]int]*format.Chunk{},
@@ -426,61 +433,82 @@ func (w *World) fireOnChunkLoaded(chunkX, chunkZ int, chunk *format.Chunk) {
 	}
 }
 
-// resolveBlockState is BaseWorldProvider's palette deserialization: a saved block state to its
-// internal state ID through GlobalBlockStateHandlers' deserializer. States that can't be
-// deserialized become GlobalBlockStateHandlers::getUnknownBlockStateData() (the "update!" block),
-// like PHP (the block data upgrader for older saves isn't ported).
-func (w *World) resolveBlockState(data bedrock.BlockStateData) (int32, bool) {
-	deserializer := worldformatio.GetBlockStateDeserializer()
-	stateID, err := deserializer.Deserialize(data)
-	if err != nil {
-		if w.logger != nil {
-			w.logger.Debug(fmt.Sprintf("Unknown block state %s: %v", data.Name, err))
-		}
-		stateID, err = deserializer.Deserialize(worldformatio.GetUnknownBlockStateData())
-		if err != nil {
-			return 0, false
-		}
-	}
-	return int32(stateID), true
-}
-
 // lookupBlockState is GlobalBlockStateHandlers::getSerializer()->serialize($stateId): the state data
 // saved for an internal state ID.
 func (w *World) lookupBlockState(stateID int32) (bedrock.BlockStateData, error) {
 	return worldformatio.GetBlockStateSerializer().Serialize(int(stateID))
 }
 
-// OpenProvider opens (creating if necessary) a real Bedrock-compatible LevelDB world database at
-// path, and attaches it to this World as its on-disk backing - a port of the relevant slice of
-// WorldManager::loadWorld/World::__construct's WorldProvider setup. Chunks are loaded from it
-// lazily (see generateChunkOnly) and must be explicitly written back with SaveAll (this port has
-// no per-chunk dirty tracking / autosave scheduler yet, so saving is all-or-nothing and
-// caller-triggered - see main.go's shutdown handler).
+// SetProvider attaches the world's provider (World::__construct's $provider): chunks are loaded
+// from it (see loadChunk) and saved to it by SaveAll and chunk unloading.
+func (w *World) SetProvider(provider worldformatio.WritableWorldProvider) { w.provider = provider }
+
+// GetAutoSave is a port of World::getAutoSave.
+func (w *World) GetAutoSave() bool { return w.autoSave }
+
+// SetAutoSave is a port of World::setAutoSave.
+func (w *World) SetAutoSave(value bool) { w.autoSave = value }
+
+// GetProvider is a port of World::getProvider (nil for an in-memory world).
+func (w *World) GetProvider() worldformatio.WritableWorldProvider { return w.provider }
+
+// OpenProvider opens the LevelDB world at path as this world's provider, creating an empty one
+// first if there is none (a helper for tests and tools; servers go through WorldManager).
 func (w *World) OpenProvider(path string) error {
-	db, err := goleveldb.OpenFile(path, nil)
+	if !worldio.IsValid(path) {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			return err
+		}
+		if err := worldio.Generate(path, filepath.Base(path), worldformatio.WorldCreationOptions{GeneratorName: "normal", Difficulty: worldformatio.DifficultyNormal}); err != nil {
+			return fmt.Errorf("world: creating LevelDB world at %q: %w", path, err)
+		}
+	}
+	logger := w.logger
+	if logger == nil {
+		logger = log.Global()
+	}
+	provider, err := worldio.NewLevelDB(path, logger)
 	if err != nil {
 		return fmt.Errorf("world: opening LevelDB world at %q: %w", path, err)
 	}
-	w.provider = db
+	w.provider = provider
 	return nil
 }
 
-// SaveAll writes every currently-loaded chunk back to the open provider (see OpenProvider) - a
-// no-op if no provider is open. It's the chunk half of World::save(true), which also fires
-// WorldSaveEvent.
+// chunkData is the ChunkData World::saveChunks/unloadChunk give the provider: the chunk's terrain
+// and the NBT of its savable entities and its tiles.
+func (w *World) chunkData(chunkX, chunkZ int, chunk *format.Chunk) *worldformatio.ChunkData {
+	tiles := chunk.GetTiles()
+	keys := make([]int, 0, len(tiles))
+	for k := range tiles {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	tileNBT := make([]*nbt.CompoundTag, 0, len(keys))
+	for _, k := range keys {
+		tileNBT = append(tileNBT, tiles[k].SaveNBT())
+	}
+	return worldformatio.NewChunkData(chunk.GetSubChunks(), chunk.IsPopulated(), w.saveChunkEntities(chunkX, chunkZ), tileNBT)
+}
+
+// SaveAll is World::save(true) minus the WorldData part (WorldManager saves level.dat): fires
+// WorldSaveEvent and saves every loaded chunk (World::saveChunks). A no-op for an in-memory
+// world.
 func (w *World) SaveAll() error {
 	if w.provider == nil {
 		return nil
 	}
 	event.Call(worldevent.NewWorldSaveEvent(w))
+	return w.saveChunks()
+}
+
+// saveChunks is a port of World::saveChunks.
+func (w *World) saveChunks() error {
 	for key, chunk := range w.chunks {
-		if err := worldio.SaveChunk(w.provider, int32(key[0]), int32(key[1]), chunk, w.lookupBlockState); err != nil {
+		if err := w.provider.SaveChunk(key[0], key[1], w.chunkData(key[0], key[1], chunk), chunk.GetTerrainDirtyFlags()); err != nil {
 			return err
 		}
-		if err := worldio.SaveEntities(w.provider, int32(key[0]), int32(key[1]), w.saveChunkEntities(key[0], key[1])); err != nil {
-			return err
-		}
+		chunk.ClearTerrainDirtyFlags()
 	}
 	return nil
 }
@@ -489,7 +517,8 @@ func (w *World) SaveAll() error {
 // longer valid.
 func (w *World) IsClosed() bool { return w.closed }
 
-// Close saves every loaded chunk (see SaveAll) and closes the on-disk provider, if one is open.
+// Close is the provider half of World::onUnload: saves every loaded chunk (see SaveAll) and closes
+// the provider.
 func (w *World) Close() error {
 	w.closed = true
 	if w.provider == nil {
@@ -506,10 +535,11 @@ func (w *World) Close() error {
 // IDs.
 func (w *World) Translator() *convert.BlockTranslator { return w.translator }
 
-// GetBlockAt is a port of World::getBlockAt (simplified: no chunk-load-failure/out-of-bounds
-// handling - see IsInWorld). Falls back to air for a state ID with no registered template (see
-// stateTemplates' doc comment) rather than panicking; this should never happen for a state this
-// World itself ever wrote, only for data corruption.
+// GetBlockAt is a port of World::getBlockAt, including the dynamic state read
+// (Block::readStateFromWorld: tile data, neighbour connections, ...). Unlike PHP, unloaded terrain
+// is generated rather than read as air (see generateChunkOnly), and there is no block cache (a
+// performance device: blocks are cloned from their state templates). A state ID with no template
+// falls back to air; this only happens for corrupted data.
 func (w *World) GetBlockAt(x, y, z int) block.Behavior {
 	stateID := int32(block.VanillaAir().GetStateId())
 	if chunk := w.generateChunkOnly(x>>4, z>>4); chunk != nil {
@@ -521,6 +551,19 @@ func (w *World) GetBlockAt(x, y, z int) block.Behavior {
 	}
 	got := tpl.Clone()
 	got.(positionable).SetPosition(w, x, y, z)
+
+	if !w.inDynamicStateRecalculation {
+		// A getBlock() call made while calculating dynamic state doesn't calculate its own: this
+		// makes it impossible for dynamic state properties to recursively depend on each other.
+		w.inDynamicStateRecalculation = true
+		replacement := got.ReadStateFromWorld()
+		w.inDynamicStateRecalculation = false
+		if replacement != nil && replacement != got {
+			replacement.(positionable).SetPosition(w, x, y, z)
+			w.registerTemplate(replacement)
+			got = replacement
+		}
+	}
 	return got
 }
 
@@ -542,6 +585,9 @@ func (w *World) SetBlock(pos block.Position, blk block.Behavior) error {
 // recalculated and neighbours aren't notified (Leaves and Farmland use this).
 func (w *World) SetBlockUpdate(pos block.Position, blk block.Behavior, update bool) error {
 	x, y, z := pos.FloorX(), pos.FloorY(), pos.FloorZ()
+	if !w.IsInWorld(x, y, z) {
+		return fmt.Errorf("Cannot set a block at x=%d,y=%d,z=%d: outside the world", x, y, z)
+	}
 	w.registerTemplate(blk)
 	chunk := w.generateChunkOnly(x>>4, z>>4)
 	if chunk == nil {
@@ -549,7 +595,10 @@ func (w *World) SetBlockUpdate(pos block.Position, blk block.Behavior, update bo
 	}
 	// setBlockAt breaks any population lock: the async result is discarded and redone.
 	w.UnlockChunk(x>>4, z>>4, nil)
-	chunk.SetBlockStateID(x&0xf, y, z&0xf, int32(blk.GetStateId()))
+
+	placed := blk.Clone()
+	placed.(positionable).SetPosition(w, x, y, z)
+	placed.WriteStateToWorld()
 
 	chunkPos := [2]int{x >> 4, z >> 4}
 
@@ -601,6 +650,9 @@ func (w *World) AddTile(t block.Tile) {
 		panic(fmt.Sprintf("Attempted to create tile %T in unloaded chunk", t))
 	}
 	chunk.AddTile(t)
+
+	//delegate tile ticking to the corresponding block
+	w.ScheduleDelayedBlockUpdate(pos.Vector3, 1)
 }
 
 // RemoveTile is a port of World::removeTile - also satisfies tile.World's own RemoveTile (called
@@ -608,8 +660,12 @@ func (w *World) AddTile(t block.Tile) {
 // removeTile($this)`-style bookkeeping).
 func (w *World) RemoveTile(t block.Tile) {
 	pos := t.GetPosition()
-	if chunk := w.generateChunkOnly(pos.FloorX()>>4, pos.FloorZ()>>4); chunk != nil {
+	chunkX, chunkZ := pos.FloorX()>>4, pos.FloorZ()>>4
+	if chunk, ok := w.chunks[chunkKey(chunkX, chunkZ)]; ok {
 		chunk.RemoveTile(t)
+	}
+	for _, listener := range w.GetChunkListeners(chunkX, chunkZ) {
+		listener.OnBlockChanged(pos.Vector3)
 	}
 }
 

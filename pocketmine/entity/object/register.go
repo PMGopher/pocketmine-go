@@ -71,8 +71,19 @@ func init() {
 		if _, ok, _ := tag.GetCompoundTag(TagItem); !ok {
 			return nil, data.NewSavedDataLoadingError(`Expected "` + TagItem + `" NBT tag not found`)
 		}
-		// Item::nbtDeserialize isn't ported (see ItemEntity's doc comment).
-		return nil, data.NewSavedDataLoadingError("item entity data can't be loaded: item NBT deserialization isn't ported")
+		itemTag, _, _ := tag.GetCompoundTag(TagItem)
+		it, err := item.NbtDeserialize(itemTag)
+		if err != nil {
+			return nil, err
+		}
+		if it.IsNull() {
+			return nil, data.NewSavedDataLoadingError("Item is invalid")
+		}
+		loc, err := entity.ParseLocation(tag, w)
+		if err != nil {
+			return nil, err
+		}
+		return NewItemEntity(loc, it, tag), nil
 	}, []string{"Item", "minecraft:item"})
 
 	entity.RegisterEntity(f, func(w *world.World, tag *nbt.CompoundTag) (*Painting, error) {

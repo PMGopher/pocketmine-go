@@ -1,6 +1,7 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
@@ -8,11 +9,8 @@ import (
 
 // RedstoneComparator is a port of pocketmine\block\RedstoneComparator.
 //
-// Redstone functionality is a TODO in the PHP original too - only state/placement/collision are
-// implemented upstream either. ReadStateFromWorld/WriteStateToWorld's signal-strength storage in
-// the block/tile Comparator tile is skipped (block/tile isn't ported yet), so SignalStrength only
-// lives on the block instance, not persisted via a tile - same category of gap as everywhere else
-// a tile round-trip is needed.
+// Redstone functionality is a TODO in the PHP original too - only state/placement/collision and
+// the signal strength stored in the Comparator tile are implemented upstream.
 type RedstoneComparator struct {
 	Flowable
 	HorizontalFacingComponent
@@ -83,5 +81,26 @@ func (r *RedstoneComparator) OnNearbyBlockChange() {
 		}
 	} else {
 		r.Flowable.OnNearbyBlockChange()
+	}
+}
+
+// ReadStateFromWorld is a port of RedstoneComparator::readStateFromWorld.
+func (r *RedstoneComparator) ReadStateFromWorld() Behavior {
+	r.Block.ReadStateFromWorld()
+	if t, ok := r.tileAt(); ok {
+		if comparator, ok := t.(*tile.Comparator); ok {
+			r.SignalStrength = comparator.GetSignalStrength()
+		}
+	}
+	return r.self
+}
+
+// WriteStateToWorld is a port of RedstoneComparator::writeStateToWorld.
+func (r *RedstoneComparator) WriteStateToWorld() {
+	r.Block.WriteStateToWorld()
+	if t, ok := r.tileAt(); ok {
+		if comparator, ok := t.(*tile.Comparator); ok {
+			comparator.SetSignalStrength(r.SignalStrength)
+		}
 	}
 }

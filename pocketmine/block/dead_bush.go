@@ -49,10 +49,10 @@ func (d *DeadBush) OnNearbyBlockChange() {
 	}
 }
 
-// GetDropsForIncompatibleTool should return [VanillaItems.Stick().SetCount(rand.Intn(3))] — needs
-// the unported item package for real Item construction (see Block.GetDropsForCompatibleTool's
-// doc comment), so this returns nil for now.
-func (d *DeadBush) GetDropsForIncompatibleTool(item Item) []Item { return nil }
+// GetDropsForIncompatibleTool is a port of DeadBush::getDropsForIncompatibleTool.
+func (d *DeadBush) GetDropsForIncompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("stick", mtRand(0, 2)))
+}
 
 func (d *DeadBush) IsAffectedBySilkTouch() bool { return true }
 

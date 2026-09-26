@@ -19,7 +19,7 @@ func (s *Snow) Clone() Behavior {
 
 func (s *Snow) IsAffectedBySilkTouch() bool { return true }
 
-// GetDropsForCompatibleTool should return [VanillaItems.SNOWBALL().SetCount(4)] — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (s *Snow) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Snow::getDropsForCompatibleTool.
+func (s *Snow) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("snowball", 4))
+}

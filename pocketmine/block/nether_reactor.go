@@ -17,7 +17,14 @@ func (n *NetherReactor) Clone() Behavior {
 	return &c
 }
 
-// GetDropsForCompatibleTool should return [VanillaItems.IRON_INGOT().SetCount(6),
-// VanillaItems.DIAMOND().SetCount(3)] — needs real Item construction from the unported item
-// package (see Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-func (n *NetherReactor) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of NetherReactor::getDropsForCompatibleTool.
+func (n *NetherReactor) GetDropsForCompatibleTool(item Item) []Item {
+	var drops []Item
+	if iron := vanillaItemCount("iron_ingot", 6); iron != nil {
+		drops = append(drops, iron)
+	}
+	if diamonds := vanillaItemCount("diamond", 3); diamonds != nil {
+		drops = append(drops, diamonds)
+	}
+	return drops
+}

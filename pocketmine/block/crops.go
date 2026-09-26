@@ -12,9 +12,7 @@ const CropsMaxAge = 7
 // Crops is a port of pocketmine\block\Crops.
 //
 // Like Button, this isn't meant to be instantiated directly - it has no Clone() of its own, so a
-// concrete leaf type (Wheat, Carrot, Potato, Beetroot - not yet ported, all need the item
-// registry for their AsItem()/GetDropsForCompatibleTool overrides) must embed it and implement
-// Clone.
+// concrete leaf type (Wheat, Carrot, Potato, Beetroot) must embed it and implement Clone.
 type Crops struct {
 	Flowable
 	AgeComponent

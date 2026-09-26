@@ -78,15 +78,21 @@ func (n *NetherVines) Place(tx BlockTransaction, item Item, blockReplace Behavio
 	return n.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract's fertilizer-driven grow needs a Fertilizer item marker, not ported yet. Block's
-// default OnInteract (return false) already matches this gap, so there's nothing to override
-// here.
+// OnInteract is a port of NetherVines::onInteract.
+func (n *NetherVines) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if isFertilizer(item) {
+		if n.grow(player, mtRand(1, 5)) {
+			item.Pop()
+		}
+		return true
+	}
+	return false
+}
 
 func (n *NetherVines) TicksRandomly() bool { return n.Age < NetherVinesMaxAge }
 
-// grow is a port of NetherVines::grow. Only ever called with a nil player currently
-// (OnRandomTick, below) - same reasoning as Bamboo.grow not taking a player parameter yet.
-func (n *NetherVines) grow(growthAmount int) bool {
+// grow is a port of NetherVines::grow.
+func (n *NetherVines) grow(player Player, growthAmount int) bool {
 	top := n.seekToTip()
 	age := top.Age
 	world, err := top.position.GetWorld()
@@ -113,7 +119,7 @@ func (n *NetherVines) grow(growthAmount int) bool {
 	}
 
 	if changedBlocks > 0 {
-		ev := blockevent.NewStructureGrowEvent(top.self, tx, nil)
+		ev := blockevent.NewStructureGrowEvent(top.self, tx, eventPlayer(player))
 		event.Call(ev)
 		if ev.IsCancelled() {
 			return false
@@ -127,7 +133,7 @@ func (n *NetherVines) grow(growthAmount int) bool {
 func (n *NetherVines) OnRandomTick() {
 	if n.Age < NetherVinesMaxAge && rand.Intn(10) == 0 {
 		if n.self.(blockGeometry).GetSide(n.GrowthFace, 1).CanBeReplaced() {
-			n.grow(1)
+			n.grow(nil, 1)
 		}
 	}
 }
@@ -141,10 +147,13 @@ func (n *NetherVines) OnEntityInside(entity Entity) bool {
 
 func (n *NetherVines) RecalculateCollisionBoxes() []math.AxisAlignedBB { return nil }
 
-// GetDropsForCompatibleTool's shears-or-fortune-chance drop needs real Item construction from the
-// unported item package (see Block.GetDropsForCompatibleTool's doc comment), so this returns nil
-// for now.
-func (n *NetherVines) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of NetherVines::getDropsForCompatibleTool.
+func (n *NetherVines) GetDropsForCompatibleTool(item Item) []Item {
+	if item.GetBlockToolType()&ToolTypeShears != 0 || FortuneBonusChanceFixed(item, 1.0/3, 2.0/9) {
+		return itemDrops(asItemOrNil(n.self))
+	}
+	return nil
+}
 
 func (n *NetherVines) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone

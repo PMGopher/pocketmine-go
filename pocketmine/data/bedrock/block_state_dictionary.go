@@ -28,6 +28,8 @@ package bedrock
 import (
 	"bytes"
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"sync"
 
@@ -53,10 +55,8 @@ var (
 	blockStatesByName map[string][]int32
 )
 
-// loadBlockStates is a port of BlockStateDictionary::loadPaletteFromString, minus the metaMap
-// machinery (idMetaToStateIdLookup/lookupStateIdFromIdMeta): nothing in this port needs legacy
-// numeric meta-based lookups yet - only name+states lookups (RuntimeIDFor, below), matching
-// BlockStateDictionary's stateDataToStateIdLookup fast path.
+// loadBlockStates is a port of BlockStateDictionary::loadPaletteFromString (the palette half; the
+// meta map is loaded by loadIdMetaLookup).
 func loadBlockStates() {
 	blockStatesOnce.Do(func() {
 		dec := gtnbt.NewDecoderWithEncoding(bytes.NewReader(canonicalBlockStatesData), gtnbt.NetworkLittleEndian)
@@ -96,4 +96,79 @@ func RuntimeIDFor(name string, states map[string]any) (int32, bool) {
 		}
 	}
 	return 0, false
+}
+
+// blockStateMetaMapData is the legacy meta of every palette state (BedrockData's
+// block_state_meta_map.json). pmmp has no 1.26.50 BedrockData yet, so this file is derived from
+// pmmp/BedrockData 6.7.0+bedrock-1.26.30 by matching states (ignoring the 1.26.50-only
+// minecraft:corner and minecraft:connection_* properties); states of blocks added since 1.26.30
+// get the index of their distinct state among the block's states.
+//
+//go:embed assets/block_state_meta_map.json
+var blockStateMetaMapData []byte
+
+var (
+	idMetaLookupOnce sync.Once
+	blockStateMetas  []int
+	// idMetaLookup is BlockStateDictionary::getIdMetaToStateIdLookup: name => meta => runtime ID.
+	idMetaLookup map[string]map[int]int32
+)
+
+func loadIdMetaLookup() {
+	idMetaLookupOnce.Do(func() {
+		loadBlockStates()
+		if err := json.Unmarshal(blockStateMetaMapData, &blockStateMetas); err != nil {
+			panic(fmt.Sprintf("bedrock: invalid block state meta map: %v", err))
+		}
+		if len(blockStateMetas) != len(blockStates) {
+			panic(fmt.Sprintf("bedrock: block state meta map has %d entries, the palette has %d states", len(blockStateMetas), len(blockStates)))
+		}
+		idMetaLookup = map[string]map[int]int32{}
+		for i, state := range blockStates {
+			if idMetaLookup[state.Name] == nil {
+				idMetaLookup[state.Name] = map[int]int32{}
+			}
+			idMetaLookup[state.Name][blockStateMetas[i]] = int32(i)
+		}
+	})
+}
+
+// GetMetaFromStateId is a port of BlockStateDictionary::getMetaFromStateId.
+func GetMetaFromStateId(runtimeID int32) (int, bool) {
+	loadIdMetaLookup()
+	if runtimeID < 0 || int(runtimeID) >= len(blockStateMetas) {
+		return 0, false
+	}
+	return blockStateMetas[runtimeID], true
+}
+
+// LookupStateIdFromIdMeta is a port of BlockStateDictionary::lookupStateIdFromIdMeta. Like PHP, a
+// block with only one meta value returns that state for any meta.
+func LookupStateIdFromIdMeta(id string, meta int) (int32, bool) {
+	loadIdMetaLookup()
+	metas, ok := idMetaLookup[id]
+	if !ok {
+		return 0, false
+	}
+	if len(metas) == 1 {
+		for _, runtimeID := range metas {
+			return runtimeID, true
+		}
+	}
+	runtimeID, ok := metas[meta]
+	return runtimeID, ok
+}
+
+// GenerateDataFromStateId is a port of BlockStateDictionary::generateDataFromStateId.
+func GenerateDataFromStateId(runtimeID int32) (BlockStateData, bool) {
+	loadBlockStates()
+	if runtimeID < 0 || int(runtimeID) >= len(blockStates) {
+		return BlockStateData{}, false
+	}
+	state := blockStates[runtimeID]
+	states := make(map[string]any, len(state.States))
+	for k, v := range state.States {
+		states[k] = v
+	}
+	return BlockStateData{Name: state.Name, States: states, Version: state.Version}, true
 }

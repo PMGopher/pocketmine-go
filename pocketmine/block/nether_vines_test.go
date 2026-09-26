@@ -75,7 +75,7 @@ func TestNetherVinesGrowAddsOneSegmentAndIncrementsAge(t *testing.T) {
 	replaceable.SetPosition(w, 1, 4, 3)
 	w.blocks[[3]int{1, 4, 3}] = replaceable
 
-	if !n.grow(1) {
+	if !n.grow(nil, 1) {
 		t.Fatal("expected grow to succeed")
 	}
 	if len(w.setCalls) != 1 {
@@ -103,7 +103,7 @@ func TestNetherVinesGrowCapsAgeAtMax(t *testing.T) {
 	replaceable.SetPosition(w, 1, 4, 3)
 	w.blocks[[3]int{1, 4, 3}] = replaceable
 
-	if !n.grow(1) {
+	if !n.grow(nil, 1) {
 		t.Fatal("expected grow to succeed")
 	}
 	grown := w.setCalls[0].blk.(*NetherVines)
@@ -118,7 +118,7 @@ func TestNetherVinesGrowFailsWhenNotReplaceable(t *testing.T) {
 	w.blocks[[3]int{1, 5, 3}] = n
 	// Default filler below is opaque/non-replaceable.
 
-	if n.grow(1) {
+	if n.grow(nil, 1) {
 		t.Error("expected grow to fail when the space below isn't replaceable")
 	}
 	if len(w.setCalls) != 0 {

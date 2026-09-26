@@ -54,11 +54,26 @@ func (c *Cake) SetBites(bites int) {
 	c.Bites = bites
 }
 
-// OnInteract is a port of Cake::onInteract. The candle-topping branch (turning a bite-free cake
-// into CakeWithCandle/CakeWithDyedCandle when clicked with a candle ItemBlock) needs the unported
-// block registry (VanillaBlocks) to construct the result block, so it's skipped and this falls
-// straight through to BaseCake.OnInteract, same gap as Farmland/GrassPath's VanillaBlocks swaps.
+// OnInteract is a port of Cake::onInteract.
 func (c *Cake) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if itemBlock, ok := item.(ItemBlockLike); ok && c.Bites == 0 {
+		blk := itemBlock.GetBlock()
+		var resultBlock Behavior
+		if blk.GetTypeId() == CANDLE {
+			resultBlock = VanillaBlock("cake_with_candle")
+		} else if dyed, ok := blk.(*DyedCandle); ok {
+			cake := VanillaBlock("cake_with_dyed_candle").(*CakeWithDyedCandle)
+			cake.Color = dyed.Color
+			resultBlock = cake
+		}
+		if resultBlock != nil {
+			if world, err := c.position.GetWorld(); err == nil {
+				_ = world.SetBlock(c.position, resultBlock)
+			}
+			item.Pop()
+			return true
+		}
+	}
 	return c.BaseCake.OnInteract(item, face, clickVector, player, returnedItems)
 }
 

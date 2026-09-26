@@ -3,6 +3,8 @@ package block
 import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/event"
+	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/utils"
 	"pocketmine-go/pocketmine/world/sound"
@@ -30,6 +32,8 @@ type Liquid struct {
 	Falling         bool
 	Decay           int
 	Still           bool
+
+	flowVector *math.Vector3
 }
 
 func (l *Liquid) liquidBase() *Liquid { return l }
@@ -48,6 +52,8 @@ func IsLiquid(blk Behavior) bool {
 type liquidShaper interface {
 	TickRate() int
 	checkForHarden() bool
+	GetFlowDecayPerBlock() int
+	GetMinAdjacentSourcesToFormSource() (int, bool)
 }
 
 func (l *Liquid) DescribeBlockOnlyState(w runtime.DataDescriber) {
@@ -169,17 +175,197 @@ func (l *Liquid) OnNearbyBlockChange() {
 	}
 }
 
-// OnScheduledUpdate is a port of Liquid::onScheduledUpdate - the actual flow/spread algorithm.
-// It needs MinimumCostFlowCalculator (a whole pathfinding helper class), BlockSpreadEvent, and the
-// block registry (VanillaBlocks.AIR() as a replacement state), none ported yet, so this is a
-// documented no-op for now.
-func (l *Liquid) OnScheduledUpdate() {}
+// getEffectiveFlowDecay is a port of Liquid::getEffectiveFlowDecay: -1 if blk isn't this liquid.
+func (l *Liquid) getEffectiveFlowDecay(blk Behavior) int {
+	lb, ok := blk.(liquidBaser)
+	if !ok || blk.GetTypeId() != l.self.GetTypeId() {
+		return -1
+	}
+	other := lb.liquidBase()
+	if other.Falling {
+		return 0
+	}
+	return other.Decay
+}
 
-// GetFlowVector is a port of Liquid::getFlowVector. The real algorithm inspects neighbouring
-// liquid decay levels via World.GetBlockAt in all four horizontal directions (already reachable),
-// but its result only ever feeds AddVelocityToEntity, and there's no entity-physics subsystem yet
-// to consume that vector, so this is a documented no-op returning a zero vector for now.
-func (l *Liquid) GetFlowVector() math.Vector3 { return math.Vector3{} }
+// ReadStateFromWorld is a port of Liquid::readStateFromWorld.
+func (l *Liquid) ReadStateFromWorld() Behavior {
+	l.Block.ReadStateFromWorld()
+	l.flowVector = nil
+	return l.self
+}
+
+// OnScheduledUpdate is a port of Liquid::onScheduledUpdate: the flow/spread algorithm.
+func (l *Liquid) OnScheduledUpdate() {
+	shaper := l.self.(liquidShaper)
+	multiplier := shaper.GetFlowDecayPerBlock()
+	world, err := l.position.GetWorld()
+	if err != nil {
+		return
+	}
+	x, y, z := l.position.FloorX(), l.position.FloorY(), l.position.FloorZ()
+
+	if !l.IsSource() {
+		smallestFlowDecay := -100
+		l.AdjacentSources = 0
+		smallestFlowDecay = l.getSmallestFlowDecay(world.GetBlockAt(x, y, z-1), smallestFlowDecay)
+		smallestFlowDecay = l.getSmallestFlowDecay(world.GetBlockAt(x, y, z+1), smallestFlowDecay)
+		smallestFlowDecay = l.getSmallestFlowDecay(world.GetBlockAt(x-1, y, z), smallestFlowDecay)
+		smallestFlowDecay = l.getSmallestFlowDecay(world.GetBlockAt(x+1, y, z), smallestFlowDecay)
+
+		newDecay := smallestFlowDecay + multiplier
+		falling := false
+
+		if newDecay > LiquidMaxDecay || smallestFlowDecay < 0 {
+			newDecay = -1
+		}
+		if l.getEffectiveFlowDecay(world.GetBlockAt(x, y+1, z)) >= 0 {
+			falling = true
+		}
+
+		if minAdjacentSources, ok := shaper.GetMinAdjacentSourcesToFormSource(); ok && l.AdjacentSources >= minAdjacentSources {
+			bottomBlock := world.GetBlockAt(x, y-1, z)
+			bottomLiquid, isLiquid := bottomBlock.(liquidBaser)
+			if bottomBlock.IsSolid() || (isLiquid && bottomBlock.GetTypeId() == l.self.GetTypeId() && bottomLiquid.liquidBase().IsSource()) {
+				newDecay = 0
+				falling = false
+			}
+		}
+
+		if falling != l.Falling || (!falling && newDecay != l.Decay) {
+			if !falling && newDecay < 0 {
+				_ = world.SetBlock(l.position, VanillaAir())
+				return
+			}
+			l.Falling = falling
+			l.Decay = newDecay
+			if falling {
+				l.Decay = 0
+			}
+			_ = world.SetBlock(l.position, l.self) // local block update will cause an update to be scheduled
+		}
+	}
+
+	bottomBlock := world.GetBlockAt(x, y-1, z)
+	l.flowIntoBlock(bottomBlock, 0, true)
+
+	if l.IsSource() || !bottomBlock.CanBeFlowedInto() {
+		adjacentDecay := l.Decay + multiplier
+		if l.Falling {
+			adjacentDecay = 1 // falling liquid behaves like source block
+		}
+		if adjacentDecay <= LiquidMaxDecay {
+			calculator := NewMinimumCostFlowCalculator(world, shaper.GetFlowDecayPerBlock(), l.canFlowInto)
+			for _, facing := range calculator.GetOptimalFlowDirections(x, y, z) {
+				offset := math.FacingOffset[facing]
+				l.flowIntoBlock(world.GetBlockAt(x+offset[0], y+offset[1], z+offset[2]), adjacentDecay, false)
+			}
+		}
+	}
+
+	shaper.checkForHarden()
+}
+
+// flowIntoBlock is a port of Liquid::flowIntoBlock.
+func (l *Liquid) flowIntoBlock(blk Behavior, newFlowDecay int, falling bool) {
+	if _, isLiquid := blk.(liquidBaser); !l.canFlowInto(blk) || isLiquid {
+		return
+	}
+	newState := l.self.Clone()
+	nl := newState.(liquidBaser).liquidBase()
+	nl.Falling = falling
+	nl.Decay = newFlowDecay
+	if falling {
+		nl.Decay = 0
+	}
+	ev := blockevent.NewBlockSpreadEvent(blk, l.self, newState)
+	event.Call(ev)
+	if ev.IsCancelled() {
+		return
+	}
+	world, err := l.position.GetWorld()
+	if err != nil {
+		return
+	}
+	if blk.GetTypeId() != AIR {
+		world.UseBreakOn(blk.GetPosition().Vector3)
+	}
+	_ = world.SetBlock(blk.GetPosition(), ev.GetNewState().(Behavior))
+}
+
+// getSmallestFlowDecay is a port of Liquid::getSmallestFlowDecay.
+func (l *Liquid) getSmallestFlowDecay(blk Behavior, decay int) int {
+	lb, ok := blk.(liquidBaser)
+	if !ok || blk.GetTypeId() != l.self.GetTypeId() {
+		return decay
+	}
+	other := lb.liquidBase()
+	blockDecay := other.Decay
+	if other.IsSource() {
+		l.AdjacentSources++
+	} else if other.Falling {
+		blockDecay = 0
+	}
+	if decay >= 0 && blockDecay >= decay {
+		return decay
+	}
+	return blockDecay
+}
+
+// GetFlowVector is a port of Liquid::getFlowVector: the direction the liquid pushes entities in.
+func (l *Liquid) GetFlowVector() math.Vector3 {
+	if l.flowVector != nil {
+		return *l.flowVector
+	}
+	world, err := l.position.GetWorld()
+	if err != nil {
+		return math.Vector3{}
+	}
+	vX, vY, vZ := 0, 0, 0
+	x, y, z := l.position.FloorX(), l.position.FloorY(), l.position.FloorZ()
+	decay := l.getEffectiveFlowDecay(l.self)
+
+	for _, j := range horizontalFacings {
+		offset := math.FacingOffset[j]
+		dx, dy, dz := offset[0], offset[1], offset[2]
+		sideX, sideY, sideZ := x+dx, y+dy, z+dz
+		sideBlock := world.GetBlockAt(sideX, sideY, sideZ)
+		blockDecay := l.getEffectiveFlowDecay(sideBlock)
+
+		if blockDecay < 0 {
+			if !sideBlock.CanBeFlowedInto() {
+				continue
+			}
+			blockDecay = l.getEffectiveFlowDecay(world.GetBlockAt(sideX, sideY-1, sideZ))
+			if blockDecay >= 0 {
+				realDecay := blockDecay - (decay - 8)
+				vX += dx * realDecay
+				vY += dy * realDecay
+				vZ += dz * realDecay
+			}
+			continue
+		}
+		realDecay := blockDecay - decay
+		vX += dx * realDecay
+		vY += dy * realDecay
+		vZ += dz * realDecay
+	}
+
+	vector := math.NewVector3(float64(vX), float64(vY), float64(vZ))
+	if l.Falling {
+		for _, facing := range horizontalFacings {
+			offset := math.FacingOffset[facing]
+			if !l.canFlowInto(world.GetBlockAt(x+offset[0], y+offset[1], z+offset[2])) ||
+				!l.canFlowInto(world.GetBlockAt(x+offset[0], y+offset[1]+1, z+offset[2])) {
+				vector = vector.Normalize().Add(0, -6, 0)
+				break
+			}
+		}
+	}
+	normalized := vector.Normalize()
+	l.flowVector = &normalized
+	return normalized
+}
 
 func (l *Liquid) AddVelocityToEntity(entity Entity) (math.Vector3, bool) {
 	if entity.CanBeMovedByCurrents() {

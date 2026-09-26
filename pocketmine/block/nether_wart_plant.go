@@ -52,21 +52,25 @@ func (n *NetherWartPlant) OnNearbyBlockChange() {
 
 func (n *NetherWartPlant) TicksRandomly() bool { return n.Age < n.MaxAge }
 
-// OnRandomTick should use BlockEventHelper.Grow (not yet ported — see block/utils) to fire the
-// grow event before applying the change; for now it grows unconditionally when the random roll
-// succeeds, matching everything except that event hook.
+// OnRandomTick is a port of NetherWartPlant::onRandomTick.
 func (n *NetherWartPlant) OnRandomTick() {
-	if n.Age < n.MaxAge && rand.Intn(11) == 0 {
-		n.Age++
-		if world, err := n.position.GetWorld(); err == nil {
-			if err := world.SetBlock(n.position, n.self); err != nil {
-				panic(err)
-			}
-		}
+	if n.Age < n.MaxAge && rand.Intn(11) == 0 { // Still growing
+		grown := n.self.Clone().(*NetherWartPlant)
+		grown.Age++
+		Grow(n.self, grown, nil)
 	}
 }
 
-// GetDropsForCompatibleTool should scale the drop count via FortuneDropHelper (not yet ported)
-// when fully grown; needs real Item construction from the unported item package regardless (see
-// Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-func (n *NetherWartPlant) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of NetherWartPlant::getDropsForCompatibleTool.
+func (n *NetherWartPlant) GetDropsForCompatibleTool(item Item) []Item {
+	drop := asItemOrNil(n.self)
+	if drop == nil {
+		return nil
+	}
+	count := 1
+	if n.Age == NetherWartPlantMaxAge {
+		count = FortuneDiscrete(item, 2, 4)
+	}
+	drop.SetCount(count)
+	return []Item{drop}
+}

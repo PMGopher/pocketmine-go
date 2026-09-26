@@ -105,7 +105,7 @@ func TestLoadWorldReturnsTheSameInstanceIfAlreadyLoaded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded, err := m.LoadWorld("myworld")
+	loaded, err := m.LoadWorld("myworld", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestLoadWorldReturnsTheSameInstanceIfAlreadyLoaded(t *testing.T) {
 
 func TestLoadWorldRejectsAnUngeneratedName(t *testing.T) {
 	m := newTestWorldManager(t)
-	if _, err := m.LoadWorld("never-generated"); err == nil {
+	if _, err := m.LoadWorld("never-generated", false); err == nil {
 		t.Error("LoadWorld on a never-generated name = nil error, want an error")
 	}
 }
@@ -144,7 +144,7 @@ func TestUnloadWorldThenLoadWorldReconstructsAnEquivalentWorldFromDisk(t *testin
 		t.Error("GetWorld(originalID) still found the unloaded world")
 	}
 
-	reloaded, err := m.LoadWorld("myworld")
+	reloaded, err := m.LoadWorld("myworld", false)
 	if err != nil {
 		t.Fatalf("LoadWorld after unload: %v", err)
 	}

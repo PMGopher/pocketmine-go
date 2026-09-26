@@ -859,4 +859,3 @@ func VanillaWrittenBook() Item { return VanillaItem("written_book") }
 
 // VanillaZombieSpawnEgg is VanillaItems::ZOMBIE_SPAWN_EGG().
 func VanillaZombieSpawnEgg() Item { return VanillaItem("zombie_spawn_egg") }
-

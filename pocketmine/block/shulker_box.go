@@ -5,12 +5,10 @@ import (
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/nbt"
 )
 
 // ShulkerBox is a port of pocketmine\block\ShulkerBox.
-//
-// WriteStateToWorld (pushing Facing back into the tile on placement) isn't ported - there's no
-// WriteStateToWorld hook on Behavior yet, same documented gap as Note/Bed/BaseBanner/MobHead.
 type ShulkerBox struct {
 	Opaque
 	FacingComponent
@@ -61,10 +59,7 @@ func (s *ShulkerBox) Place(tx BlockTransaction, item Item, blockReplace Behavior
 	return s.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract is a port of ShulkerBox::onInteract, minus actually opening the inventory window
-// (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc comment for the same
-// gap). The obstruction check (something solid blocking the box's opening side) and the
-// CanOpenWith lock check are both fully real.
+// OnInteract is a port of ShulkerBox::onInteract.
 func (s *ShulkerBox) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return true
@@ -87,7 +82,7 @@ func (s *ShulkerBox) OnInteract(item Item, face math.Facing, clickVector math.Ve
 	if !tileShulker.CanOpenWith(item.GetCustomName()) {
 		return true
 	}
-	// player.SetCurrentWindow(tileShulker.GetInventory()) - not ported, see doc comment above.
+	openTileWindow(player, tileShulker.GetInventory())
 	return true
 }
 
@@ -95,7 +90,53 @@ func (s *ShulkerBox) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone
 }
 
-// GetDropsForCompatibleTool/GetPickedItem should copy the tile's cleaned NBT/name onto the
-// dropped/picked item (addDataFromTile) - needs real Item construction and SetNamedTag/
-// SetCustomName wiring from the unported item package integration (see
-// Block.GetDropsForCompatibleTool's doc comment), so both are left as Block's defaults for now.
+// addDataFromTile is a port of ShulkerBox::addDataFromTile: the box keeps its contents and name.
+func (s *ShulkerBox) addDataFromTile(shulker *tile.ShulkerBox, it Item) {
+	if tag := shulker.GetCleanedNBT(); tag != nil {
+		if named, ok := it.(interface{ SetNamedTag(tag *nbt.CompoundTag) }); ok {
+			named.SetNamedTag(tag)
+		}
+	}
+	if shulker.HasName() {
+		if named, ok := it.(interface{ SetCustomName(name string) }); ok {
+			named.SetCustomName(shulker.GetName())
+		}
+	}
+}
+
+// GetDropsForCompatibleTool is a port of ShulkerBox::getDropsForCompatibleTool.
+func (s *ShulkerBox) GetDropsForCompatibleTool(item Item) []Item {
+	drop := asItemOrNil(s.self)
+	if drop == nil {
+		return nil
+	}
+	if t, ok := s.tileAt(); ok {
+		if shulker, ok := t.(*tile.ShulkerBox); ok {
+			s.addDataFromTile(shulker, drop)
+		}
+	}
+	return []Item{drop}
+}
+
+// GetPickedItem is a port of ShulkerBox::getPickedItem.
+func (s *ShulkerBox) GetPickedItem(addUserData bool) Item {
+	result := s.Block.GetPickedItem(addUserData)
+	if addUserData && result != nil {
+		if t, ok := s.tileAt(); ok {
+			if shulker, ok := t.(*tile.ShulkerBox); ok {
+				s.addDataFromTile(shulker, result)
+			}
+		}
+	}
+	return result
+}
+
+// WriteStateToWorld is a port of ShulkerBox::writeStateToWorld.
+func (s *ShulkerBox) WriteStateToWorld() {
+	s.Block.WriteStateToWorld()
+	if t, ok := s.tileAt(); ok {
+		if shulker, ok := t.(*tile.ShulkerBox); ok {
+			shulker.SetFacing(int(s.Facing))
+		}
+	}
+}

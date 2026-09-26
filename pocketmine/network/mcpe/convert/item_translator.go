@@ -2,6 +2,7 @@ package convert
 
 import (
 	"fmt"
+	"pocketmine-go/pocketmine/nbt"
 
 	"pocketmine-go/pocketmine/data/bedrock"
 	bedrockitem "pocketmine-go/pocketmine/data/bedrock/item"
@@ -105,4 +106,14 @@ func DeserializeItemType(name string, meta int, blockStateData *bedrock.BlockSta
 		return nil, false
 	}
 	return it, true
+}
+
+// ToNetworkNbt is a port of ItemTranslator::toNetworkNbt: the item's NBT as sent in tile spawn
+// data (this relies on network item NBT being the same as disk item NBT, like PHP).
+func (t *ItemTranslator) ToNetworkNbt(it item.Item) (*nbt.CompoundTag, error) {
+	stack, err := t.serializer.SerializeStack(it, nil)
+	if err != nil {
+		return nil, err
+	}
+	return stack.ToNbt(), nil
 }

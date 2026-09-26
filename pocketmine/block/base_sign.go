@@ -40,9 +40,8 @@ type signShaper interface {
 // instantiated directly - a concrete leaf type (FloorSign, WallSign) must embed it, implement
 // Clone, and satisfy signShaper.
 //
-// The PHP constructor's `asItemCallback` closure is dropped: it's only used by AsItem(), which
-// needs real Item construction from the unported item package regardless (see
-// Block.GetDropsForCompatibleTool's doc comment), so AsItem is left as Block's default here too.
+// The PHP constructor's `asItemCallback` closure is replaced by BaseSign.AsItem, which builds the
+// sign item of the wood type.
 type BaseSign struct {
 	Transparent
 	WoodTypeComponent
@@ -340,4 +339,17 @@ func (b *BaseSign) UpdateFaceText(author Player, authorName string, frontFace bo
 		return false, err
 	}
 	return true, nil
+}
+
+// WriteStateToWorld is a port of BaseSign::writeStateToWorld.
+func (b *BaseSign) WriteStateToWorld() {
+	b.Block.WriteStateToWorld()
+	if t, ok := b.tileAt(); ok {
+		if signTile, ok := t.(*tile.Sign); ok {
+			signTile.SetText(b.Text)
+			signTile.SetBackText(b.BackText)
+			signTile.SetWaxed(b.Waxed)
+			signTile.SetEditorEntityRuntimeID(int64(b.EditorEntityRuntimeID), b.HasEditor)
+		}
+	}
 }

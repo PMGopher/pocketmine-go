@@ -9,7 +9,6 @@ import (
 	"pocketmine-go/pocketmine/promise"
 	"pocketmine-go/pocketmine/scheduler"
 	"pocketmine-go/pocketmine/world/format"
-	worldio "pocketmine-go/pocketmine/world/format/io/leveldb"
 )
 
 // This file ports World's chunk loading, locking and asynchronous population: loadChunk,
@@ -69,20 +68,26 @@ func (w *World) loadChunk(chunkX, chunkZ int) *format.Chunk {
 		w.knownUngeneratedChunks[key] = true
 		return nil
 	}
-	c, ok, err := worldio.LoadChunk(w.provider, int32(chunkX), int32(chunkZ), int32(block.VanillaAir().GetStateId()), 0, w.resolveBlockState)
+	loadedChunkData, err := w.provider.LoadChunk(chunkX, chunkZ)
 	if err != nil && w.logger != nil {
 		w.logger.Critical(fmt.Sprintf("Failed to load chunk x=%d z=%d: %v", chunkX, chunkZ, err))
 	}
-	if err != nil || !ok {
+	if err != nil || loadedChunkData == nil {
 		w.knownUngeneratedChunks[key] = true
 		return nil
+	}
+
+	chunkData := loadedChunkData.GetData()
+	c := format.NewChunk(chunkData.GetSubChunks(), chunkData.IsPopulated(), int32(block.VanillaAir().GetStateId()), 0)
+	if !loadedChunkData.IsUpgraded() {
+		c.ClearTerrainDirtyFlags()
+	} else if w.logger != nil {
+		w.logger.Debug(fmt.Sprintf("Chunk %d %d has been upgraded, will be saved at the next autosave opportunity", chunkX, chunkZ))
 	}
 	w.chunks[key] = c
 	delete(w.changedBlocks, key)
 
-	if entityNBT, err := worldio.LoadEntities(w.provider, int32(chunkX), int32(chunkZ)); err == nil {
-		w.initChunkEntities(entityNBT)
-	}
+	w.initChunk(chunkX, chunkZ, chunkData, c)
 	if event.HasHandlers[worldevent.ChunkLoadEvent]() {
 		event.Call(worldevent.NewChunkLoadEvent(w, chunkX, chunkZ, c, false))
 	}

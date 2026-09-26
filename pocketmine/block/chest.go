@@ -91,9 +91,7 @@ func (c *Chest) OnPostPlace() {
 	}
 }
 
-// OnInteract is a port of Chest::onInteract, minus actually opening the inventory window
-// (player.SetCurrentWindow isn't ported - needs a real Player with window-management state). The
-// support/lock checks that decide WHETHER it could be opened are fully real.
+// OnInteract is a port of Chest::onInteract.
 func (c *Chest) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return true
@@ -125,7 +123,7 @@ func (c *Chest) OnInteract(item Item, face math.Facing, clickVector math.Vector3
 		return true
 	}
 
-	// player.SetCurrentWindow(tileChest.GetInventory()) - not ported, see doc comment above.
+	openTileWindow(player, tileChest.GetInventory())
 	return true
 }
 

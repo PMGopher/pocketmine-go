@@ -83,6 +83,9 @@ func (w *WritableBookBase) GetMaxStackSize() int { return 1 }
 
 func (w *WritableBookBase) GetPages() []WritableBookPage { return w.Pages }
 
+// GetPageCount is count($this->getPages()), for the lectern tile (which can't name WritableBookPage).
+func (w *WritableBookBase) GetPageCount() int { return len(w.Pages) }
+
 func (w *WritableBookBase) SetPages(pages []WritableBookPage) { w.Pages = pages }
 
 // deserializeCompoundTag/serializeCompoundTag are WritableBookBase's participation in the

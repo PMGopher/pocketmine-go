@@ -3,8 +3,7 @@ package block
 // InfestedStone is a port of pocketmine\block\InfestedStone.
 //
 // The PHP original stores the imitated block's state ID and resolves it back to a real Block via
-// RuntimeBlockStateRegistry (an unported world/block-state registry) in GetImitatedBlock. That
-// resolution isn't implemented yet — only the raw state ID is stored/exposed for now.
+// RuntimeBlockStateRegistry in GetImitatedBlock.
 type InfestedStone struct {
 	Opaque
 
@@ -30,8 +29,14 @@ func (i *InfestedStone) GetImitatedStateID() int { return i.ImitatedStateID }
 
 func (i *InfestedStone) GetDropsForCompatibleTool(item Item) []Item { return nil }
 
-// GetSilkTouchDrops should return [i.GetImitatedBlock().AsItem()] — needs
-// RuntimeBlockStateRegistry (see the type doc comment), so this returns nil for now.
-func (i *InfestedStone) GetSilkTouchDrops(item Item) []Item { return nil }
+// GetImitatedBlock is a port of InfestedStone::getImitatedBlock.
+func (i *InfestedStone) GetImitatedBlock() Behavior {
+	return GetRuntimeBlockStateRegistry().FromStateId(i.ImitatedStateID)
+}
+
+// GetSilkTouchDrops is a port of InfestedStone::getSilkTouchDrops.
+func (i *InfestedStone) GetSilkTouchDrops(item Item) []Item {
+	return itemDrops(asItemOrNil(i.GetImitatedBlock()))
+}
 
 func (i *InfestedStone) IsAffectedBySilkTouch() bool { return true }

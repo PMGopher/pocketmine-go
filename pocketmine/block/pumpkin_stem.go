@@ -3,9 +3,6 @@ package block
 import "pocketmine-go/pocketmine/math"
 
 // PumpkinStem is a port of pocketmine\block\PumpkinStem.
-//
-// AsItem should return VanillaItems.PUMPKIN_SEEDS() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.
 type PumpkinStem struct {
 	Stem
 }

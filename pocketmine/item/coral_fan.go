@@ -3,14 +3,13 @@ package item
 import (
 	"pocketmine-go/pocketmine/block"
 	blockutils "pocketmine-go/pocketmine/block/utils"
-	"pocketmine-go/pocketmine/math"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/math"
 )
 
 // CoralFan is a port of pocketmine\item\CoralFan. It reuses block.CoralComponent directly for its
 // coral-type/dead state (the same struct backing FloorCoralFan/WallCoralFan block state), matching
 // PHP's own reuse of CoralTypeTrait for both Block and Item.
-//
 type CoralFan struct {
 	ItemBase
 	block.CoralComponent

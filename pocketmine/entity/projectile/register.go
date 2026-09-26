@@ -77,8 +77,19 @@ func init() {
 		if _, ok, _ := tag.GetCompoundTag(TagTridentItem); !ok {
 			return nil, data.NewSavedDataLoadingError(`Expected "` + TagTridentItem + `" NBT tag not found`)
 		}
-		// Item::nbtDeserialize isn't ported (see Trident's doc comment).
-		return nil, data.NewSavedDataLoadingError("trident data can't be loaded: item NBT deserialization isn't ported")
+		itemTag, _, _ := tag.GetCompoundTag(TagTridentItem)
+		it, err := item.NbtDeserialize(itemTag)
+		if err != nil {
+			return nil, err
+		}
+		if it.IsNull() {
+			return nil, data.NewSavedDataLoadingError("Trident item is invalid")
+		}
+		loc, err := entity.ParseLocation(tag, w)
+		if err != nil {
+			return nil, err
+		}
+		return NewTrident(loc, it, nil, tag), nil
 	}, []string{
 		"minecraft:trident",        //java
 		"minecraft:thrown_trident", //bedrock

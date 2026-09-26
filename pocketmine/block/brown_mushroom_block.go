@@ -24,6 +24,7 @@ func (b *BrownMushroomBlock) Clone() Behavior {
 	return &c
 }
 
-// GetDropsForCompatibleTool should return [VanillaBlocks.BROWN_MUSHROOM().AsItem().SetCount(mt_rand(0,2))]
-// — same gap as RedMushroomBlock.GetDropsForCompatibleTool's doc comment.
-func (b *BrownMushroomBlock) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of BrownMushroomBlock::getDropsForCompatibleTool.
+func (b *BrownMushroomBlock) GetDropsForCompatibleTool(item Item) []Item {
+	return mushroomDrops("brown_mushroom")
+}

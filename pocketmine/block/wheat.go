@@ -1,10 +1,6 @@
 package block
 
 // Wheat is a port of pocketmine\block\Wheat.
-//
-// GetDropsForCompatibleTool/AsItem should return VanillaItems.WHEAT_SEEDS()/WHEAT() — needs the
-// unported item package (see Block.GetDropsForCompatibleTool's doc comment), so both are left as
-// Crops'/Block's defaults for now.
 type Wheat struct {
 	Crops
 }
@@ -22,4 +18,19 @@ func (w *Wheat) Clone() Behavior {
 	c := *w
 	c.rebind(&c)
 	return &c
+}
+
+// GetDropsForCompatibleTool is a port of Wheat::getDropsForCompatibleTool.
+func (w *Wheat) GetDropsForCompatibleTool(item Item) []Item {
+	if w.Age >= CropsMaxAge {
+		var drops []Item
+		if wheat := vanillaItem("wheat"); wheat != nil {
+			drops = append(drops, wheat)
+		}
+		if seeds := vanillaItemCount("wheat_seeds", FortuneBinomial(item, 0, 3, 4.0/7)); seeds != nil {
+			drops = append(drops, seeds)
+		}
+		return drops
+	}
+	return itemDrops(vanillaItem("wheat_seeds"))
 }

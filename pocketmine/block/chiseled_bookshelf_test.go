@@ -73,13 +73,14 @@ func TestChiseledBookshelfOnInteractRejectsWrongFace(t *testing.T) {
 	}
 }
 
-func TestChiseledBookshelfOnInteractAcceptsMatchingFace(t *testing.T) {
+// With no bookshelf tile (and so no inventory), PHP returns false.
+func TestChiseledBookshelfOnInteractWithoutTile(t *testing.T) {
 	w := &fakeWorld{}
 	c := newTestChiseledBookshelf(w)
 	c.Facing = math.North
 
-	if !c.OnInteract(fakeItem{}, math.North, math.Vector3{}, nil, nil) {
-		t.Error("expected OnInteract to return true when the clicked face matches the block's facing")
+	if c.OnInteract(fakeItem{}, math.North, math.Vector3{X: 0.5, Y: 0.5}, nil, nil) {
+		t.Error("expected OnInteract to return false without a bookshelf tile")
 	}
 }
 

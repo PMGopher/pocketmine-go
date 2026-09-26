@@ -13,6 +13,7 @@ const (
 	itemTypeIDsWaterBucket      = 20218
 	itemTypeIDsPowderSnowBucket = 20258
 	itemTypeIDsLingeringPotion  = 20259
+	itemTypeIDsBamboo           = 20005
 )
 
 // VanillaItemFunc returns a new instance of the named VanillaItems entry (e.g. "bucket"). This
@@ -48,4 +49,21 @@ func appendItem(items *[]Item, it Item) {
 	if items != nil && it != nil {
 		*items = append(*items, it)
 	}
+}
+
+// vanillaItemCount is VanillaItems::X()->setCount($count) (nil if the item package isn't loaded).
+func vanillaItemCount(name string, count int) Item {
+	it := vanillaItem(name)
+	if it != nil {
+		it.SetCount(count)
+	}
+	return it
+}
+
+// itemDrops is a one-item drop list, empty if the item couldn't be built.
+func itemDrops(it Item) []Item {
+	if it == nil {
+		return nil
+	}
+	return []Item{it}
 }

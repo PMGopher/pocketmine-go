@@ -122,15 +122,53 @@ func (l *Leaves) Place(tx BlockTransaction, item Item, blockReplace Behavior, bl
 	return l.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// GetDropsForCompatibleTool's shears branch is fully ported; the sapling/apple/stick fortune-based
-// drops need FortuneDropHelper and the block/item registries (VanillaBlocks/VanillaItems), none
-// ported yet, so that part returns nil for now (see Block.GetDropsForCompatibleTool's doc comment
-// for the same category of gap).
+// GetDropsForCompatibleTool is a port of Leaves::getDropsForCompatibleTool.
 func (l *Leaves) GetDropsForCompatibleTool(item Item) []Item {
 	if item.GetBlockToolType()&ToolTypeShears != 0 {
 		return l.Block.GetDropsForCompatibleTool(item)
 	}
-	return nil
+	var drops []Item
+	if FortuneBonusChanceDivisor(item, 20, 4) { // Saplings
+		// TODO: according to the wiki, the jungle saplings have a different drop rate
+		var sapling string
+		switch l.LeavesTypeValue {
+		case blockutils.LeavesTypeAcacia:
+			sapling = "acacia_sapling"
+		case blockutils.LeavesTypeBirch:
+			sapling = "birch_sapling"
+		case blockutils.LeavesTypeDarkOak:
+			sapling = "dark_oak_sapling"
+		case blockutils.LeavesTypeJungle:
+			sapling = "jungle_sapling"
+		case blockutils.LeavesTypeOak:
+			sapling = "oak_sapling"
+		case blockutils.LeavesTypeSpruce:
+			sapling = "spruce_sapling"
+		case blockutils.LeavesTypeMangrove, //TODO: mangrove propagule
+			blockutils.LeavesTypeAzalea:
+			sapling = "azalea"
+		case blockutils.LeavesTypeFloweringAzalea:
+			sapling = "flowering_azalea"
+		}
+		//TODO: cherry, pale oak
+		if sapling != "" {
+			if it := asItemOrNil(VanillaBlock(sapling)); it != nil {
+				drops = append(drops, it)
+			}
+		}
+	}
+	if (l.LeavesTypeValue == blockutils.LeavesTypeOak || l.LeavesTypeValue == blockutils.LeavesTypeDarkOak) &&
+		FortuneBonusChanceDivisor(item, 200, 20) { // Apples
+		if apple := vanillaItem("apple"); apple != nil {
+			drops = append(drops, apple)
+		}
+	}
+	if FortuneBonusChanceDivisor(item, 50, 5) {
+		if sticks := vanillaItemCount("stick", mtRand(1, 2)); sticks != nil {
+			drops = append(drops, sticks)
+		}
+	}
+	return drops
 }
 
 func (l *Leaves) IsAffectedBySilkTouch() bool { return true }

@@ -1,14 +1,21 @@
 package world
 
 import (
+	"errors"
 	"fmt"
 	stdmath "math"
+	"os"
 	"path/filepath"
+
 	"pocketmine-go/pocketmine/event"
 	worldevent "pocketmine-go/pocketmine/event/world"
+	"pocketmine-go/pocketmine/lang"
 	"pocketmine-go/pocketmine/log"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/scheduler"
+	"pocketmine-go/pocketmine/world/format/io/exception"
+	_ "pocketmine-go/pocketmine/world/format/io/leveldb" // registers the LevelDB provider
+	_ "pocketmine-go/pocketmine/world/format/io/region"  // registers the Anvil, McRegion and PMAnvil providers
 	"strings"
 	"time"
 
@@ -26,14 +33,17 @@ const ticksPerAutoSave = 300 * 20
 // every currently-loaded World, tracks which one is the default, and drives all of their ticks and
 // autosave together.
 type WorldManager struct {
-	logger log.Logger
+	logger   log.Logger
+	language *lang.Language
+
+	providerManager *worldio.WorldProviderManager
 
 	dataPath    string
 	translator  *convert.BlockTranslator
 	knownBlocks []block.Behavior
 
 	worlds       map[int]*World
-	worldData    map[int]*worldio.WorldData
+	worldData    map[int]worldio.WorldData
 	defaultWorld *World
 	nextID       int
 
@@ -93,13 +103,14 @@ func (m *WorldManager) setUpGeneration(w *World, generatorName string, seed int6
 // explicitly (see World.New's own doc comment on why).
 func NewWorldManager(dataPath string, translator *convert.BlockTranslator, knownBlocks []block.Behavior) *WorldManager {
 	return &WorldManager{
-		dataPath:      dataPath,
-		translator:    translator,
-		knownBlocks:   knownBlocks,
-		worlds:        map[int]*World{},
-		worldData:     map[int]*worldio.WorldData{},
-		autoSave:      true,
-		autoSaveTicks: ticksPerAutoSave,
+		dataPath:        dataPath,
+		translator:      translator,
+		knownBlocks:     knownBlocks,
+		worlds:          map[int]*World{},
+		worldData:       map[int]worldio.WorldData{},
+		providerManager: worldio.NewWorldProviderManager(),
+		autoSave:        true,
+		autoSaveTicks:   ticksPerAutoSave,
 	}
 }
 
@@ -161,9 +172,66 @@ func (m *WorldManager) GetWorldByName(name string) (*World, bool) {
 
 func (m *WorldManager) worldPath(name string) string { return filepath.Join(m.dataPath, name) }
 
-// IsWorldGenerated is a port of WorldManager::isWorldGenerated - minus the WorldProviderManager
-// format-matching probe (this port only ever writes LevelDB worlds - see io/leveldb's own doc
-// comment - so "generated" just means "this world's directory has a level.dat in it").
+// GetProviderManager is a port of WorldManager::getProviderManager.
+func (m *WorldManager) GetProviderManager() *worldio.WorldProviderManager { return m.providerManager }
+
+// SetLanguage sets the language load errors are translated with (PHP uses the server's).
+func (m *WorldManager) SetLanguage(language *lang.Language) { m.language = language }
+
+func (m *WorldManager) translate(t *lang.Translatable) string {
+	if m.language != nil {
+		return m.language.Translate(t)
+	}
+	return fmt.Sprint(t.Text(), t.Parameters())
+}
+
+func (m *WorldManager) logError(t *lang.Translatable) error {
+	message := m.translate(t)
+	if m.logger != nil {
+		m.logger.Error(message)
+	}
+	return fmt.Errorf("%s", message)
+}
+
+// migrateOldPortLayout moves a LevelDB database written by older versions of this server, which
+// stored it directly in the world directory, into db/ where Bedrock and PocketMine-MP keep it.
+// Without this such worlds wouldn't be recognised any more (LevelDB::isValid needs db/), and the
+// server would generate a new world over them. PHP has no equivalent (it never used that layout).
+func (m *WorldManager) migrateOldPortLayout(path string) {
+	if _, err := os.Stat(filepath.Join(path, "level.dat")); err != nil {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(path, "db")); err == nil {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(path, "CURRENT")); err != nil {
+		return
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return
+	}
+	dbPath := filepath.Join(path, "db")
+	if err := os.Mkdir(dbPath, 0o755); err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || name == "level.dat" || name == "level.dat_old" || name == "levelname.txt" {
+			continue
+		}
+		if name == "CURRENT" || name == "LOCK" || strings.HasPrefix(name, "LOG") || strings.HasPrefix(name, "MANIFEST-") ||
+			strings.HasSuffix(name, ".ldb") || strings.HasSuffix(name, ".log") {
+			_ = os.Rename(filepath.Join(path, name), filepath.Join(dbPath, name))
+		}
+	}
+	if m.logger != nil {
+		m.logger.Notice(fmt.Sprintf("Moved the world database of \"%s\" into %s", filepath.Base(path), dbPath))
+	}
+}
+
+// IsWorldGenerated is a port of WorldManager::isWorldGenerated: a loaded world, or a directory a
+// world provider recognises.
 func (m *WorldManager) IsWorldGenerated(name string) bool {
 	if strings.TrimSpace(name) == "" {
 		return false
@@ -171,8 +239,9 @@ func (m *WorldManager) IsWorldGenerated(name string) bool {
 	if _, ok := m.GetWorldByName(name); ok {
 		return true
 	}
-	_, err := worldio.LoadWorldData(m.worldPath(name))
-	return err == nil
+	path := m.worldPath(name)
+	m.migrateOldPortLayout(path)
+	return len(m.providerManager.GetMatchingProviders(path)) > 0
 }
 
 // UnloadWorld is a port of WorldManager::unloadWorld.
@@ -191,7 +260,7 @@ func (m *WorldManager) UnloadWorld(w *World, forceUnload bool) (bool, error) {
 	}
 
 	if m.logger != nil {
-		m.logger.Info(fmt.Sprintf("Unloading world \"%s\"", w.GetDisplayName())) // pocketmine.level.unloading
+		m.logger.Info(m.translate(lang.KnownTranslationFactory.PocketmineLevelUnloading(w.GetDisplayName())))
 	}
 	if players := w.GetPlayers(); len(players) != 0 {
 		var safeSpawn *math.Vector3
@@ -218,7 +287,7 @@ func (m *WorldManager) UnloadWorld(w *World, forceUnload bool) (bool, error) {
 	// World::onUnload -> World::save: level.dat is saved along with the chunks (Close).
 	if wd, ok := m.worldData[w.GetID()]; ok {
 		m.syncWorldData(w, wd)
-		if err := wd.Save(m.worldPath(w.GetFolderName())); err != nil {
+		if err := wd.Save(); err != nil {
 			return false, fmt.Errorf("world manager: saving %q's level.dat: %w", w.GetFolderName(), err)
 		}
 	}
@@ -234,10 +303,10 @@ func (m *WorldManager) UnloadWorld(w *World, forceUnload bool) (bool, error) {
 	return true, nil
 }
 
-// LoadWorld is a port of WorldManager::loadWorld. Not ported: format auto-upgrade (autoUpgrade's
-// FormatConverter path - this port only ever reads/writes its own single LevelDB format, so there
-// is no other format to convert from) and the WorldLoadEvent (see WorldManager's own doc comment).
-func (m *WorldManager) LoadWorld(name string) (*World, error) {
+// LoadWorld is a port of WorldManager::loadWorld: the world in worlds/<name>, in any format a
+// provider recognises (Bedrock LevelDB, or Anvil/McRegion/PMAnvil, which are converted to
+// LevelDB first when autoUpgrade is set). Load errors are logged, like PHP, and returned.
+func (m *WorldManager) LoadWorld(name string, autoUpgrade bool) (*World, error) {
 	if strings.TrimSpace(name) == "" {
 		return nil, fmt.Errorf("world manager: invalid empty world name")
 	}
@@ -249,39 +318,113 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 	}
 
 	path := m.worldPath(name)
-	wd, err := worldio.LoadWorldData(path)
+
+	providers := m.providerManager.GetMatchingProviders(path)
+	if len(providers) != 1 {
+		reason := lang.KnownTranslationFactory.PocketmineLevelUnknownFormat()
+		if len(providers) > 1 {
+			aliases := make([]string, len(providers))
+			for i, p := range providers {
+				aliases[i] = p.Alias
+			}
+			reason = lang.KnownTranslationFactory.PocketmineLevelAmbiguousFormat(strings.Join(aliases, ", "))
+		}
+		return nil, m.logError(lang.KnownTranslationFactory.PocketmineLevelLoadError(name, reason))
+	}
+	providerEntry := providers[0].Entry
+
+	providerLogger := m.providerLogger(name)
+	provider, err := providerEntry.FromPath(path, providerLogger)
 	if err != nil {
-		return nil, fmt.Errorf("world manager: loading %q's level.dat: %w", name, err)
+		return nil, m.providerLoadError(name, err)
 	}
 
-	factory, ok := generator.GetFactory(wd.GetGenerator())
+	worldData := provider.GetWorldData()
+	factory, ok := generator.GetFactory(strings.ToLower(worldData.GetGenerator()))
 	if !ok {
-		return nil, &generator.UnknownGeneratorError{Name: wd.GetGenerator()}
+		_ = provider.Close()
+		return nil, m.logError(lang.KnownTranslationFactory.PocketmineLevelLoadError(name,
+			lang.KnownTranslationFactory.PocketmineLevelUnknownGenerator(worldData.GetGenerator())))
 	}
-	gen, err := factory(wd.GetSeed(), wd.GetGeneratorOptions())
+	gen, err := factory(worldData.GetSeed(), worldData.GetGeneratorOptions())
 	if err != nil {
-		return nil, fmt.Errorf("world manager: constructing %q's generator: %w", name, err)
+		_ = provider.Close()
+		return nil, m.logError(lang.KnownTranslationFactory.PocketmineLevelLoadError(name,
+			lang.KnownTranslationFactory.PocketmineLevelInvalidGeneratorOptions(worldData.GetGeneratorOptions(), worldData.GetGenerator(), err.Error())))
+	}
+
+	writable, ok := provider.(worldio.WritableWorldProvider)
+	if !ok {
+		if !autoUpgrade {
+			_ = provider.Close()
+			return nil, &exception.UnsupportedWorldFormatError{Message: fmt.Sprintf("World \"%s\" is in an unsupported format and needs to be upgraded", name)}
+		}
+		if m.logger != nil {
+			m.logger.Notice(m.translate(lang.KnownTranslationFactory.PocketmineLevelConversionStart(name)))
+		}
+		defaultEntry := m.providerManager.GetDefault()
+		logger := m.logger
+		if logger == nil {
+			logger = log.Global()
+		}
+		converter := worldio.NewFormatConverter(provider, defaultEntry, filepath.Join(filepath.Dir(m.dataPath), "backups", "worlds"), logger, 256, func(generatorName string) (string, bool) {
+			if _, ok := generator.GetFactory(strings.ToLower(generatorName)); ok {
+				return strings.ToLower(generatorName), true
+			}
+			return "", false
+		})
+		if err := converter.Execute(); err != nil {
+			return nil, m.logError(lang.KnownTranslationFactory.PocketmineLevelLoadError(name, lang.KnownTranslationFactory.PocketmineLevelCorrupted(err.Error())))
+		}
+		if writable, err = defaultEntry.FromPathWritable(path, providerLogger); err != nil {
+			return nil, m.providerLoadError(name, err)
+		}
+		if m.logger != nil {
+			m.logger.Notice(m.translate(lang.KnownTranslationFactory.PocketmineLevelConversionFinish(name, converter.GetBackupPath())))
+		}
+		worldData = writable.GetWorldData()
 	}
 
 	w := New(gen, m.translator, m.knownBlocks)
-	if err := w.OpenProvider(path); err != nil {
-		return nil, fmt.Errorf("world manager: opening %q's world data: %w", name, err)
-	}
-	w.SetTime(wd.GetTime())
-	w.spawnLocation = wd.GetSpawn()
-	w.difficulty = wd.GetDifficulty()
+	w.SetProvider(writable)
+	w.SetTime(worldData.GetTime())
+	w.spawnLocation = worldData.GetSpawn()
+	w.difficulty = worldData.GetDifficulty()
 
 	m.nextID++
 	w.id = m.nextID
 	w.folderName = name
-	w.displayName = wd.GetName()
-	m.setUpGeneration(w, wd.GetGenerator(), wd.GetSeed(), wd.GetGeneratorOptions())
+	w.displayName = worldData.GetName()
+	m.setUpGeneration(w, worldData.GetGenerator(), worldData.GetSeed(), worldData.GetGeneratorOptions())
 
 	m.worlds[w.id] = w
-	m.worldData[w.id] = wd
+	m.worldData[w.id] = worldData
+	w.SetAutoSave(m.autoSave)
 
 	event.Call(worldevent.NewWorldLoadEvent(w))
 	return w, nil
+}
+
+func (m *WorldManager) providerLogger(name string) log.Logger {
+	logger := m.logger
+	if logger == nil {
+		logger = log.Global()
+	}
+	return log.NewPrefixedLogger(logger, "World Provider: "+name)
+}
+
+// providerLoadError is loadWorld's CorruptedWorldException/UnsupportedWorldFormatException
+// handling.
+func (m *WorldManager) providerLoadError(name string, err error) error {
+	var corrupted *exception.CorruptedWorldError
+	var unsupported *exception.UnsupportedWorldFormatError
+	switch {
+	case errors.As(err, &unsupported):
+		return m.logError(lang.KnownTranslationFactory.PocketmineLevelLoadError(name, lang.KnownTranslationFactory.PocketmineLevelUnsupportedFormat(unsupported.Message)))
+	case errors.As(err, &corrupted):
+		return m.logError(lang.KnownTranslationFactory.PocketmineLevelLoadError(name, lang.KnownTranslationFactory.PocketmineLevelCorrupted(corrupted.Message)))
+	}
+	return m.logError(lang.KnownTranslationFactory.PocketmineLevelLoadError(name, lang.KnownTranslationFactory.PocketmineLevelCorrupted(err.Error())))
 }
 
 // GenerateWorld is a port of WorldManager::generateWorld, minus background spawn-chunk
@@ -290,10 +433,6 @@ func (m *WorldManager) LoadWorld(name string) (*World, error) {
 //
 // gen must already be fully constructed by the caller (see generator.Factory's own doc comment on
 // why - not every Generator this port has can be built from just a name + options string yet).
-// options.SpawnPosition is written into level.dat exactly as given, unadjusted - matching real
-// PHP's own generateWorld/BedrockWorldData::generate, which never runs a safe-spawn search at
-// generation time either (see World.GetSafeSpawn's own doc comment - that search happens lazily,
-// wherever a caller actually needs a safe point to put something, not baked into world creation).
 func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, options *WorldCreationOptions) (*World, error) {
 	if strings.TrimSpace(name) == "" {
 		return nil, fmt.Errorf("world manager: invalid empty world name")
@@ -302,31 +441,40 @@ func (m *WorldManager) GenerateWorld(name string, gen generator.Generator, optio
 		return nil, fmt.Errorf("world manager: world %q already exists", name)
 	}
 
+	providerEntry := m.providerManager.GetDefault()
 	path := m.worldPath(name)
-	w := New(gen, m.translator, m.knownBlocks)
-	if err := w.OpenProvider(path); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return nil, err
+	}
+	if err := providerEntry.Generate(path, name, worldio.WorldCreationOptions{
+		GeneratorName:    options.GeneratorName,
+		GeneratorOptions: options.GeneratorOptions,
+		Seed:             options.Seed,
+		Difficulty:       options.Difficulty,
+		SpawnPosition:    options.SpawnPosition,
+	}); err != nil {
+		return nil, fmt.Errorf("world manager: generating %q: %w", name, err)
+	}
+	provider, err := providerEntry.FromPathWritable(path, m.providerLogger(name))
+	if err != nil {
 		return nil, fmt.Errorf("world manager: opening %q's world data: %w", name, err)
 	}
+	worldData := provider.GetWorldData()
 
-	wd, err := worldio.GenerateWorldData(path, name, options.Seed, worldio.GeneratorInfinite, options.GeneratorName, options.GeneratorOptions, options.SpawnPosition)
-	if err != nil {
-		return nil, fmt.Errorf("world manager: writing %q's level.dat: %w", name, err)
-	}
-	wd.SetDifficulty(options.Difficulty)
-	if err := wd.Save(path); err != nil {
-		return nil, fmt.Errorf("world manager: writing %q's level.dat: %w", name, err)
-	}
-	w.spawnLocation = options.SpawnPosition
-	w.difficulty = options.Difficulty
+	w := New(gen, m.translator, m.knownBlocks)
+	w.SetProvider(provider)
+	w.spawnLocation = worldData.GetSpawn()
+	w.difficulty = worldData.GetDifficulty()
 
 	m.nextID++
 	w.id = m.nextID
 	w.folderName = name
-	w.displayName = name
+	w.displayName = worldData.GetName()
 	m.setUpGeneration(w, options.GeneratorName, options.Seed, options.GeneratorOptions)
 
 	m.worlds[w.id] = w
-	m.worldData[w.id] = wd
+	m.worldData[w.id] = worldData
+	w.SetAutoSave(m.autoSave)
 
 	event.Call(worldevent.NewWorldInitEvent(w))
 	event.Call(worldevent.NewWorldLoadEvent(w))
@@ -376,7 +524,7 @@ func (m *WorldManager) doAutoSave() {
 		_ = w.SaveAll()
 		if wd, ok := m.worldData[id]; ok {
 			m.syncWorldData(w, wd)
-			_ = wd.Save(m.worldPath(w.GetFolderName()))
+			_ = wd.Save()
 		}
 	}
 }
@@ -401,7 +549,7 @@ func (m *WorldManager) SetAutoSaveInterval(autoSaveTicks int64) error {
 
 // syncWorldData copies the World state PHP keeps directly in its WorldData (time, spawn, display
 // name, difficulty) into wd before it's saved.
-func (m *WorldManager) syncWorldData(w *World, wd *worldio.WorldData) {
+func (m *WorldManager) syncWorldData(w *World, wd worldio.WorldData) {
 	wd.SetTime(w.GetTime())
 	wd.SetSpawn(w.GetSpawnLocation())
 	wd.SetName(w.GetDisplayName())
@@ -424,7 +572,7 @@ func (m *WorldManager) SaveWorld(w *World) error {
 	}
 	if wd, ok := m.worldData[w.GetID()]; ok {
 		m.syncWorldData(w, wd)
-		return wd.Save(m.worldPath(w.GetFolderName()))
+		return wd.Save()
 	}
 	return nil
 }

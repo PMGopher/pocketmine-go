@@ -1,6 +1,7 @@
 package block
 
 import (
+	"math/rand"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
@@ -151,10 +152,117 @@ func (g *GlowLichen) OnNearbyBlockChange() {
 	}
 }
 
-// OnInteract's fertilizer-driven spread mechanic (spreadAroundSupport/spreadAdjacentToSupport/
-// spreadWithinSelf) needs BlockEventHelper and the block registry (VanillaBlocks), neither ported
-// yet, so this is a no-op for now.
+// OnInteract is a port of GlowLichen::onInteract: bone meal spreads it to a random neighbouring
+// face.
 func (g *GlowLichen) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if !isFertilizer(item) || len(g.Faces) == 0 {
+		return false
+	}
+	shuffledFaces := g.GetFaces()
+	rand.Shuffle(len(shuffledFaces), func(i, j int) { shuffledFaces[i], shuffledFaces[j] = shuffledFaces[j], shuffledFaces[i] })
+	spreadMethods := []func(math.Facing) bool{g.spreadAroundSupport, g.spreadAdjacentToSupport, g.spreadWithinSelf}
+	rand.Shuffle(len(spreadMethods), func(i, j int) { spreadMethods[i], spreadMethods[j] = spreadMethods[j], spreadMethods[i] })
+spread:
+	for _, sourceFace := range shuffledFaces {
+		for _, spreadMethod := range spreadMethods {
+			if spreadMethod(sourceFace) {
+				item.Pop()
+				break spread
+			}
+		}
+	}
+	return true
+}
+
+// getSpreadBlock is a port of GlowLichen::getSpreadBlock.
+func (g *GlowLichen) getSpreadBlock(replace Behavior, spreadFace math.Facing) Behavior {
+	var result *GlowLichen
+	if lichen, ok := replace.(*GlowLichen); ok && lichen.HasSameTypeId(g.self) {
+		if lichen.HasFace(spreadFace) {
+			return nil
+		}
+		result = lichen.Clone().(*GlowLichen)
+	} else if replace.GetTypeId() == AIR {
+		result = VanillaBlock("glow_lichen").(*GlowLichen)
+	} else {
+		//TODO: if this is a water block, generate a waterlogged block
+		return nil
+	}
+	result.SetFace(spreadFace, true)
+	return result
+}
+
+// spread is a port of GlowLichen::spread.
+func (g *GlowLichen) spread(world World, replacePos math.Vector3, spreadFace math.Facing) bool {
+	side := replacePos.GetSide(spreadFace, 1)
+	supportBlock := world.GetBlockAt(side.FloorX(), side.FloorY(), side.FloorZ())
+	supportFace := math.Opposite(spreadFace)
+	if supportBlock.GetSupportType(supportFace) != blockutils.SupportTypeFull {
+		return false
+	}
+	replacedBlock := supportBlock.(blockGeometry).GetSide(supportFace, 1)
+	replacementBlock := g.getSpreadBlock(replacedBlock, math.Opposite(supportFace))
+	if replacementBlock == nil {
+		return false
+	}
+	return Spread(replacedBlock, replacementBlock, g.self)
+}
+
+// shuffledSpreadFaces is a port of GlowLichen::getShuffledSpreadFaces: every face not on
+// sourceFace's axis, in random order.
+func shuffledSpreadFaces(sourceFace math.Facing) []math.Facing {
+	skipAxis := math.FacingAxis(sourceFace)
+	faces := append([]math.Facing(nil), math.AllFacing...)
+	rand.Shuffle(len(faces), func(i, j int) { faces[i], faces[j] = faces[j], faces[i] })
+	result := faces[:0]
+	for _, f := range faces {
+		if math.FacingAxis(f) != skipAxis {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// spreadAroundSupport is a port of GlowLichen::spreadAroundSupport.
+func (g *GlowLichen) spreadAroundSupport(sourceFace math.Facing) bool {
+	world, err := g.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	supportPos := g.position.GetSide(sourceFace, 1)
+	for _, spreadFace := range shuffledSpreadFaces(sourceFace) {
+		if g.spread(world, supportPos.GetSide(spreadFace, 1).Vector3, math.Opposite(spreadFace)) {
+			return true
+		}
+	}
+	return false
+}
+
+// spreadAdjacentToSupport is a port of GlowLichen::spreadAdjacentToSupport.
+func (g *GlowLichen) spreadAdjacentToSupport(sourceFace math.Facing) bool {
+	world, err := g.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	for _, spreadFace := range shuffledSpreadFaces(sourceFace) {
+		if g.spread(world, g.position.GetSide(spreadFace, 1).Vector3, sourceFace) {
+			return true
+		}
+	}
+	return false
+}
+
+// spreadWithinSelf is a port of GlowLichen::spreadWithinSelf.
+func (g *GlowLichen) spreadWithinSelf(sourceFace math.Facing) bool {
+	world, err := g.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	for _, spreadFace := range shuffledSpreadFaces(sourceFace) {
+		if !g.HasFace(spreadFace) && g.spread(world, g.position.Vector3, spreadFace) {
+			return true
+		}
+	}
 	return false
 }
 

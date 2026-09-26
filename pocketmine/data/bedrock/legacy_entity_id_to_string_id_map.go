@@ -63,3 +63,7 @@ func LegacyEntityIdToStringIdMap() *LegacyToStringIdMap {
 	})
 	return legacyEntityIDMap
 }
+
+// NewLegacyToStringIdMap is LegacyToStringIdMap's constructor for other packages' maps: data is a
+// JSON object of string ID => legacy numeric ID.
+func NewLegacyToStringIdMap(data []byte) *LegacyToStringIdMap { return newLegacyToStringIdMap(data) }

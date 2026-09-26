@@ -175,13 +175,12 @@ func TestSerializeFullChunkEndsWithBorderBlocksAndEmptyTiles(t *testing.T) {
 	data := SerializeFullChunk(c, tr)
 
 	// No populated subchunks -> 0 subchunk sections, then one biome palette per subchunk slot,
-	// then a 0 border block count byte, then a 0-length (VarUint) tiles section.
+	// then a 0 border block count byte, then the (raw, here empty) tiles.
 	var want []byte
 	for y := format.MinSubChunkIndex; y <= format.MaxSubChunkIndex; y++ {
 		want = append(want, serializeBiomePalette(c.GetSubChunk(y).GetBiomeArray())...)
 	}
-	want = append(want, 0)
-	want = append(want, binaryutils.WriteUnsignedVarInt(0)...)
+	want = append(want, 0) // no tiles: serializeTiles writes nothing
 
 	if string(data) != string(want) {
 		t.Errorf("len(data) = %d, want %d (mismatched bytes)", len(data), len(want))
@@ -209,8 +208,7 @@ func TestSerializeFullChunkIncludesEverySubChunkUpToTopmostNonEmpty(t *testing.T
 	for y := format.MinSubChunkIndex; y <= format.MaxSubChunkIndex; y++ {
 		want = append(want, serializeBiomePalette(c.GetSubChunk(y).GetBiomeArray())...)
 	}
-	want = append(want, 0)
-	want = append(want, binaryutils.WriteUnsignedVarInt(0)...)
+	want = append(want, 0) // no tiles: serializeTiles writes nothing
 
 	if string(data) != string(want) {
 		t.Errorf("len(data) = %d, want %d (mismatched bytes)", len(data), len(want))

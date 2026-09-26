@@ -39,6 +39,10 @@ func (h *HangingRoots) OnNearbyBlockChange() {
 	}
 }
 
-// GetDropsForIncompatibleTool should check Item.HasEnchantment(SilkTouch) — needs the unported
-// enchantment package, so this always returns nil (matching the "no silk touch" branch) for now.
-func (h *HangingRoots) GetDropsForIncompatibleTool(item Item) []Item { return nil }
+// GetDropsForIncompatibleTool is a port of HangingRoots::getDropsForIncompatibleTool.
+func (h *HangingRoots) GetDropsForIncompatibleTool(item Item) []Item {
+	if hasSilkTouch(item) {
+		return h.self.GetDropsForCompatibleTool(item)
+	}
+	return nil
+}

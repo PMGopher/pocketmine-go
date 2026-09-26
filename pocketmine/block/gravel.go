@@ -21,10 +21,13 @@ func (g *Gravel) Clone() Behavior {
 // OnNearbyBlockChange is FallableTrait::onNearbyBlockChange.
 func (g *Gravel) OnNearbyBlockChange() { FallableOnNearbyBlockChange(g.self) }
 
-// GetDropsForCompatibleTool's FortuneDropHelper-based flint chance needs the unported item
-// package for real Item construction (see Block.GetDropsForCompatibleTool's doc comment); the
-// fallback (no flint) path is fully portable, so that's what always runs for now.
+// GetDropsForCompatibleTool is a port of Gravel::getDropsForCompatibleTool.
 func (g *Gravel) GetDropsForCompatibleTool(item Item) []Item {
+	if FortuneBonusChanceDivisor(item, 10, 3) {
+		if flint := vanillaItem("flint"); flint != nil {
+			return []Item{flint}
+		}
+	}
 	return g.Block.GetDropsForCompatibleTool(item)
 }
 

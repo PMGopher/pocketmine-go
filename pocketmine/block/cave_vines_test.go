@@ -12,7 +12,7 @@ func newTestCaveVines(w World) *CaveVines {
 	return c
 }
 
-func TestCaveVinesOnInteractReturnsTrueWithoutPickingWhenBerried(t *testing.T) {
+func TestCaveVinesOnInteractPicksBerries(t *testing.T) {
 	w := &containerTileWorld{tiles: map[[3]int]Tile{}, blocks: map[[3]int]Behavior{}}
 	c := newTestCaveVines(w)
 	c.Berries = true
@@ -20,8 +20,8 @@ func TestCaveVinesOnInteractReturnsTrueWithoutPickingWhenBerried(t *testing.T) {
 	if !c.OnInteract(fakeItem{}, math.Up, math.Vector3{}, nil, nil) {
 		t.Fatal("expected OnInteract to return true")
 	}
-	if !c.Berries {
-		t.Error("expected berries to remain set (picking isn't ported, so state shouldn't change)")
+	if c.Berries {
+		t.Error("expected the berries to be picked")
 	}
 }
 

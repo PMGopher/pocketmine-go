@@ -76,9 +76,10 @@ func (b *BaseBanner) Place(tx BlockTransaction, item Item, blockReplace Behavior
 	if !bannerCanBeSupportedBy(blockReplace.(blockGeometry).GetSide(supportingFace, 1)) {
 		return false
 	}
-	// The PHP original also copies colour/patterns from an ItemBanner here - needs the unported
-	// item package, so it's skipped (documented gap, same category as everywhere else real Item
-	// construction is needed).
+	if banner, ok := item.(itemBanner); ok {
+		b.Color = banner.GetColor()
+		b.SetPatterns(banner.GetPatterns())
+	}
 	return b.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
@@ -91,7 +92,43 @@ func (b *BaseBanner) OnNearbyBlockChange() {
 	}
 }
 
-// GetDropsForCompatibleTool/GetPickedItem/AsItem should return an ItemBanner carrying Patterns -
-// needs real Item construction from the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so all three are left as Block's defaults for
-// now.
+// itemBanner is pocketmine\item\Banner as BaseBanner needs it.
+type itemBanner interface {
+	Item
+	GetColor() blockutils.DyeColor
+	SetColor(color blockutils.DyeColor)
+	GetPatterns() []blockutils.BannerPatternLayer
+	SetPatterns(patterns []blockutils.BannerPatternLayer)
+}
+
+// GetDropsForCompatibleTool is a port of BaseBanner::getDropsForCompatibleTool.
+func (b *BaseBanner) GetDropsForCompatibleTool(item Item) []Item {
+	drop := asItemOrNil(b.self)
+	if drop == nil {
+		return nil
+	}
+	if banner, ok := drop.(itemBanner); ok && len(b.Patterns) > 0 {
+		banner.SetPatterns(b.Patterns)
+	}
+	return []Item{drop}
+}
+
+// GetPickedItem is a port of BaseBanner::getPickedItem.
+func (b *BaseBanner) GetPickedItem(addUserData bool) Item {
+	result := asItemOrNil(b.self)
+	if banner, ok := result.(itemBanner); ok && addUserData && len(b.Patterns) > 0 {
+		banner.SetPatterns(b.Patterns)
+	}
+	return result
+}
+
+// WriteStateToWorld is a port of BaseBanner::writeStateToWorld.
+func (b *BaseBanner) WriteStateToWorld() {
+	b.Block.WriteStateToWorld()
+	if t, ok := b.tileAt(); ok {
+		if bannerTile, ok := t.(*tile.Banner); ok {
+			bannerTile.SetBaseColor(b.Color)
+			bannerTile.SetPatterns(b.Patterns)
+		}
+	}
+}

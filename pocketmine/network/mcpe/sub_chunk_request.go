@@ -88,9 +88,9 @@ func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.
 	}
 	entry.Result = protocol.SubChunkResultSuccess
 	serialised := serializer.SerializeSubChunk(sub, subY, w.Translator())
-	// Tiles would follow the sub-chunk data; this port has no tiles in chunks yet (see
-	// serializer.SerializeFullChunk).
-	var tiles []byte
+	// The spawn compounds of the sub-chunk's tiles follow the sub-chunk data (as Dragonfly does;
+	// PHP's ChunkSerializer::serializeTiles appends every tile of the chunk to the full chunk).
+	tiles := serializer.SerializeTiles(chunk, subY)
 	if cache != nil {
 		if hash, ok := cache.Track(serialised); ok {
 			entry.BlobHash = protocol.Option(hash)

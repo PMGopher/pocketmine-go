@@ -10,10 +10,6 @@ const (
 // Note is a port of pocketmine\block\Note.
 //
 // Deprecated in the PHP original too.
-//
-// WriteStateToWorld's tile sync (writing Pitch back to the tile.Note on placement) is skipped:
-// there's no WriteStateToWorld hook in the Behavior interface yet - same gap already documented
-// on RedstoneComparator for its tile-backed signal strength.
 type Note struct {
 	Opaque
 
@@ -60,4 +56,14 @@ func (n *Note) SetPitch(pitch int) {
 		panic("Pitch must be in range 0 - 24")
 	}
 	n.Pitch = pitch
+}
+
+// WriteStateToWorld is a port of Note::writeStateToWorld.
+func (n *Note) WriteStateToWorld() {
+	n.Block.WriteStateToWorld()
+	if t, ok := n.tileAt(); ok {
+		if noteTile, ok := t.(*tile.Note); ok {
+			noteTile.SetPitch(n.Pitch)
+		}
+	}
 }

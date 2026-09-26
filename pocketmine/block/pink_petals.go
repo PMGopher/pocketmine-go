@@ -77,10 +77,29 @@ func (p *PinkPetals) Place(tx BlockTransaction, item Item, blockReplace Behavior
 	return p.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract should grow the plant (BlockEventHelper.Grow) or drop an item copy when fertilized —
-// needs Item.Fertilizer type-checking and World.DropItem from the unported item package, so this
-// is a no-op for now (see Block.GetDropsForCompatibleTool's doc comment for the same kind of gap).
+// OnInteract is a port of PinkPetals::onInteract: bone meal adds a petal, or drops a petal item
+// when there are already 4.
 func (p *PinkPetals) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if !isFertilizer(item) {
+		return false
+	}
+	grew := false
+	if p.Count < PinkPetalsMaxCount {
+		grown := p.self.Clone().(*PinkPetals)
+		grown.Count++
+		grew = Grow(p.self, grown, player)
+	} else if world, err := p.position.GetWorld(); err == nil {
+		if dropper, ok := world.(blockItemDropper); ok {
+			if petal := asItemOrNil(p.self); petal != nil {
+				dropper.DropBlockItem(p.position.Add(0, 0.5, 0), petal)
+			}
+		}
+		grew = true
+	}
+	if grew {
+		item.Pop()
+		return true
+	}
 	return false
 }
 
@@ -88,7 +107,12 @@ func (p *PinkPetals) GetFlameEncouragement() int { return 60 }
 
 func (p *PinkPetals) GetFlammability() int { return 100 }
 
-// GetDropsForCompatibleTool should return [p.AsItem().SetCount(p.Count)] — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (p *PinkPetals) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of PinkPetals::getDropsForCompatibleTool.
+func (p *PinkPetals) GetDropsForCompatibleTool(item Item) []Item {
+	drop := asItemOrNil(p.self)
+	if drop == nil {
+		return nil
+	}
+	drop.SetCount(p.Count)
+	return []Item{drop}
+}

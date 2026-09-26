@@ -1,8 +1,7 @@
 package blockutils
 
-// SaplingType is a port of pocketmine\block\utils\SaplingType. The getTreeType() mapping to
-// pocketmine\world\generator\object\TreeType isn't ported here since the world-gen package
-// (TreeFactory/TreeType) isn't ported yet - see Sapling.grow's doc comment.
+// SaplingType is a port of pocketmine\block\utils\SaplingType. getTreeType() is
+// block.saplingTreeType (TreeType belongs to world/generator/object, which imports this package).
 type SaplingType int
 
 const (

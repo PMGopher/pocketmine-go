@@ -29,6 +29,13 @@ func NewSubChunk(emptyBlockID int32, blockLayers []*PalettedBlockArray, biomes *
 // IsEmptyFast is a port of SubChunk::isEmptyFast.
 func (s *SubChunk) IsEmptyFast() bool { return len(s.blockLayers) == 0 }
 
+// IsEmptyAuthoritative is a port of SubChunk::isEmptyAuthoritative: garbage-collects the block
+// layers first, so a subchunk whose layers only contain the empty block counts as empty.
+func (s *SubChunk) IsEmptyAuthoritative() bool {
+	s.CollectGarbage()
+	return s.IsEmptyFast()
+}
+
 // GetEmptyBlockID is a port of SubChunk::getEmptyBlockId.
 func (s *SubChunk) GetEmptyBlockID() int32 { return s.emptyBlockID }
 

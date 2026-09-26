@@ -70,3 +70,38 @@ func (d *ItemDeserializer) DeserializeType(data SavedItemData) (it item.Item, er
 	}
 	return deserializer(data), nil
 }
+
+// DeserializeStack is a port of ItemDeserializer::deserializeStack.
+func (d *ItemDeserializer) DeserializeStack(data SavedItemStackData) (it item.Item, err error) {
+	itemStack, err := d.DeserializeType(data.TypeData)
+	if err != nil {
+		return nil, err
+	}
+	itemStack.SetCount(data.Count)
+	if tag := data.TypeData.Tag; tag != nil {
+		// The item's setters panic on invalid values, like PHP's NbtException.
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					err = &ItemTypeDeserializeError{Message: fmt.Sprintf("Invalid item saved NBT: %v", p)}
+				}
+			}()
+			itemStack.SetNamedTag(tag.Clone())
+		}()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	//TODO: this hack is necessary to get legacy tools working - we need a better way to handle this kind of stuff
+	if durable, ok := itemStack.(interface {
+		GetDamage() int
+		SetDamage(int)
+		GetMaxDurability() int
+	}); ok && durable.GetDamage() == 0 && data.TypeData.Meta > 0 {
+		durable.SetDamage(min(data.TypeData.Meta, durable.GetMaxDurability()))
+	}
+
+	//TODO: canDestroy, canPlaceOn, wasPickedUp are currently unused
+	return itemStack, nil
+}

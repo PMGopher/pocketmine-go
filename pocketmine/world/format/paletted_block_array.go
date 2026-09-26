@@ -94,11 +94,35 @@ func NewPalettedBlockArrayFromRaw(bitsPerBlock int, wordBytes []byte, palette []
 	if len(wordBytes) != wantWords*4 {
 		return nil, fmt.Errorf("format: word array is %d bytes, want %d for bitsPerBlock=%d", len(wordBytes), wantWords*4, bitsPerBlock)
 	}
+	if len(palette) > 1<<uint(bitsPerBlock) {
+		return nil, fmt.Errorf("format: palette of %d entries is too big for bitsPerBlock=%d", len(palette), bitsPerBlock)
+	}
 	p.words = make([]uint32, wantWords)
 	for i := range p.words {
 		p.words[i] = binary.LittleEndian.Uint32(wordBytes[i*4:])
 	}
+	// chunkutils2's fromData validates the offset table: every entry must index the palette.
+	for i := 0; i < subChunkBlockCount; i++ {
+		if idx := p.paletteIndexAt(i); idx >= len(palette) {
+			return nil, fmt.Errorf("format: offset table contains invalid palette offset %d (palette has %d entries)", idx, len(palette))
+		}
+	}
 	return p, nil
+}
+
+// GetExpectedWordArraySize is a port of PalettedBlockArray::getExpectedWordArraySize: the size in
+// bytes of the word array for bitsPerBlock (an error for an invalid bitsPerBlock, PHP's
+// InvalidArgumentException).
+func GetExpectedWordArraySize(bitsPerBlock int) (int, error) {
+	for _, b := range validBitsPerBlock {
+		if b == bitsPerBlock {
+			if bitsPerBlock == 0 {
+				return 0, nil
+			}
+			return wordCountFor(bitsPerBlock) * 4, nil
+		}
+	}
+	return 0, fmt.Errorf("Invalid bits per block %d", bitsPerBlock)
 }
 
 // Clone is a port of PalettedBlockArray's implicit PHP `clone` semantics (native extension objects

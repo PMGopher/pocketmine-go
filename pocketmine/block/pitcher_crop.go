@@ -114,6 +114,3 @@ func (p *PitcherCrop) OnRandomTick() {
 		p.grow(nil)
 	}
 }
-
-// AsItem should return VanillaItems.PITCHER_POD() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.

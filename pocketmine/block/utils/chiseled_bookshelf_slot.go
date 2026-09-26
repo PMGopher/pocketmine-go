@@ -14,6 +14,9 @@ const (
 	ChiseledBookshelfSlotBottomRight
 )
 
+// ChiseledBookshelfSlotCount is count(ChiseledBookshelfSlot::cases()).
+const ChiseledBookshelfSlotCount = 6
+
 const chiseledBookshelfSlotsPerShelf = 3
 
 // ChiseledBookshelfSlotFromBlockFaceCoordinates is a port of

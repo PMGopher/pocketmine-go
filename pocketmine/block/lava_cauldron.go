@@ -1,13 +1,13 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
 	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
-// LavaCauldron is a port of pocketmine\block\LavaCauldron. writeStateToWorld's tile reset isn't
-// ported (no Cauldron tile yet).
+// LavaCauldron is a port of pocketmine\block\LavaCauldron.
 type LavaCauldron struct {
 	FillableCauldron
 }
@@ -56,4 +56,15 @@ func (l *LavaCauldron) OnEntityInside(entity Entity) bool {
 		entity.SetOnFire(combustEv.GetDuration())
 	}
 	return true
+}
+
+// WriteStateToWorld is a port of LavaCauldron::writeStateToWorld.
+func (l *LavaCauldron) WriteStateToWorld() {
+	l.Block.WriteStateToWorld()
+	if t, ok := l.tileAt(); ok {
+		if cauldronTile, ok := t.(*tile.Cauldron); ok {
+			cauldronTile.SetCustomWaterColor(nil)
+			cauldronTile.SetPotionItem(nil)
+		}
+	}
 }

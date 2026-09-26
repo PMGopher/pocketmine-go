@@ -2,6 +2,8 @@
 package sound
 
 import (
+	"fmt"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
@@ -795,4 +797,177 @@ type RespawnAnchorDepleteSound struct{}
 
 func (RespawnAnchorDepleteSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
 	return nonActorSound(packet.SoundEventRespawnAnchorDeplete, pos, false, -1)
+}
+
+// AnvilBreakSound is a port of pocketmine\world\sound\AnvilBreakSound.
+type AnvilBreakSound struct{}
+
+func (AnvilBreakSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundAnvilBroken, 0, pos)
+}
+
+// AnvilUseSound is a port of pocketmine\world\sound\AnvilUseSound.
+type AnvilUseSound struct{}
+
+func (AnvilUseSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundAnvilUsed, 0, pos)
+}
+
+// BlastFurnaceSound is a port of pocketmine\world\sound\BlastFurnaceSound.
+type BlastFurnaceSound struct{}
+
+func (BlastFurnaceSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventBlastFurnaceUse, pos, false, -1)
+}
+
+// CampfireSound is a port of pocketmine\world\sound\CampfireSound.
+type CampfireSound struct{}
+
+func (CampfireSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventCampfireCrackle, pos, false, -1)
+}
+
+// ClickSound is a port of pocketmine\world\sound\ClickSound.
+type ClickSound struct{ Pitch float64 }
+
+func (s ClickSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundClick, int32(s.Pitch*1000), pos)
+}
+
+// DoorBumpSound is a port of pocketmine\world\sound\DoorBumpSound.
+type DoorBumpSound struct{}
+
+func (DoorBumpSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundZombieWoodenDoor, 0, pos) // LevelEvent::SOUND_DOOR_BUMP
+}
+
+// DoorCrashSound is a port of pocketmine\world\sound\DoorCrashSound.
+type DoorCrashSound struct{}
+
+func (DoorCrashSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundZombieDoorCrash, 0, pos) // LevelEvent::SOUND_DOOR_CRASH
+}
+
+// FurnaceSound is a port of pocketmine\world\sound\FurnaceSound.
+type FurnaceSound struct{}
+
+func (FurnaceSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventFurnaceUse, pos, false, -1)
+}
+
+// GhastShootSound is a port of pocketmine\world\sound\GhastShootSound.
+type GhastShootSound struct{}
+
+func (GhastShootSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundGhastFireball, 0, pos) // LevelEvent::SOUND_GHAST_SHOOT
+}
+
+// GhastSound is a port of pocketmine\world\sound\GhastSound.
+type GhastSound struct{}
+
+func (GhastSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundGhastWarning, 0, pos) // LevelEvent::SOUND_GHAST
+}
+
+// GlowBerriesPickSound is a port of pocketmine\world\sound\GlowBerriesPickSound.
+type GlowBerriesPickSound struct{}
+
+func (GlowBerriesPickSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventCaveVinesPickBerries, pos, false, -1)
+}
+
+// GoatHornSound is a port of pocketmine\world\sound\GoatHornSound. HornType is the
+// pocketmine\item\GoatHornType case (item.GoatHornType's value; this package can't import item).
+type GoatHornSound struct{ HornType int }
+
+var goatHornSounds = []string{
+	packet.SoundEventGoatCall0, // PONDER
+	packet.SoundEventGoatCall1, // SING
+	packet.SoundEventGoatCall2, // SEEK
+	packet.SoundEventGoatCall3, // FEEL
+	packet.SoundEventGoatCall4, // ADMIRE
+	packet.SoundEventGoatCall5, // CALL
+	packet.SoundEventGoatCall6, // YEARN
+	packet.SoundEventGoatCall7, // DREAM
+}
+
+func (s GoatHornSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(goatHornSounds[s.HornType], pos, false, -1)
+}
+
+// LaunchSound is a port of pocketmine\world\sound\LaunchSound.
+type LaunchSound struct{ Pitch float64 }
+
+func (s LaunchSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundLaunch, int32(s.Pitch*1000), pos) // LevelEvent::SOUND_SHOOT
+}
+
+// NoteSound is a port of pocketmine\world\sound\NoteSound.
+type NoteSound struct {
+	instrument NoteInstrument
+	note       int
+}
+
+// NewNoteSound is a port of NoteSound::__construct. Panics for a note outside 0-255.
+func NewNoteSound(instrument NoteInstrument, note int) NoteSound {
+	if note < 0 || note > 255 {
+		panic(fmt.Sprintf("Note %d is outside accepted range", note))
+	}
+	return NoteSound{instrument: instrument, note: note}
+}
+
+func (s NoteSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	instrumentID := NoteInstrumentToID(s.instrument)
+	return nonActorSound(packet.SoundEventNote, pos, false, int32(instrumentID<<8|s.note))
+}
+
+// PaintingPlaceSound is a port of pocketmine\world\sound\PaintingPlaceSound (item frames and
+// paintings have the same sound).
+type PaintingPlaceSound struct{}
+
+func (PaintingPlaceSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundItemFramePlace, 0, pos)
+}
+
+// PopSound is a port of pocketmine\world\sound\PopSound.
+type PopSound struct{ Pitch float64 }
+
+func (s PopSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return levelEventSound(packet.LevelEventSoundInfinityArrowPickup, int32(s.Pitch*1000), pos) // LevelEvent::SOUND_POP
+}
+
+// PotionFinishBrewingSound is a port of pocketmine\world\sound\PotionFinishBrewingSound.
+type PotionFinishBrewingSound struct{}
+
+func (PotionFinishBrewingSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventPotionBrewed, pos, false, -1)
+}
+
+// SmokerSound is a port of pocketmine\world\sound\SmokerSound.
+type SmokerSound struct{}
+
+func (SmokerSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventSmokerUse, pos, false, -1)
+}
+
+// SweetBerriesPickSound is a port of pocketmine\world\sound\SweetBerriesPickSound.
+type SweetBerriesPickSound struct{}
+
+func (SweetBerriesPickSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventSweetBerryBushPick, pos, false, -1)
+}
+
+// WaterSplashSound is a port of pocketmine\world\sound\WaterSplashSound.
+type WaterSplashSound struct{ volume float64 }
+
+// NewWaterSplashSound is a port of WaterSplashSound::__construct. Panics for a volume outside 0-1.
+func NewWaterSplashSound(volume float64) WaterSplashSound {
+	if volume < 0 || volume > 1 {
+		panic("Volume must be between 0 and 1")
+	}
+	return WaterSplashSound{volume: volume}
+}
+
+func (s WaterSplashSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	return nonActorSound(packet.SoundEventSplash, pos, false, int32(s.volume*16777215))
 }

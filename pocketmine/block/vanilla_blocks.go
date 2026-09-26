@@ -224,11 +224,9 @@ var (
 	tileShulkerBox        = tileOf(tile.NewShulkerBox)
 	tileSign              = tileOf(tile.NewSign)
 	tileSmoker            = tileOf(tile.NewSmoker)
-	// Not ported yet: the Cauldron, FlowerPot and GlowingItemFrame tiles (the glowing item frame
-	// uses the plain ItemFrame tile until then).
-	tileCauldron         TileFactory
-	tileFlowerPot        TileFactory
-	tileGlowingItemFrame = tileItemFrame
+	tileCauldron          = tileOf(tile.NewCauldron)
+	tileFlowerPot         = tileOf(tile.NewFlowerPot)
+	tileGlowingItemFrame  = tileOf(tile.NewGlowingItemFrame)
 )
 
 func (r *vanillaBlocksRegistry) setup() {
@@ -1410,10 +1408,10 @@ func (r *vanillaBlocksRegistry) registerBlocksR16() {
 	})
 	netherFungusInfo := NewBlockTypeInfo(bInstant(ToolTypeNone, 0), []string{BlockTypeTagsPottablePlants, BlockTypeTagsHugeFungusReplaceable}, nil)
 	r.register("crimson_fungus", func(id *BlockIdentifier) Behavior {
-		return NewNetherFungus(id, "Crimson Fungus", netherFungusInfo, CRIMSON_NYLIUM)
+		return NewNetherFungus(id, "Crimson Fungus", netherFungusInfo, TreeTypeCrimson, CRIMSON_NYLIUM)
 	})
 	r.register("warped_fungus", func(id *BlockIdentifier) Behavior {
-		return NewNetherFungus(id, "Warped Fungus", netherFungusInfo, WARPED_NYLIUM)
+		return NewNetherFungus(id, "Warped Fungus", netherFungusInfo, TreeTypeWarped, WARPED_NYLIUM)
 	})
 	r.register("nether_sprouts", func(id *BlockIdentifier) Behavior {
 		return NewNetherSprouts(id, "Nether Sprouts", NewBlockTypeInfo(bInstant(ToolTypeShears, 1), nil, nil))

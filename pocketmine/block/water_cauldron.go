@@ -1,6 +1,8 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
+	"pocketmine-go/pocketmine/color"
 	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
@@ -18,16 +20,17 @@ const (
 
 // WaterCauldron is a port of pocketmine\block\WaterCauldron.
 //
-// Not ported yet: the custom water colour (it lives in the Cauldron tile, which isn't ported, as
-// do readStateFromWorld's potion-cauldron conversion and writeStateToWorld), and the dye, armour,
-// banner and shulker box interactions that depend on it (they need Dye/Armor/Banner item types
-// this package can't see).
+// Not ported yet: the dye, armour, banner and shulker box interactions (they need
+// Dye/Armor/Banner item types this package can't see); the custom water colour they set is kept in
+// the Cauldron tile.
 type WaterCauldron struct {
 	FillableCauldron
+
+	customWaterColor *color.Color
 }
 
 func NewWaterCauldron(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) *WaterCauldron {
-	w := &WaterCauldron{newFillableCauldron(idInfo, name, typeInfo)}
+	w := &WaterCauldron{FillableCauldron: newFillableCauldron(idInfo, name, typeInfo)}
 	w.Init(w)
 	return w
 }
@@ -91,6 +94,51 @@ func (w *WaterCauldron) OnNearbyBlockChange() {
 			w.SetFillLevel(FillableCauldronMaxFillLevel)
 			_ = world.SetBlock(w.position, w)
 			world.AddSound(w.position.Add(0.5, 0.5, 0.5), w.GetFillSound())
+		}
+	}
+}
+
+// GetCustomWaterColor is a port of WaterCauldron::getCustomWaterColor (nil for none).
+func (w *WaterCauldron) GetCustomWaterColor() *color.Color { return w.customWaterColor }
+
+// SetCustomWaterColor is a port of WaterCauldron::setCustomWaterColor.
+func (w *WaterCauldron) SetCustomWaterColor(customWaterColor *color.Color) *WaterCauldron {
+	w.customWaterColor = customWaterColor
+	return w
+}
+
+// ReadStateFromWorld is a port of WaterCauldron::readStateFromWorld.
+func (w *WaterCauldron) ReadStateFromWorld() Behavior {
+	if result := w.Block.ReadStateFromWorld(); result != w.self {
+		return result
+	}
+	t, _ := w.tileAt()
+	cauldronTile, _ := t.(*tile.Cauldron)
+	if cauldronTile != nil {
+		if potion, ok := cauldronTile.GetPotionItem().(Item); ok {
+			//TODO: HACK! we keep potion cauldrons as a separate block type due to different behaviour, but in the
+			//blockstate they are typically indistinguishable from water cauldrons. This hack converts cauldrons into
+			//their appropriate type.
+			potionCauldron := VanillaBlock("potion_cauldron").(*PotionCauldron)
+			potionCauldron.SetFillLevel(w.FillLevel)
+			potionCauldron.SetPotionItem(potion)
+			return potionCauldron
+		}
+	}
+	w.customWaterColor = nil
+	if cauldronTile != nil {
+		w.customWaterColor = cauldronTile.GetCustomWaterColor()
+	}
+	return w.self
+}
+
+// WriteStateToWorld is a port of WaterCauldron::writeStateToWorld.
+func (w *WaterCauldron) WriteStateToWorld() {
+	w.Block.WriteStateToWorld()
+	if t, ok := w.tileAt(); ok {
+		if cauldronTile, ok := t.(*tile.Cauldron); ok {
+			cauldronTile.SetCustomWaterColor(w.customWaterColor)
+			cauldronTile.SetPotionItem(nil)
 		}
 	}
 }

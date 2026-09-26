@@ -17,10 +17,13 @@ func (g *GildedBlackstone) Clone() Behavior {
 	return &c
 }
 
-// GetDropsForCompatibleTool's gold-nugget bonus chance needs the unported item package for real
-// Item construction (see Block.GetDropsForCompatibleTool's doc comment); the fallback path
-// (parent::getDropsForCompatibleTool) is fully portable and always runs for now.
+// GetDropsForCompatibleTool is a port of GildedBlackstone::getDropsForCompatibleTool.
 func (g *GildedBlackstone) GetDropsForCompatibleTool(item Item) []Item {
+	if FortuneBonusChanceDivisor(item, 10, 3) {
+		if nuggets := vanillaItemCount("gold_nugget", mtRand(2, 5)); nuggets != nil {
+			return []Item{nuggets}
+		}
+	}
 	return g.Block.GetDropsForCompatibleTool(item)
 }
 

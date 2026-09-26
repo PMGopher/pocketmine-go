@@ -1,9 +1,14 @@
 package block
 
 import (
+	"fmt"
+	"math/rand"
+
+	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	entityevent "pocketmine-go/pocketmine/event/entity"
+	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -27,22 +32,35 @@ type campfireMarker interface{ isCampfire() }
 
 func (c *Campfire) isCampfire() {}
 
-// Campfire is a port of pocketmine\block\Campfire, minus its cooking half: matching held items
-// against furnace recipes and simulating cook progress needs the crafting package's
-// FurnaceRecipeManager/CraftingManager (not ported) plus a real cooking-item inventory on the
-// tile side (not ported either - see tile.Campfire's doc comment for why). OnScheduledUpdate is
-// therefore a no-op. The ignite/extinguish state machine (Place, OnInteract's item-based
-// branches, OnNearbyBlockChange, OnProjectileHit) is fully real.
+// Campfire cooking hooks: the parts of Campfire that need furnace recipes (the crafting package)
+// and the tile's item inventory, which this package can't import. block/inventory sets them.
+var (
+	// CampfireAddIngredientFunc is Campfire::onInteract's recipe branch: if item can be cooked,
+	// one of it goes into the campfire's inventory (true).
+	CampfireAddIngredientFunc func(c *Campfire, item Item) bool
+	// CampfireCookFunc is Campfire::onScheduledUpdate's cooking of the items in the campfire's
+	// inventory (cooking times, CampfireCookEvent, dropping the results). It returns whether the
+	// campfire had items.
+	CampfireCookFunc func(c *Campfire) bool
+)
+
+// Campfire is a port of pocketmine\block\Campfire.
 type Campfire struct {
 	Transparent
 	HorizontalFacingComponent
 	LightableComponent
+
+	// inventory is the tile's CampfireInventory (see tile.Inventory); cookingTimes is slot =>
+	// ticks.
+	inventory    tile.Inventory
+	cookingTimes map[int]int
 }
 
 func NewCampfire(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) *Campfire {
 	c := &Campfire{
 		Transparent:               Transparent{NewBlock(idInfo, name, typeInfo)},
 		HorizontalFacingComponent: NewHorizontalFacingComponent(),
+		cookingTimes:              map[int]int{},
 	}
 	c.Init(c)
 	return c
@@ -50,9 +68,71 @@ func NewCampfire(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) 
 
 func (c *Campfire) Clone() Behavior {
 	cl := *c
+	cl.cookingTimes = make(map[int]int, len(c.cookingTimes))
+	for k, v := range c.cookingTimes {
+		cl.cookingTimes[k] = v
+	}
 	cl.rebind(&cl)
 	return &cl
 }
+
+// ReadStateFromWorld is a port of Campfire::readStateFromWorld.
+func (c *Campfire) ReadStateFromWorld() Behavior {
+	c.Block.ReadStateFromWorld()
+	c.inventory = nil
+	if t, ok := c.tileAt(); ok {
+		if campfireTile, ok := t.(*tile.Campfire); ok {
+			c.inventory = campfireTile.GetInventory()
+			c.cookingTimes = map[int]int{}
+			for k, v := range campfireTile.GetCookingTimes() {
+				c.cookingTimes[k] = v
+			}
+		}
+	}
+	return c.self
+}
+
+// WriteStateToWorld is a port of Campfire::writeStateToWorld.
+func (c *Campfire) WriteStateToWorld() {
+	c.Block.WriteStateToWorld()
+	if t, ok := c.tileAt(); ok {
+		if campfireTile, ok := t.(*tile.Campfire); ok {
+			times := make(map[int]int, len(c.cookingTimes))
+			for k, v := range c.cookingTimes {
+				times[k] = v
+			}
+			campfireTile.SetCookingTimes(times)
+		}
+	}
+}
+
+// GetInventory is a port of Campfire::getInventory: the tile's CampfireInventory (nil if the block
+// was never read from a world, like PHP's uninitialized property).
+func (c *Campfire) GetInventory() tile.Inventory { return c.inventory }
+
+// campfireFurnaceTyper lets Campfire reach SoulCampfire's getFurnaceType override.
+type campfireFurnaceTyper interface{ GetFurnaceType() tile.FurnaceType }
+
+// GetFurnaceType is a port of Campfire::getFurnaceType.
+func (c *Campfire) GetFurnaceType() tile.FurnaceType { return tile.FurnaceTypeCampfire }
+
+func (c *Campfire) furnaceType() tile.FurnaceType {
+	return c.self.(campfireFurnaceTyper).GetFurnaceType()
+}
+
+// SetCookingTime is a port of Campfire::setCookingTime. Panics for an invalid slot or time.
+func (c *Campfire) SetCookingTime(slot, time int) {
+	if slot < 0 || slot > 3 {
+		panic("Slot must be in range 0-3")
+	}
+	if max := c.furnaceType().GetCookDurationTicks(); time < 0 || time > max {
+		panic(fmt.Sprintf("CookingTime must be in range 0-%d", max))
+	}
+	c.cookingTimes[slot] = time
+}
+
+// GetCookingTime is a port of Campfire::getCookingTime.
+func (c *Campfire) GetCookingTime(slot int) int { return c.cookingTimes[slot] }
 
 func (c *Campfire) DescribeBlockOnlyState(w runtime.DataDescriber) {
 	c.DescribeHorizontalFacing(w)
@@ -70,9 +150,15 @@ func (c *Campfire) GetLightLevel() int {
 
 func (c *Campfire) IsAffectedBySilkTouch() bool { return true }
 
-// GetDropsForCompatibleTool should return [VanillaItems.CHARCOAL().SetCount(2)] - needs the
-// unported item registry (see Block.GetDropsForCompatibleTool's doc comment), so it's left as
-// Block's default for now.
+// GetDropsForCompatibleTool is a port of Campfire::getDropsForCompatibleTool.
+func (c *Campfire) GetDropsForCompatibleTool(item Item) []Item {
+	charcoal := vanillaItem("charcoal")
+	if charcoal == nil {
+		return nil
+	}
+	charcoal.SetCount(2)
+	return []Item{charcoal}
+}
 
 func (c *Campfire) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone
@@ -104,8 +190,7 @@ func (c *Campfire) Place(tx BlockTransaction, item Item, blockReplace Behavior, 
 	return c.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract is a port of Campfire::onInteract, minus the furnace-recipe-matching branch (see
-// type doc comment). The ignite/extinguish branches are fully real.
+// OnInteract is a port of Campfire::onInteract.
 func (c *Campfire) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if !c.Lit {
 		if item.GetTypeId() == itemTypeIDsFireCharge {
@@ -114,16 +199,22 @@ func (c *Campfire) OnInteract(item Item, face math.Facing, clickVector math.Vect
 			c.addSound(sound.BlazeShootSound{})
 			return true
 		}
-		if item.GetTypeId() == itemTypeIDsFlintAndSteel {
+		if item.GetTypeId() == itemTypeIDsFlintAndSteel || hasEnchantment(item, enchantment.VanillaFireAspect()) {
 			if durable, ok := item.(Durable); ok {
 				durable.ApplyDamage(1)
 			}
 			c.ignite()
 			return true
 		}
-	} else if shovel, ok := item.(Shovel); ok {
-		shovel.ApplyDamage(1)
+	} else if isShovel(item) {
+		applyDamage(item, 1)
 		c.extinguish()
+		return true
+	}
+
+	if CampfireAddIngredientFunc != nil && CampfireAddIngredientFunc(c, item) {
+		item.Pop()
+		c.addSound(sound.ItemFrameAddItemSound{})
 		return true
 	}
 	return false
@@ -152,10 +243,30 @@ func (c *Campfire) OnEntityInside(e Entity) bool {
 	return true
 }
 
-func (c *Campfire) OnProjectileHit(projectile Projectile, hitResult math.RayTraceResult) {}
+// OnProjectileHit is a port of Campfire::onProjectileHit: water splash potions put it out.
+func (c *Campfire) OnProjectileHit(projectile Projectile, hitResult math.RayTraceResult) {
+	if potion, ok := projectile.(interface{ IsWaterPotion() bool }); ok && c.Lit && potion.IsWaterPotion() {
+		c.extinguish()
+	}
+}
 
-// OnScheduledUpdate is a no-op - see type doc comment.
-func (c *Campfire) OnScheduledUpdate() {}
+// OnScheduledUpdate is a port of Campfire::onScheduledUpdate.
+func (c *Campfire) OnScheduledUpdate() {
+	if !c.Lit {
+		return
+	}
+	world, err := c.position.GetWorld()
+	if err != nil {
+		return
+	}
+	if CampfireCookFunc != nil && CampfireCookFunc(c) {
+		_ = world.SetBlock(c.position, c.self)
+	}
+	if rand.Intn(6) == 0 {
+		world.AddSound(c.position.Vector3, furnaceCookSound(c.furnaceType()))
+	}
+	world.ScheduleDelayedBlockUpdate(c.position.Vector3, campfireUpdateIntervalTicks)
+}
 
 func (c *Campfire) addSound(s sound.Sound) {
 	world, err := c.position.GetWorld()

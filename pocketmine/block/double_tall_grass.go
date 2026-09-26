@@ -19,12 +19,13 @@ func (d *DoubleTallGrass) Clone() Behavior {
 
 func (d *DoubleTallGrass) CanBeReplaced() bool { return true }
 
-// GetDropsForIncompatibleTool is a port of DoubleTallGrass::getDropsForIncompatibleTool. The
-// bottom half always drops nothing (fully portable). The top half should defer to
-// TallGrassTrait's version (a FortuneDropHelper-based wheat seed chance), but that needs the
-// unported item package for real Item construction - see Gravel's GetDropsForCompatibleTool doc
-// comment for the same category of gap - so both halves return nil for now.
-func (d *DoubleTallGrass) GetDropsForIncompatibleTool(item Item) []Item { return nil }
+// GetDropsForIncompatibleTool is a port of DoubleTallGrass::getDropsForIncompatibleTool.
+func (d *DoubleTallGrass) GetDropsForIncompatibleTool(item Item) []Item {
+	if d.Top {
+		return tallGrassDropsForIncompatibleTool(item)
+	}
+	return nil
+}
 
 func (d *DoubleTallGrass) GetFlameEncouragement() int { return 60 }
 

@@ -63,3 +63,29 @@ func TestBlockStatesRuntimeIDMatchesSliceIndex(t *testing.T) {
 		t.Errorf("BlockStates()[%d].Name = %q, want minecraft:grass_block", got, states[got].Name)
 	}
 }
+
+func TestLookupStateIdFromIdMeta(t *testing.T) {
+	// Legacy meta 0 of a multi-state block, and a single-state block for any meta.
+	for _, tc := range []struct {
+		id    string
+		meta  int
+		check func(BlockStateData) bool
+	}{
+		{"minecraft:skeleton_skull", 0, func(d BlockStateData) bool { return d.States["facing_direction"] == int32(0) }},
+		{"minecraft:oak_log", 0, func(d BlockStateData) bool { return d.States["pillar_axis"] == "y" }},
+		{"minecraft:oak_log", 1, func(d BlockStateData) bool { return d.States["pillar_axis"] == "x" }},
+		{"minecraft:dirt", 7, func(d BlockStateData) bool { return d.Name == "minecraft:dirt" }},
+	} {
+		id, ok := LookupStateIdFromIdMeta(tc.id, tc.meta)
+		if !ok {
+			t.Fatalf("%s:%d not found", tc.id, tc.meta)
+		}
+		data, _ := GenerateDataFromStateId(id)
+		if data.Name != tc.id || !tc.check(data) {
+			t.Errorf("%s:%d -> %s %v", tc.id, tc.meta, data.Name, data.States)
+		}
+		if meta, ok := GetMetaFromStateId(id); !ok || (meta != tc.meta && tc.id != "minecraft:dirt") {
+			t.Errorf("%s:%d meta round trip gave %d", tc.id, tc.meta, meta)
+		}
+	}
+}

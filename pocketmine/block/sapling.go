@@ -56,10 +56,14 @@ func (s *Sapling) OnNearbyBlockChange() {
 	}
 }
 
-// OnInteract's fertilizer-driven grow needs a Fertilizer item marker (pocketmine\item\Fertilizer,
-// not ported yet - same gap documented on Crops/SweetBerryBush/CocoaBlock's OnInteract). Block's
-// default OnInteract (return false) already matches this gap, so there's nothing to override
-// here.
+// OnInteract is a port of Sapling::onInteract.
+func (s *Sapling) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if isFertilizer(item) && s.grow(player) {
+		item.Pop()
+		return true
+	}
+	return false
+}
 
 func (s *Sapling) TicksRandomly() bool { return true }
 
@@ -73,7 +77,7 @@ func (s *Sapling) OnRandomTick() {
 		return
 	}
 	if s.Ready {
-		s.grow()
+		s.grow(nil)
 	} else {
 		s.Ready = true
 		if err := world.SetBlock(s.position, s.self); err != nil {
@@ -82,10 +86,26 @@ func (s *Sapling) OnRandomTick() {
 	}
 }
 
-// grow is a port of Sapling::grow. StructureGrowEvent/BlockTransactionImpl now exist (see
-// bamboo.go), but the real blocker here is TreeFactory - a whole Random-seeded tree-shape
-// generator (different branching/leaf-placement algorithms per SaplingType) that's out of scope
-// for this port's current world-gen-free stage, so this stays a no-op stub returning false.
-func (s *Sapling) grow() bool { return false }
+// grow is a port of Sapling::grow.
+func (s *Sapling) grow(player Player) bool {
+	return growStructure(s.self, saplingTreeType(s.SaplingType), player)
+}
+
+// saplingTreeType is a port of SaplingType::getTreeType.
+func saplingTreeType(t blockutils.SaplingType) TreeType {
+	switch t {
+	case blockutils.SaplingTypeSpruce:
+		return TreeTypeSpruce
+	case blockutils.SaplingTypeBirch:
+		return TreeTypeBirch
+	case blockutils.SaplingTypeJungle:
+		return TreeTypeJungle
+	case blockutils.SaplingTypeAcacia:
+		return TreeTypeAcacia
+	case blockutils.SaplingTypeDarkOak:
+		return TreeTypeDarkOak
+	}
+	return TreeTypeOak
+}
 
 func (s *Sapling) GetFuelTime() int { return 100 }

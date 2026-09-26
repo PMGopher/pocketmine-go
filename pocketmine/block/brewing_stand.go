@@ -9,8 +9,7 @@ import (
 
 // BrewingStandSlot is a port of pocketmine\block\utils\BrewingStandSlot - the three visual bottle
 // positions, each mapping to a real slot number in blockinventory.BrewingStandInventory's layout
-// (confirmed against BrewingStandInventory.php's SLOT_BOTTLE_* constants, even though that
-// inventory type itself isn't ported yet).
+// (BrewingStandInventory's SLOT_BOTTLE_* constants).
 type BrewingStandSlot int
 
 const (
@@ -102,9 +101,7 @@ func (b *BrewingStand) SetSlots(slots map[BrewingStandSlot]bool) {
 	}
 }
 
-// OnInteract is a port of BrewingStand::onInteract, minus actually opening the inventory window
-// (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc comment for the same
-// gap). The CanOpenWith lock check that would gate it is fully real.
+// OnInteract is a port of BrewingStand::onInteract.
 func (b *BrewingStand) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return true
@@ -122,13 +119,38 @@ func (b *BrewingStand) OnInteract(item Item, face math.Facing, clickVector math.
 		return true
 	}
 	if tileStand.CanOpenWith(item.GetCustomName()) {
-		// player.SetCurrentWindow(tileStand.GetInventory()) - not ported, see doc comment above.
+		openTileWindow(player, tileStand.GetInventory())
 	}
 	return true
 }
 
-// OnScheduledUpdate should drive tile.BrewingStand.OnUpdate (not ported - see its doc comment)
-// and then sync this block's visual Slots from the tile's real inventory occupancy - since the
-// tile has no real inventory here (see ContainerComponent's doc comment), there's nothing to sync
-// from, so this is a no-op.
-func (b *BrewingStand) OnScheduledUpdate() {}
+// OnScheduledUpdate is a port of BrewingStand::onScheduledUpdate: brews, then shows the bottles
+// that are in the stand.
+func (b *BrewingStand) OnScheduledUpdate() {
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return
+	}
+	t, _ := world.GetTile(b.position)
+	brewing, ok := t.(*tile.BrewingStand)
+	if !ok {
+		return
+	}
+	if brewing.OnUpdate() {
+		world.ScheduleDelayedBlockUpdate(b.position.Vector3, 1)
+	}
+	if tile.InventoryIsSlotEmptyFunc == nil {
+		return
+	}
+	changed := false
+	for _, slot := range []BrewingStandSlot{BrewingStandSlotEast, BrewingStandSlotNorthwest, BrewingStandSlotSouthwest} {
+		occupied := !tile.InventoryIsSlotEmptyFunc(brewing.GetInventory(), slot.GetSlotNumber())
+		if occupied != b.HasSlot(slot) {
+			b.SetSlot(slot, occupied)
+			changed = true
+		}
+	}
+	if changed {
+		_ = world.SetBlock(b.position, b.self)
+	}
+}

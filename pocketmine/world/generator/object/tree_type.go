@@ -1,28 +1,43 @@
 package object
 
-import "pocketmine-go/pocketmine/utils"
-
-// TreeType is a port of the slice of pocketmine\world\generator\object\TreeType this port's
-// TreeFactory actually needs - only the 3 species any registered biome (Mountains/Forest/Taiga)
-// populates trees with. Jungle/Acacia/DarkOak/Crimson/Warped/Azalea aren't ported (see Tree's doc
-// comment).
+// TreeType is a port of pocketmine\world\generator\object\TreeType.
 type TreeType int
 
 const (
 	TreeTypeOak TreeType = iota
 	TreeTypeSpruce
 	TreeTypeBirch
+	TreeTypeJungle
+	TreeTypeAcacia
+	TreeTypeDarkOak
+	TreeTypeCrimson
+	TreeTypeWarped
+	TreeTypeAzalea
+	//TODO: cherry blossom, mangrove
+	//TODO: perhaps huge mushrooms should be here too???
 )
 
-// NewTreeFromType is a port of the slice of TreeFactory::get this port needs (real TreeFactory
-// also builds big-oak/jungle/acacia/azalea/nether trees, none of which are ported).
-func NewTreeFromType(random *utils.Random, t TreeType) *Tree {
+// GetDisplayName is a port of TreeType::getDisplayName.
+func (t TreeType) GetDisplayName() string {
 	switch t {
+	case TreeTypeOak:
+		return "Oak"
 	case TreeTypeSpruce:
-		return NewSpruceTree()
+		return "Spruce"
 	case TreeTypeBirch:
-		return NewBirchTree(random.NextBoundedInt(39) == 0)
-	default:
-		return NewOakTree()
+		return "Birch"
+	case TreeTypeJungle:
+		return "Jungle"
+	case TreeTypeAcacia:
+		return "Acacia"
+	case TreeTypeDarkOak:
+		return "Dark Oak"
+	case TreeTypeCrimson:
+		return "Crimson"
+	case TreeTypeWarped:
+		return "Warped"
+	case TreeTypeAzalea:
+		return "Azalea"
 	}
+	return ""
 }

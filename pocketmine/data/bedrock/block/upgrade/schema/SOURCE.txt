@@ -1,0 +1,2 @@
+pmmp/BedrockBlockUpgradeSchema 5.3.0+bedrock-1.26.50 (CC0-1.0, see LICENSE).
+Only nbt_upgrade_schema/ is loaded, like PocketMine-MP (the release ships 0351_1.26.40_to_1.26.50.json at the repository root, outside that directory).

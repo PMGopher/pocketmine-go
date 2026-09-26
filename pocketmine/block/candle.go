@@ -126,7 +126,12 @@ func (c *Candle) OnProjectileHit(projectile Projectile, hitResult math.RayTraceR
 	c.OnProjectileHitCandle(c.self, c.position, projectile)
 }
 
-// GetDropsForCompatibleTool should return [c.AsItem().SetCount(c.Count)] - needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (c *Candle) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Candle::getDropsForCompatibleTool.
+func (c *Candle) GetDropsForCompatibleTool(item Item) []Item {
+	drop := asItemOrNil(c.self)
+	if drop == nil {
+		return nil
+	}
+	drop.SetCount(c.Count)
+	return []Item{drop}
+}

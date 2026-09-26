@@ -2,6 +2,7 @@ package block
 
 import (
 	"math/rand"
+	"pocketmine-go/pocketmine/world/sound"
 
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	entityevent "pocketmine-go/pocketmine/event/entity"
@@ -75,17 +76,49 @@ func (s *SweetBerryBush) OnNearbyBlockChange() {
 	}
 }
 
-// OnInteract should fertilize the bush or pick berries — needs a Fertilizer item marker,
-// BlockEventHelper, World.DropItem, and real Item construction, none ported yet, so this is a
-// no-op for now; it still returns true, matching the PHP original's unconditional `return true;`.
+// OnInteract is a port of SweetBerryBush::onInteract: bone meal grows it, otherwise ripe berries
+// are picked.
 func (s *SweetBerryBush) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	world, err := s.position.GetWorld()
+	if err != nil {
+		return true
+	}
+	if s.Age < SweetBerryBushStageMature && item.GetTypeId() == itemTypeIDsBoneMeal {
+		next := s.self.Clone().(*SweetBerryBush)
+		next.Age++
+		if Grow(s.self, next, player) {
+			item.Pop()
+		}
+	} else if dropAmount := s.GetBerryDropAmount(); dropAmount > 0 {
+		s.Age = SweetBerryBushStageBushNoBerries
+		_ = world.SetBlock(s.position, s.self)
+		if berries := asItemOrNil(s.self); berries != nil {
+			berries.SetCount(dropAmount)
+			if dropper, ok := world.(blockItemDropper); ok {
+				dropper.DropBlockItem(s.position.Vector3, berries)
+			}
+		}
+		world.AddSound(s.position.Vector3, sound.SweetBerriesPickSound{})
+	}
 	return true
 }
 
-// GetDropsForCompatibleTool should scale berry drops via FortuneDropHelper — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (s *SweetBerryBush) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of SweetBerryBush::getDropsForCompatibleTool.
+func (s *SweetBerryBush) GetDropsForCompatibleTool(item Item) []Item {
+	count := 0
+	switch s.Age {
+	case SweetBerryBushStageMature:
+		count = FortuneDiscrete(item, 2, 3)
+	case SweetBerryBushStageBushSomeBerries:
+		count = FortuneDiscrete(item, 1, 2)
+	}
+	drop := asItemOrNil(s.self)
+	if drop == nil {
+		return nil
+	}
+	drop.SetCount(count)
+	return []Item{drop}
+}
 
 func (s *SweetBerryBush) TicksRandomly() bool { return s.Age < SweetBerryBushStageMature }
 

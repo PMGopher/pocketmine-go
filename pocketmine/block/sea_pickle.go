@@ -89,7 +89,12 @@ func (s *SeaPickle) OnInteract(item Item, face math.Facing, clickVector math.Vec
 	return s.Block.OnInteract(item, face, clickVector, player, returnedItems)
 }
 
-// GetDropsForCompatibleTool should return [s.AsItem().SetCount(s.Count)] — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (s *SeaPickle) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of SeaPickle::getDropsForCompatibleTool.
+func (s *SeaPickle) GetDropsForCompatibleTool(item Item) []Item {
+	drop := asItemOrNil(s.self)
+	if drop == nil {
+		return nil
+	}
+	drop.SetCount(s.Count)
+	return []Item{drop}
+}

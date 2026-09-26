@@ -89,7 +89,16 @@ func (s *Slab) GetSupportType(facing math.Facing) blockutils.SupportType {
 	return blockutils.SupportTypeNone
 }
 
-// GetDropsForCompatibleTool should return [s.AsItem().SetCount(...)] — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (s *Slab) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Slab::getDropsForCompatibleTool.
+func (s *Slab) GetDropsForCompatibleTool(item Item) []Item {
+	count := 1
+	if s.SlabTypeValue == blockutils.SlabTypeDouble {
+		count = 2
+	}
+	drop := asItemOrNil(s.self)
+	if drop == nil {
+		return nil
+	}
+	drop.SetCount(count)
+	return []Item{drop}
+}

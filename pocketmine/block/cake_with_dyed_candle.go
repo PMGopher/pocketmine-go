@@ -27,8 +27,9 @@ func (c *CakeWithDyedCandle) Clone() Behavior {
 
 func (c *CakeWithDyedCandle) DescribeBlockItemState(w runtime.DataDescriber) { c.DescribeColor(w) }
 
-// GetCandle should return VanillaBlocks.DYED_CANDLE().SetColor(c.Color) - needs the unported
-// block registry, same gap as CakeWithCandle.GetCandle.
-func (c *CakeWithDyedCandle) GetCandle() *Candle {
-	return &Candle{Count: candleMinCount}
+// GetCandle is a port of CakeWithDyedCandle::getCandle.
+func (c *CakeWithDyedCandle) GetCandle() Behavior {
+	candle := VanillaBlock("dyed_candle").(*DyedCandle)
+	candle.Color = c.Color
+	return candle
 }

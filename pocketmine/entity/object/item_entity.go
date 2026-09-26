@@ -35,11 +35,6 @@ const (
 )
 
 // ItemEntity is a port of pocketmine\entity\object\ItemEntity.
-//
-// Not ported: saving the item to NBT (PHP's Item::nbtSerialize - the item serializer registry
-// isn't ported), so ItemEntity.CanSaveWithChunk is false: item entities are dropped, not saved,
-// when their chunk unloads. Everything else (including loading, once item deserialization exists
-// to feed NewItemEntity) behaves like PHP.
 type ItemEntity struct {
 	entity.Entity
 
@@ -199,13 +194,17 @@ func (i *ItemEntity) TryChangeMovement() {
 
 func (i *ItemEntity) ApplyDragBeforeGravity() bool { return true }
 
-// CanSaveWithChunk: see ItemEntity's doc comment - item serialization isn't ported, so item
-// entities aren't saved (PHP: `!$this->item->isNull() && parent::canSaveWithChunk()`).
-func (i *ItemEntity) CanSaveWithChunk() bool { return false }
+// CanSaveWithChunk is a port of ItemEntity::canSaveWithChunk.
+func (i *ItemEntity) CanSaveWithChunk() bool {
+	return !i.item.IsNull() && i.Entity.CanSaveWithChunk()
+}
 
-// SaveNBT is a port of ItemEntity::saveNBT, minus the Item tag (see ItemEntity's doc comment).
+// SaveNBT is a port of ItemEntity::saveNBT.
 func (i *ItemEntity) SaveNBT() *nbt.CompoundTag {
 	tag := i.Entity.SaveNBT()
+	if itemTag, err := item.NbtSerialize(i.item, -1); err == nil {
+		tag.SetTag(TagItem, itemTag)
+	}
 	tag.SetShort(tagItemHealth, nbt.ShortTag(int(i.GetHealth())))
 	age := -32768
 	if i.despawnDelay != NeverDespawn {

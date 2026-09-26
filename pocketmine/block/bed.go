@@ -4,7 +4,9 @@ import (
 	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/lang"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/utils"
 )
 
 // Bed is a port of pocketmine\block\Bed.
@@ -55,10 +57,6 @@ func (b *Bed) ReadStateFromWorld() Behavior {
 	return b.self
 }
 
-// WriteStateToWorld's tile sync (writing Color back to the tile.Bed on placement) is skipped:
-// there's no WriteStateToWorld hook in Behavior yet - same documented gap as
-// Note/RedstoneComparator/BaseBanner/MobHead.
-
 func (b *Bed) RecalculateCollisionBoxes() []math.AxisAlignedBB {
 	return []math.AxisAlignedBB{math.OneAABB().TrimmedCopy(math.Up, 7.0/16)}
 }
@@ -91,12 +89,61 @@ func (b *Bed) GetOtherHalf() (*Bed, bool) {
 	return other, true
 }
 
-// OnInteract should send the player a status message and put them to sleep - needs
-// Player.SendMessage/SleepOn, World.GetTimeOfDay, and the lang/KnownTranslationFactory machinery
-// wired to a real Player, none ported to that depth yet, so this is a documented no-op for now
-// (still returns true when a player is present, matching the PHP original's control flow).
+// Bed.OnInteract time constants: World::TIME_NIGHT and World::TIME_SUNRISE.
+const (
+	worldTimeNight   = 13000
+	worldTimeSunrise = 23000
+)
+
+// sendPlayerMessage is Player::sendMessage (the block Player interface doesn't declare it).
+func sendPlayerMessage(player Player, message any) {
+	if p, ok := player.(interface{ SendMessage(message any) }); ok {
+		p.SendMessage(message)
+	}
+}
+
+// OnInteract is a port of Bed::onInteract.
 func (b *Bed) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	return player != nil
+	if player == nil {
+		return true
+	}
+	other, ok := b.GetOtherHalf()
+	playerPos := player.GetPosition()
+	if !ok {
+		sendPlayerMessage(player, lang.KnownTranslationFactory.PocketmineBlockBedIncomplete().Prefix(utils.Gray))
+		return true
+	} else if playerPos.DistanceSquared(b.position.Vector3) > 4 && playerPos.DistanceSquared(other.position.Vector3) > 4 {
+		sendPlayerMessage(player, lang.KnownTranslationFactory.TileBedTooFar().Prefix(utils.Gray))
+		return true
+	}
+
+	world, err := b.position.GetWorld()
+	if err != nil {
+		return true
+	}
+	var time int64
+	if w, ok := world.(interface{ GetTimeOfDay() int64 }); ok {
+		time = w.GetTimeOfDay()
+	}
+	isNight := time >= worldTimeNight && time < worldTimeSunrise
+	if !isNight {
+		sendPlayerMessage(player, lang.KnownTranslationFactory.TileBedNoSleep().Prefix(utils.Gray))
+		return true
+	}
+
+	head := other
+	if b.Head {
+		head = b
+	}
+	if head.Occupied {
+		sendPlayerMessage(player, lang.KnownTranslationFactory.TileBedOccupied().Prefix(utils.Gray))
+		return true
+	}
+
+	if sleeper, ok := player.(interface{ SleepOn(pos math.Vector3) bool }); ok {
+		sleeper.SleepOn(head.position.Vector3)
+	}
+	return true
 }
 
 func (b *Bed) OnNearbyBlockChange() {
@@ -163,3 +210,13 @@ func (b *Bed) GetAffectedBlocks() []Behavior {
 }
 
 func (b *Bed) GetMaxStackSize() int { return 1 }
+
+// WriteStateToWorld is a port of Bed::writeStateToWorld (extra block properties storage hack).
+func (b *Bed) WriteStateToWorld() {
+	b.Block.WriteStateToWorld()
+	if t, ok := b.tileAt(); ok {
+		if bedTile, ok := t.(*tile.Bed); ok {
+			bedTile.SetColor(b.Color)
+		}
+	}
+}

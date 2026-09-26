@@ -3,7 +3,13 @@
 package serializer
 
 import (
+	"bytes"
+	"math"
+
+	gtnbt "github.com/sandertv/gophertunnel/minecraft/nbt"
+
 	"pocketmine-go/pocketmine/binaryutils"
+	"pocketmine-go/pocketmine/block/tile"
 	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world/format"
 )
@@ -51,12 +57,28 @@ func SerializeFullChunk(chunk *format.Chunk, translator *convert.BlockTranslator
 
 	buf = append(buf, 0) // border block array count - always empty (see ChunkSerializer.php's own comment: these crash the regular client)
 
-	// Tiles: this port has no Tile-in-World system yet (see format.Chunk's doc comment on why
-	// tiles aren't part of Chunk at all here), so there's never anything to write - matching
-	// ChunkSerializer::serializeTiles with an empty tile list.
-	buf = append(buf, binaryutils.WriteUnsignedVarInt(0)...)
+	buf = append(buf, SerializeTiles(chunk, AllSubChunks)...)
 
 	return buf
+}
+
+// AllSubChunks makes SerializeTiles write the tiles of every sub-chunk.
+const AllSubChunks = math.MinInt
+
+// SerializeTiles is a port of ChunkSerializer::serializeTiles: the spawn compound (network NBT) of
+// every Spawnable tile in the chunk, or only in sub-chunk subY (sub-chunk request mode).
+func SerializeTiles(chunk *format.Chunk, subY int) []byte {
+	var buf bytes.Buffer
+	enc := gtnbt.NewEncoderWithEncoding(&buf, gtnbt.NetworkLittleEndian)
+	for _, t := range chunk.GetTiles() {
+		if subY != AllSubChunks && t.GetPosition().FloorY()>>4 != subY {
+			continue
+		}
+		if compound, ok := tile.SerializedSpawnCompound(t); ok {
+			_ = enc.Encode(convert.NbtToMap(compound))
+		}
+	}
+	return buf.Bytes()
 }
 
 // SerializeBiomesPayload is the LevelChunk payload for sub-chunk request mode: every sub-chunk's

@@ -1,5 +1,7 @@
 package block
 
+import "pocketmine-go/pocketmine/block/tile"
+
 // SoulCampfire is a port of pocketmine\block\SoulCampfire.
 type SoulCampfire struct {
 	Campfire
@@ -39,3 +41,6 @@ func (s *SoulCampfire) GetDropsForCompatibleTool(item Item) []Item {
 }
 
 func (s *SoulCampfire) GetEntityCollisionDamage() int { return 2 }
+
+// GetFurnaceType is a port of SoulCampfire::getFurnaceType.
+func (s *SoulCampfire) GetFurnaceType() tile.FurnaceType { return tile.FurnaceTypeSoulCampfire }

@@ -62,7 +62,7 @@ func (c *CopperComponent) OnInteractCopper(self Behavior, position Position, ite
 		return true
 	}
 
-	if axe, ok := item.(Axe); ok {
+	if axe, ok := asAxe(item); ok {
 		if c.Waxed {
 			c.Waxed = false
 			if err := world.SetBlock(position, self); err != nil {

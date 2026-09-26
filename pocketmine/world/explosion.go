@@ -2,10 +2,14 @@ package world
 
 import (
 	"fmt"
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
+	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	stdmath "math"
 	"math/rand"
 	"pocketmine-go/pocketmine/event"
 	blockevent "pocketmine-go/pocketmine/event/block"
+	"pocketmine-go/pocketmine/nbt"
+	"pocketmine-go/pocketmine/network/mcpe/convert"
 
 	"pocketmine-go/pocketmine/block"
 	blockutils "pocketmine-go/pocketmine/block/utils"
@@ -196,8 +200,7 @@ type interceptable interface {
 
 // ExplodeB is a port of Explosion::explodeB: applies the explosion's effects on the world -
 // destroying blocks (if ExplodeA found any), harming and knocking back entities, and adding a
-// particle and sound. See Explosion's own doc comment for what isn't ported yet (event
-// cancellation and item drops).
+// particle and sound.
 func (e *Explosion) ExplodeB() bool {
 	sourcePos := math.NewVector3(stdmath.Floor(e.Source.X), stdmath.Floor(e.Source.Y), stdmath.Floor(e.Source.Z))
 	e.Yield = stdmath.Min(100, (1/e.Radius)*100)
@@ -418,3 +421,24 @@ func (e *Explosion) getExposure(origin math.Vector3, ent block.Entity) float64 {
 }
 
 func lerp(scale, a, b float64) float64 { return a + scale*(b-a) }
+
+func init() {
+	block.BroadcastTileDataFunc = func(bw block.World, pos math.Vector3, tag *nbt.CompoundTag) {
+		if w, ok := bw.(*World); ok {
+			w.BroadcastPacketToViewers(pos, &packet.BlockActorData{
+				Position: protocol.BlockPos{int32(pos.FloorX()), int32(pos.FloorY()), int32(pos.FloorZ())},
+				NBTData:  convert.NbtToMap(tag),
+			})
+		}
+	}
+	block.ExplodeFunc = func(source block.Position, radius float64, what block.Behavior, fireChance float64, blockBreaking bool) {
+		explosion, err := NewExplosion(source, radius, what, fireChance)
+		if err != nil {
+			return
+		}
+		if blockBreaking {
+			explosion.ExplodeA()
+		}
+		explosion.ExplodeB()
+	}
+}

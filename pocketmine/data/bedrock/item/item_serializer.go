@@ -100,3 +100,14 @@ func (s *ItemSerializer) registerSpecialBlockSerializers() {
 	s.Map(item.VanillaItem("bamboo"), func(item.Item) SavedItemData { return s.standardBlock(block.VanillaBlock("bamboo")) })
 	s.Map(item.VanillaItem("coral_fan"), func(it item.Item) SavedItemData { return s.standardBlock(it.GetBlock()) })
 }
+
+// SerializeStack is a port of ItemSerializer::serializeStack. slot is nil when the stack isn't in
+// a slot.
+func (s *ItemSerializer) SerializeStack(it item.Item, slot *int) (SavedItemStackData, error) {
+	typeData, err := s.SerializeType(it)
+	if err != nil {
+		return SavedItemStackData{}, err
+	}
+	// canDestroy and canPlaceOn are represented via NBT, like PC
+	return SavedItemStackData{TypeData: typeData, Count: it.GetCount(), Slot: slot}, nil
+}

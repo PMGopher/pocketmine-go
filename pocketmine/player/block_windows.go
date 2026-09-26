@@ -3,12 +3,25 @@ package player
 import (
 	"pocketmine-go/pocketmine/block"
 	blockinventory "pocketmine-go/pocketmine/block/inventory"
+	"pocketmine-go/pocketmine/block/tile"
 	"pocketmine-go/pocketmine/inventory"
 )
 
 // init wires block.OpenWindowFunc: a block's onInteract doing
 // $player->setCurrentWindow(new XInventory($this->position)).
 func init() {
+	// $player->setCurrentWindow($tile->getInventory()) from a container block's onInteract.
+	block.OpenTileWindowFunc = func(who block.Player, inv tile.Inventory) bool {
+		p, ok := who.(*Player)
+		if !ok {
+			return false
+		}
+		window, ok := inv.(inventory.Inventory)
+		if !ok {
+			return false
+		}
+		return p.SetCurrentWindow(window)
+	}
 	block.OpenWindowFunc = func(who block.Player, windowType block.WindowType, pos block.Position) bool {
 		p, ok := who.(*Player)
 		if !ok {

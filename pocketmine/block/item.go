@@ -56,3 +56,28 @@ func asItemOrNil(blk Behavior) Item {
 type ToolTier interface {
 	GetHarvestLevel() int
 }
+
+// Item stack hooks, set by the item package: block's Item interface can't declare methods that
+// return item.Item (see NewItemBlockFunc). PopItemFunc is Item::pop($count), returning the popped
+// stack; CloneItemFunc is `clone $item`.
+var (
+	PopItemFunc   func(it Item, count int) Item
+	CloneItemFunc func(it Item) Item
+)
+
+// popItem is $item->pop(): removes one item from the stack and returns it (nil without the hook).
+func popItem(it Item) Item {
+	if PopItemFunc == nil {
+		it.Pop()
+		return nil
+	}
+	return PopItemFunc(it, 1)
+}
+
+// cloneItem is `clone $item` (it itself without the hook).
+func cloneItem(it Item) Item {
+	if it == nil || CloneItemFunc == nil {
+		return it
+	}
+	return CloneItemFunc(it)
+}

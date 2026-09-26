@@ -137,7 +137,7 @@ func TestCampfireOnInteractShovelExtinguishesWhenLit(t *testing.T) {
 	w := &fakeWorld{}
 	c := newTestCampfire(w)
 	c.Lit = true
-	shovel := &fakeAxeItem{}
+	shovel := &fakeAxeItem{fakeItem: fakeItem{toolType: ToolTypeShovel}}
 
 	if !c.OnInteract(shovel, math.Up, math.Vector3{}, nil, nil) {
 		t.Fatal("expected OnInteract to handle a shovel while lit")

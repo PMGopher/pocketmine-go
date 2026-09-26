@@ -2,6 +2,9 @@ package block
 
 import (
 	"math/rand"
+	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/utils"
+	"pocketmine-go/pocketmine/world/sound"
 
 	blockutils "pocketmine-go/pocketmine/block/utils"
 )
@@ -66,10 +69,39 @@ func (g *Grass) trySpreadOnto(world World, x, y, z int) {
 	Spread(dirt, VanillaGrass(), g.self)
 }
 
-// OnInteract should grow tall grass with Fertilizer, or till into Farmland/GrassPath with a
-// Hoe/Shovel - needs the unported Fertilizer/Hoe/Shovel item markers, the block registry, and the
-// TallGrass world-gen object. Block's default OnInteract (return false) already matches this gap,
-// so there's nothing to override here.
+// OnInteract is a port of Grass::onInteract: bone meal grows grass and flowers around it, a hoe
+// tills it into farmland and a shovel makes a path.
+func (g *Grass) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if g.self.(blockGeometry).GetSide(math.Up, 1).GetTypeId() != AIR {
+		return false
+	}
+	world, err := g.position.GetWorld()
+	if err != nil {
+		return false
+	}
+	if isFertilizer(item) {
+		item.Pop()
+		if GrowGrassFunc != nil {
+			GrowGrassFunc(world, g.position.FloorX(), g.position.FloorY(), g.position.FloorZ(), utils.NewRandom(rand.Int()), 8, 2)
+		}
+		return true
+	}
+	if face != math.Down {
+		var newBlock Behavior
+		if isHoe(item) {
+			newBlock = VanillaBlock("farmland")
+		} else if isShovel(item) {
+			newBlock = VanillaBlock("grass_path")
+		}
+		if newBlock != nil {
+			applyDamage(item, 1)
+			world.AddSound(g.position.Add(0.5, 0.5, 0.5), sound.ItemUseOnBlockSound{BlockStateID: newBlock.GetStateId()})
+			_ = world.SetBlock(g.position, newBlock)
+			return true
+		}
+	}
+	return false
+}
 
 // GetDropsForCompatibleTool is a port of Grass::getDropsForCompatibleTool.
 func (g *Grass) GetDropsForCompatibleTool(item Item) []Item {

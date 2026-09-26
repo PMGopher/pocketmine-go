@@ -79,10 +79,8 @@ func (h *Hopper) Place(tx BlockTransaction, item Item, blockReplace Behavior, bl
 	return h.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
 
-// OnInteract is a port of Hopper::onInteract, minus actually opening the inventory window
-// (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc comment for the same
-// gap). Notably (matching the PHP original) this returns false rather than true when there's no
-// player, unlike most other container blocks' OnInteract.
+// OnInteract is a port of Hopper::onInteract. Like PHP, it returns false rather than true when
+// there's no player, unlike most other container blocks' OnInteract.
 func (h *Hopper) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return false
@@ -92,8 +90,8 @@ func (h *Hopper) OnInteract(item Item, face math.Facing, clickVector math.Vector
 		return true
 	}
 	if t, ok := world.GetTile(h.position); ok {
-		if _, ok := t.(*tile.Hopper); ok {
-			// player.SetCurrentWindow(tileHopper.GetInventory()) - not ported, see doc comment above.
+		if tileHopper, ok := t.(*tile.Hopper); ok { //TODO: find a way to have inventories open on click without this boilerplate in every block
+			openTileWindow(player, tileHopper.GetInventory())
 		}
 	}
 	return true

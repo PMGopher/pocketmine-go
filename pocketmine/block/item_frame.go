@@ -13,15 +13,7 @@ import (
 
 const ItemFrameRotations = 8
 
-// ItemFrame is a port of pocketmine\block\ItemFrame, minus actually inserting a newly held item
-// into the frame: PHP's `$this->framedItem = $item->pop();` relies on Item::pop() returning the
-// popped clone, but this port's local Item interface can't declare a method returning Item and
-// have it satisfied by the real (future) item package automatically - a self-referential return
-// type means "block.Item" and "item.Item" would be different named types, and Go doesn't do
-// covariant interface satisfaction across packages (unlike the block registry gaps elsewhere,
-// this one can't be fixed by simply widening the local interface). FramedItem can still be set
-// directly (SetFramedItem), and everything that doesn't need to construct a new item from a held
-// one - rotating, ejecting, dropping, picking - is fully real.
+// ItemFrame is a port of pocketmine\block\ItemFrame.
 type ItemFrame struct {
 	Flowable
 	FacingComponent
@@ -64,7 +56,7 @@ func (i *ItemFrame) ReadStateFromWorld() Behavior {
 	if !ok {
 		return i.self
 	}
-	tileFrame, ok := t.(*tile.ItemFrame)
+	tileFrame, ok := t.(itemFrameTile)
 	if !ok {
 		return i.self
 	}
@@ -121,25 +113,30 @@ func itemFrameCanBeSupportedAt(blk Behavior, face math.Facing) bool {
 	return bg.GetAdjacentSupportType(face) != blockutils.SupportTypeNone
 }
 
-// OnInteract is a port of ItemFrame::onInteract, minus the item-insertion branch (see type doc
-// comment). Rotating an already-framed item is fully real.
+// OnInteract is a port of ItemFrame::onInteract.
 func (i *ItemFrame) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if i.FramedItem != nil {
 		i.ItemRotation = (i.ItemRotation + 1) % ItemFrameRotations
 		i.addSound(sound.ItemFrameRotateItemSound{})
-		i.setSelf()
+	} else if !item.IsNull() {
+		i.FramedItem = popItem(item)
+		i.addSound(sound.ItemFrameAddItemSound{})
+	} else {
+		return true
 	}
+	i.setSelf()
 	return true
 }
 
-// OnAttack is a port of ItemFrame::onAttack, minus actually dropping the ejected item into the
-// world (World.DropItem isn't in the ported World interface - same gap as SweetBerryBush's doc
-// comment). The framed-item-clearing state change and the return value are both real.
+// OnAttack is a port of ItemFrame::onAttack.
 func (i *ItemFrame) OnAttack(item Item, face math.Facing, player Player) bool {
 	if i.FramedItem == nil {
 		return false
 	}
 	if utils.GetRandomFloat() <= i.ItemDropChance {
+		if world, err := i.position.GetWorld(); err == nil {
+			dropItem(world, i.position.Add(0.5, 0.5, 0.5), cloneItem(i.FramedItem))
+		}
 		i.addSound(sound.ItemFrameRemoveItemSound{})
 	}
 	i.SetFramedItem(nil)
@@ -198,4 +195,27 @@ func (i *ItemFrame) setSelf() {
 		return
 	}
 	_ = world.SetBlock(i.position, i.self)
+}
+
+// itemFrameTile is `instanceof TileItemFrame`: tile.ItemFrame and tile.GlowingItemFrame (which
+// embeds it).
+type itemFrameTile interface {
+	GetItem() (tile.Item, bool)
+	SetItem(item tile.Item)
+	GetItemRotation() int
+	SetItemRotation(rotation int)
+	GetItemDropChance() float64
+	SetItemDropChance(chance float64)
+}
+
+// WriteStateToWorld is a port of ItemFrame::writeStateToWorld.
+func (i *ItemFrame) WriteStateToWorld() {
+	i.Block.WriteStateToWorld()
+	if t, ok := i.tileAt(); ok {
+		if tileFrame, ok := t.(itemFrameTile); ok {
+			tileFrame.SetItem(asTileItem(i.FramedItem))
+			tileFrame.SetItemRotation(i.ItemRotation)
+			tileFrame.SetItemDropChance(i.ItemDropChance)
+		}
+	}
 }

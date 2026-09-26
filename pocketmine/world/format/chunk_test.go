@@ -23,6 +23,7 @@ func newFakeTile(x, y, z float64) *fakeTile {
 func (f *fakeTile) ReadSaveData(n *nbt.CompoundTag) error { return nil }
 func (f *fakeTile) WriteSaveData(n *nbt.CompoundTag)      {}
 func (f *fakeTile) SaveID() string                        { return "Fake" }
+func (f *fakeTile) SaveNBT() *nbt.CompoundTag             { return nbt.NewCompoundTag() }
 func (f *fakeTile) GetPosition() tile.Position            { return f.pos }
 func (f *fakeTile) IsClosed() bool                        { return f.closed }
 func (f *fakeTile) Close()                                { f.closed = true }

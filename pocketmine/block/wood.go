@@ -7,11 +7,19 @@ import (
 	"pocketmine-go/pocketmine/world/sound"
 )
 
-// Axe is a forward-compatible marker for pocketmine\item\Axe — declared here since Wood.OnInteract
-// is the only current consumer, matching the local-interface pattern used elsewhere for
-// not-yet-ported types. The future Axe item type just needs to satisfy this.
+// Axe is the part of pocketmine\item\Axe blocks use. `$item instanceof Axe` is asAxe: axes are
+// the only items with the axe tool type.
 type Axe interface {
 	ApplyDamage(amount int) bool
+}
+
+// asAxe is `$item instanceof Axe`.
+func asAxe(item Item) (Axe, bool) {
+	if item.GetBlockToolType() != ToolTypeAxe {
+		return nil, false
+	}
+	axe, ok := item.(Axe)
+	return axe, ok
 }
 
 // Wood is a port of pocketmine\block\Wood.
@@ -74,7 +82,7 @@ func (w *Wood) GetFlammability() int {
 }
 
 func (w *Wood) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	if axe, ok := item.(Axe); !w.Stripped && ok {
+	if axe, ok := asAxe(item); !w.Stripped && ok {
 		axe.ApplyDamage(1)
 		w.Stripped = true
 		if world, err := w.position.GetWorld(); err == nil {

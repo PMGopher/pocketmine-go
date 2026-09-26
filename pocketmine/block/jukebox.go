@@ -3,6 +3,7 @@ package block
 import (
 	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
+	"pocketmine-go/pocketmine/lang"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -16,12 +17,7 @@ type Record interface {
 	GetRecordType() blockutils.RecordType
 }
 
-// Jukebox is a port of pocketmine\block\Jukebox, minus inserting a newly held record item - same
-// PopCount/covariant-interface limitation as ItemFrame's insertion branch (see its doc comment),
-// and minus actually dropping the ejected record into the world (World.DropItem isn't in the
-// ported World interface - see SweetBerryBush's doc comment for that gap) and the
-// sendJukeboxPopup player notification (not on the local Player interface). Ejecting, sound
-// start/stop, and the tile state sync are otherwise fully real.
+// Jukebox is a port of pocketmine\block\Jukebox.
 //
 // Redstone output from having a record inserted isn't implemented in the PHP original either
 // (marked with its own TODO), so that isn't a gap introduced by this port.
@@ -45,11 +41,19 @@ func (j *Jukebox) Clone() Behavior {
 
 func (j *Jukebox) GetFuelTime() int { return 300 }
 
-// OnInteract is a port of Jukebox::onInteract, minus inserting a newly held record (see type doc
-// comment). Ejecting an already-inserted record is fully real.
+// OnInteract is a port of Jukebox::onInteract.
 func (j *Jukebox) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	if player != nil && j.RecordItem != nil {
-		j.EjectRecord()
+	if player != nil {
+		if j.RecordItem != nil {
+			j.EjectRecord()
+		} else if record, ok := item.(Record); ok {
+			if p, ok := player.(interface{ SendJukeboxPopup(message any) }); ok {
+				p.SendJukeboxPopup(lang.KnownTranslationFactory.RecordNowPlaying(record.GetRecordType().GetTranslatableName()))
+			}
+			if popped, ok := popItem(item).(Record); ok {
+				j.InsertRecord(popped)
+			}
+		}
 	}
 	j.setSelf()
 	return true
@@ -57,10 +61,12 @@ func (j *Jukebox) OnInteract(item Item, face math.Facing, clickVector math.Vecto
 
 func (j *Jukebox) GetRecord() Record { return j.RecordItem }
 
-// EjectRecord is a port of Jukebox::ejectRecord, minus actually dropping the item into the world
-// (see type doc comment).
+// EjectRecord is a port of Jukebox::ejectRecord.
 func (j *Jukebox) EjectRecord() {
 	if j.RecordItem != nil {
+		if world, err := j.position.GetWorld(); err == nil {
+			dropItem(world, j.position.Add(0.5, 1, 0.5), j.RecordItem)
+		}
 		j.RecordItem = nil
 		j.StopSound()
 	}
@@ -135,4 +141,25 @@ func (j *Jukebox) setSelf() {
 		return
 	}
 	_ = world.SetBlock(j.position, j.self)
+}
+
+// WriteStateToWorld is a port of Jukebox::writeStateToWorld.
+func (j *Jukebox) WriteStateToWorld() {
+	j.Block.WriteStateToWorld()
+	if t, ok := j.tileAt(); ok {
+		if tileJukebox, ok := t.(*tile.Jukebox); ok {
+			tileJukebox.SetRecord(asTileItem(j.RecordItem))
+		}
+	}
+}
+
+func init() {
+	tile.RecordStopSoundFunc = func(t tile.Tile) {
+		pos := t.GetPosition()
+		if w, ok := pos.GetWorld(); ok {
+			if world, ok := w.(World); ok {
+				world.AddSound(pos.Vector3, sound.RecordStopSound{})
+			}
+		}
+	}
 }

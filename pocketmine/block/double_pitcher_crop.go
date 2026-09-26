@@ -88,9 +88,14 @@ func (d *DoublePitcherCrop) grow(player Player) bool {
 	return !ev.IsCancelled() && tx.Apply()
 }
 
-// OnInteract's fertilizer-driven grow needs a Fertilizer item marker, not ported yet - same gap
-// documented on PitcherCrop/TorchflowerCrop/Sapling's OnInteract. Block's default OnInteract
-// (return false) already matches this gap, so there's nothing to override here.
+// OnInteract is a port of DoublePitcherCrop::onInteract (bone meal is the only Fertilizer).
+func (d *DoublePitcherCrop) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
+	if item.GetTypeId() == itemTypeIDsBoneMeal && d.grow(player) {
+		item.Pop()
+		return true
+	}
+	return false
+}
 
 // TicksRandomly is a port of DoublePitcherCrop::ticksRandomly - only the bottom half grows.
 func (d *DoublePitcherCrop) TicksRandomly() bool { return d.Age < DoublePitcherCropMaxAge && !d.Top }
@@ -103,9 +108,10 @@ func (d *DoublePitcherCrop) OnRandomTick() {
 	}
 }
 
-// GetDropsForCompatibleTool should return VanillaBlocks.PITCHER_PLANT().AsItem() once mature, or
-// VanillaItems.PITCHER_POD() otherwise - needs the unported block registry and item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.
-
-// AsItem should return VanillaItems.PITCHER_POD() — needs the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so it's left as Block's default for now.
+// GetDropsForCompatibleTool is a port of DoublePitcherCrop::getDropsForCompatibleTool.
+func (d *DoublePitcherCrop) GetDropsForCompatibleTool(item Item) []Item {
+	if d.Age >= DoublePitcherCropMaxAge {
+		return itemDrops(asItemOrNil(VanillaBlock("pitcher_plant")))
+	}
+	return itemDrops(vanillaItem("pitcher_pod"))
+}

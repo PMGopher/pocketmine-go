@@ -32,7 +32,11 @@ func AdvancedMemoryUsage() (reserved, vmRSS, vmSize uint64) {
 	}
 
 	if vmRSS == 0 {
-		vmRSS = m.HeapAlloc
+		if rss, ok := ProcessRSS(); ok {
+			vmRSS = rss
+		} else {
+			vmRSS = m.HeapAlloc
+		}
 	}
 	if vmSize == 0 {
 		vmSize = m.Sys

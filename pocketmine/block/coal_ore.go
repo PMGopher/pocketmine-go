@@ -19,10 +19,10 @@ func (c *CoalOre) Clone() Behavior {
 	return &cl
 }
 
-// GetDropsForCompatibleTool should return coal scaled via FortuneDropHelper — needs real Item
-// construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (c *CoalOre) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of CoalOre::getDropsForCompatibleTool.
+func (c *CoalOre) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("coal", FortuneWeighted(item, 1, 1)))
+}
 
 func (c *CoalOre) IsAffectedBySilkTouch() bool { return true }
 

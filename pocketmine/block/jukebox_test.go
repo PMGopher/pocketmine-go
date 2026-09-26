@@ -30,9 +30,9 @@ type dualRecord struct {
 	fakeRecord
 }
 
-func (dualRecord) GetCustomBlockData() (*nbt.CompoundTag, bool) { return nil, false }
-func (dualRecord) GetNamedTag() *nbt.CompoundTag                { return nbt.NewCompoundTag() }
-func (dualRecord) HasCustomName() bool                          { return false }
+func (dualRecord) GetCustomBlockData() *nbt.CompoundTag { return nil }
+func (dualRecord) GetNamedTag() *nbt.CompoundTag        { return nbt.NewCompoundTag() }
+func (dualRecord) HasCustomName() bool                  { return false }
 
 func TestJukeboxGetFuelTime(t *testing.T) {
 	w := &fakeWorld{}

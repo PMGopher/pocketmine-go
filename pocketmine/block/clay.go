@@ -17,9 +17,9 @@ func (c *Clay) Clone() Behavior {
 	return &cl
 }
 
-// GetDropsForCompatibleTool should return 4 clay balls — needs real Item construction from the
-// unported item package (see Block.GetDropsForCompatibleTool's doc comment), so this returns nil
-// for now.
-func (c *Clay) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Clay::getDropsForCompatibleTool.
+func (c *Clay) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("clay", 4))
+}
 
 func (c *Clay) IsAffectedBySilkTouch() bool { return true }

@@ -15,16 +15,11 @@ const (
 	BrewingStandBrewTimeTicks = 400
 )
 
-// BrewingStand is a port of pocketmine\block\tile\BrewingStand, minus its inventory/Container
-// half - see ContainerComponent's doc comment for why the inventory package can't be imported
-// here.
-//
-// The brew/fuel time state and its NBT round trip (including the PHP original's legacy-tag
-// fallback chain and load-time consistency fixups: maxFuelTime defaulting to remainingFuelTime,
-// and everything zeroing out if remainingFuelTime is 0) are fully real. checkFuel/
-// getBrewableRecipes/onUpdate (the actual brewing simulation) all need the fuel/ingredient/bottle
-// inventory slots plus BrewingRecipe/CraftingManager (crafting package, not ported), so none of
-// that is ported.
+// BrewingStandOnUpdateFunc is BrewingStand::onUpdate (the brewing simulation), set by
+// block/inventory, which can import the packages it needs.
+var BrewingStandOnUpdateFunc func(b *BrewingStand) bool
+
+// BrewingStand is a port of pocketmine\block\tile\BrewingStand.
 type BrewingStand struct {
 	SpawnableBase
 	NameableComponent
@@ -51,6 +46,7 @@ func (b *BrewingStand) GetName() string { return b.NameableComponent.GetName(b) 
 // ReadSaveData is a port of BrewingStand::readSaveData.
 func (b *BrewingStand) ReadSaveData(tag *nbt.CompoundTag) error {
 	b.LoadName(tag)
+	b.loadItems(b, tag)
 
 	// PHP checks the legacy "BrewTime" tag first, falling back to the PE "CookTime" tag - which is
 	// the only one WriteSaveData/AddAdditionalSpawnData below actually write, so on a save
@@ -90,12 +86,33 @@ func (b *BrewingStand) writeState(tag *nbt.CompoundTag) {
 
 func (b *BrewingStand) WriteSaveData(tag *nbt.CompoundTag) {
 	b.SaveName(tag)
+	b.saveItems(b, tag)
 	b.writeState(tag)
 }
 
 func (b *BrewingStand) AddAdditionalSpawnData(tag *nbt.CompoundTag) {
 	b.NameableComponent.AddAdditionalSpawnData(tag)
 	b.writeState(tag)
+}
+
+// GetInventory is a port of BrewingStand::getInventory (a BrewingStandInventory).
+func (b *BrewingStand) GetInventory() Inventory { return b.realInventory(b) }
+
+// GetRealInventory is a port of BrewingStand::getRealInventory.
+func (b *BrewingStand) GetRealInventory() Inventory { return b.realInventory(b) }
+
+// CloseHook is BrewingStand::close's removal of the inventory's viewers.
+func (b *BrewingStand) CloseHook() { b.removeAllViewers() }
+
+// OnBlockDestroyedHook is ContainerTrait::onBlockDestroyedHook.
+func (b *BrewingStand) OnBlockDestroyedHook() { b.dropContents(b) }
+
+// OnUpdate is a port of BrewingStand::onUpdate: whether it's still brewing.
+func (b *BrewingStand) OnUpdate() bool {
+	if b.closed || BrewingStandOnUpdateFunc == nil {
+		return false
+	}
+	return BrewingStandOnUpdateFunc(b)
 }
 
 // CopyDataFromItem must be defined here rather than relying on promotion - see

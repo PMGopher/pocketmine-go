@@ -46,8 +46,8 @@ func (f *FallingBlock) GetInitialDragMultiplier() float64 { return 0.02 }
 
 func (f *FallingBlock) GetInitialGravity() float64 { return 0.04 }
 
-// ParseBlockNBT is a port of FallingBlock::parseBlockNBT. The legacy TileID/Tile + Data format
-// needs the block data upgrader, which isn't ported, so it's reported as unloadable data.
+// ParseBlockNBT is a port of FallingBlock::parseBlockNBT: the blockstate, or the legacy
+// TileID/Tile + Data numeric block, through the block data upgrader.
 func ParseBlockNBT(w *world.World, tag *nbt.CompoundTag) (block.Behavior, error) {
 	//TODO: 1.8+ save format
 	if fallingBlockTag, ok, _ := tag.GetCompoundTag(tagFallingBlock); ok {
@@ -57,12 +57,22 @@ func ParseBlockNBT(w *world.World, tag *nbt.CompoundTag) (block.Behavior, error)
 		}
 		return blk, nil
 	}
-	_, hasTileID := tag.GetTag(tagTileID)
-	_, hasTile := tag.GetTag(tagTile)
-	if !hasTileID && !hasTile {
+	var blockID int
+	tileIDTag, _ := tag.GetTag(tagTileID)
+	tileTag, _ := tag.GetTag(tagTile)
+	if id, ok := tileIDTag.(nbt.IntTag); ok {
+		blockID = int(id)
+	} else if id, ok := tileTag.(nbt.ByteTag); ok {
+		blockID = int(id)
+	} else {
 		return nil, data.NewSavedDataLoadingError("Missing legacy falling block info")
 	}
-	return nil, data.NewSavedDataLoadingError("Invalid legacy falling block data: the legacy block ID upgrader isn't ported")
+	damage := int(tag.GetByteOr(tagData, 0))
+	blk, err := w.DeserializeLegacyBlock(blockID, damage)
+	if err != nil {
+		return nil, &data.SavedDataLoadingError{Message: "Invalid legacy falling block data: " + err.Error(), Cause: err}
+	}
+	return blk, nil
 }
 
 func (f *FallingBlock) CanCollideWith(other world.Entity) bool { return false }

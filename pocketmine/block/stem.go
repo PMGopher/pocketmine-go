@@ -97,7 +97,15 @@ func (s *Stem) OnRandomTick() {
 	}
 }
 
-// GetDropsForCompatibleTool should return [s.AsItem().SetCount(FortuneDropHelper.Binomial(...))] —
-// needs real Item construction from the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-func (s *Stem) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of Stem::getDropsForCompatibleTool: a binomial number of
+// seeds, not affected by Fortune.
+func (s *Stem) GetDropsForCompatibleTool(item Item) []Item {
+	//TODO: bit annoying we have to pass an Item instance here
+	//this should not be affected by Fortune, but still follows a binomial distribution
+	drop := asItemOrNil(s.self)
+	if drop == nil {
+		return nil
+	}
+	drop.SetCount(FortuneBinomial(noFortuneItem{}, 0, 3, float64(s.Age+1)/15))
+	return []Item{drop}
+}

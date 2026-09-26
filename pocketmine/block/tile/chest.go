@@ -6,18 +6,28 @@ import (
 )
 
 const (
-	ChestTagPairX = "pairx"
-	ChestTagPairZ = "pairz"
+	ChestTagPairX    = "pairx"
+	ChestTagPairZ    = "pairz"
+	ChestTagPairLead = "pairlead"
 )
 
-// Chest is a port of pocketmine\block\tile\Chest, minus its inventory/Container half entirely -
-// see ContainerComponent's doc comment for why the inventory package can't be imported here.
-// Everything else - pairing state (IsPaired/GetPair/PairWith/Unpair), the name, and the lock (via
-// ContainerComponent.CanOpenWith) - is fully real.
+// NewDoubleChestInventoryFunc is `new DoubleChestInventory($left, $right)`, set by block/inventory
+// (see Inventory).
+var NewDoubleChestInventoryFunc func(left, right Inventory) Inventory
+
+// loadedTerrainWorld is what Chest needs from its world to check its pair's chunk.
+type loadedTerrainWorld interface {
+	IsInLoadedTerrain(pos math.Vector3) bool
+	IsChunkLoaded(chunkX, chunkZ int) bool
+}
+
+// Chest is a port of pocketmine\block\tile\Chest.
 type Chest struct {
 	SpawnableBase
 	NameableComponent
 	ContainerComponent
+
+	doubleInventory Inventory
 
 	PairX, PairZ int
 	HasPair      bool
@@ -35,6 +45,116 @@ func (c *Chest) SaveID() string { return "Chest" }
 func (c *Chest) GetDefaultName() string { return "Chest" }
 
 func (c *Chest) GetName() string { return c.NameableComponent.GetName(c) }
+
+// ReadSaveData is a port of Chest::readSaveData.
+func (c *Chest) ReadSaveData(tag *nbt.CompoundTag) error {
+	pairXTag, okX := tag.GetTag(ChestTagPairX)
+	pairZTag, okZ := tag.GetTag(ChestTagPairZ)
+	pairXVal, isIntX := pairXTag.(nbt.IntTag)
+	pairZVal, isIntZ := pairZTag.(nbt.IntTag)
+	if okX && okZ && isIntX && isIntZ {
+		pairX, pairZ := int(pairXVal), int(pairZVal)
+		sameXAdjacentZ := c.position.FloorX() == pairX && absInt(c.position.FloorZ()-pairZ) == 1
+		sameZAdjacentX := c.position.FloorZ() == pairZ && absInt(c.position.FloorX()-pairX) == 1
+		if sameXAdjacentZ || sameZAdjacentX {
+			c.PairX, c.PairZ, c.HasPair = pairX, pairZ, true
+		} else {
+			c.HasPair = false
+		}
+	}
+	c.LoadName(tag)
+	c.loadItems(c, tag)
+	return nil
+}
+
+// WriteSaveData is a port of Chest::writeSaveData.
+func (c *Chest) WriteSaveData(tag *nbt.CompoundTag) {
+	if c.HasPair {
+		tag.SetInt(ChestTagPairX, nbt.IntTag(c.PairX))
+		tag.SetInt(ChestTagPairZ, nbt.IntTag(c.PairZ))
+	}
+	c.SaveName(tag)
+	c.saveItems(c, tag)
+}
+
+// GetCleanedNBT is a port of Chest::getCleanedNBT: the pairing isn't kept in the item.
+func (c *Chest) GetCleanedNBT() *nbt.CompoundTag {
+	tag := c.TileBase.GetCleanedNBT()
+	if tag != nil {
+		//TODO: replace this with a purpose flag on writeSaveData()
+		tag.RemoveTag(ChestTagPairX, ChestTagPairZ)
+	}
+	return tag
+}
+
+// CloseHook is Chest::close: the viewers of both its own and the double inventory are removed,
+// and the pair forgets the double inventory.
+func (c *Chest) CloseHook() {
+	c.removeAllViewers()
+	if c.doubleInventory != nil {
+		world, _ := c.position.GetWorld()
+		if lt, ok := world.(loadedTerrainWorld); ok && c.HasPair && lt.IsChunkLoaded(c.PairX>>4, c.PairZ>>4) {
+			if RemoveAllViewersFunc != nil {
+				RemoveAllViewersFunc(c.doubleInventory)
+			}
+			if pair, ok := c.GetPair(); ok {
+				pair.doubleInventory = nil
+			}
+		}
+		c.doubleInventory = nil
+	}
+}
+
+// OnBlockDestroyedHook is a port of Chest::onBlockDestroyedHook.
+func (c *Chest) OnBlockDestroyedHook() {
+	c.Unpair()
+	c.dropContents(c)
+}
+
+// GetInventory is a port of Chest::getInventory: the double chest inventory when paired,
+// otherwise the chest's own.
+func (c *Chest) GetInventory() Inventory {
+	if c.HasPair && c.doubleInventory == nil {
+		c.checkPairing()
+	}
+	if c.doubleInventory != nil {
+		return c.doubleInventory
+	}
+	return c.realInventory(c)
+}
+
+// GetRealInventory is a port of Chest::getRealInventory (the chest's own ChestInventory).
+func (c *Chest) GetRealInventory() Inventory { return c.realInventory(c) }
+
+// checkPairing is a port of Chest::checkPairing.
+func (c *Chest) checkPairing() {
+	world, _ := c.position.GetWorld()
+	lt, _ := world.(loadedTerrainWorld)
+	if c.HasPair && lt != nil && !lt.IsInLoadedTerrain(math.NewVector3(float64(c.PairX), c.position.Y, float64(c.PairZ))) {
+		// paired to a tile in an unloaded chunk
+		c.doubleInventory = nil
+	} else if pair, ok := c.GetPair(); ok {
+		if !pair.HasPair {
+			pair.createPair(c)
+			pair.checkPairing()
+		}
+		if c.doubleInventory == nil {
+			if pair.doubleInventory != nil {
+				c.doubleInventory = pair.doubleInventory
+			} else if NewDoubleChestInventoryFunc != nil {
+				if pair.position.FloorX()+(pair.position.FloorZ()<<15) > c.position.FloorX()+(c.position.FloorZ()<<15) { // Order them correctly
+					c.doubleInventory = NewDoubleChestInventoryFunc(pair.realInventory(pair), c.realInventory(c))
+				} else {
+					c.doubleInventory = NewDoubleChestInventoryFunc(c.realInventory(c), pair.realInventory(pair))
+				}
+				pair.doubleInventory = c.doubleInventory
+			}
+		}
+	} else {
+		c.doubleInventory = nil
+		c.HasPair = false
+	}
+}
 
 // IsPaired is a port of Chest::isPaired.
 func (c *Chest) IsPaired() bool { return c.HasPair }
@@ -69,6 +189,7 @@ func (c *Chest) PairWith(other *Chest) bool {
 	c.createPair(other)
 	c.ClearSpawnCompoundCache()
 	other.ClearSpawnCompoundCache()
+	c.checkPairing()
 	return true
 }
 
@@ -83,34 +204,11 @@ func (c *Chest) Unpair() bool {
 
 	if hadPair {
 		pair.HasPair = false
+		pair.checkPairing()
 		pair.ClearSpawnCompoundCache()
 	}
+	c.checkPairing()
 	return true
-}
-
-func (c *Chest) ReadSaveData(tag *nbt.CompoundTag) error {
-	pairXTag, okX := tag.GetInt(ChestTagPairX)
-	pairZTag, okZ := tag.GetInt(ChestTagPairZ)
-	if okX == nil && okZ == nil {
-		pairX, pairZ := int(pairXTag), int(pairZTag)
-		sameXAdjacentZ := c.position.FloorX() == pairX && absInt(c.position.FloorZ()-pairZ) == 1
-		sameZAdjacentX := c.position.FloorZ() == pairZ && absInt(c.position.FloorX()-pairX) == 1
-		if sameXAdjacentZ || sameZAdjacentX {
-			c.PairX, c.PairZ, c.HasPair = pairX, pairZ, true
-		} else {
-			c.HasPair = false
-		}
-	}
-	c.LoadName(tag)
-	return nil
-}
-
-func (c *Chest) WriteSaveData(tag *nbt.CompoundTag) {
-	if c.HasPair {
-		tag.SetInt(ChestTagPairX, nbt.IntTag(c.PairX))
-		tag.SetInt(ChestTagPairZ, nbt.IntTag(c.PairZ))
-	}
-	c.SaveName(tag)
 }
 
 func (c *Chest) AddAdditionalSpawnData(tag *nbt.CompoundTag) {

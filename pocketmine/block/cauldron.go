@@ -1,14 +1,13 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	"pocketmine-go/pocketmine/math"
 )
 
 // Cauldron is a port of pocketmine\block\Cauldron (the empty cauldron).
-//
-// writeStateToWorld's tile reset (TileCauldron::setCustomWaterColor/setPotionItem) isn't ported:
-// there is no Cauldron tile yet.
+
 type Cauldron struct {
 	Transparent
 }
@@ -82,5 +81,17 @@ func (c *Cauldron) OnNearbyBlockChange() {
 		cauldron.SetFillLevel(FillableCauldronMaxFillLevel)
 		_ = world.SetBlock(c.position, cauldron)
 		world.AddSound(c.position.Add(0.5, 0.5, 0.5), cauldron.GetFillSound())
+	}
+}
+
+// WriteStateToWorld is a port of Cauldron::writeStateToWorld: empty cauldrons don't use the
+// tile's information.
+func (c *Cauldron) WriteStateToWorld() {
+	c.Block.WriteStateToWorld()
+	if t, ok := c.tileAt(); ok {
+		if cauldronTile, ok := t.(*tile.Cauldron); ok {
+			cauldronTile.SetCustomWaterColor(nil)
+			cauldronTile.SetPotionItem(nil)
+		}
 	}
 }

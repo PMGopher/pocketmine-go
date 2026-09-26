@@ -9,7 +9,7 @@ import (
 
 // CurrentBlockStateVersion is BlockStateData::CURRENT_VERSION (WorldDataVersions::BLOCK_STATES)
 // for the vendored 1.26.50 palette: the version every state in canonical_block_states.nbt has.
-const CurrentBlockStateVersion = 18168865
+const CurrentBlockStateVersion = bedrock.CurrentBlockStateVersion
 
 // BlockStateWriter is a port of pocketmine\data\bedrock\block\convert\BlockStateWriter. Bool
 // properties are written as uint8 (ByteTag), int properties as int32 (IntTag).

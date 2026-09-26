@@ -42,9 +42,8 @@ const (
 // as block.Behavior/block.Block: concrete leaf types embed ItemBase, call Init(self) once their
 // own fields are set to their defaults, and override whichever methods they need.
 //
-// Not ported: NbtSerialize/NbtDeserialize/SafeNbtDeserialize (need GlobalItemDataHandlers, a
-// whole item-data-driven serializer/deserializer registry) and legacyJsonDeserialize (deprecated
-// upgrade path). The Player/Entity interaction methods (OnInteractBlock, OnClickAir, ...) are in
+// Item::nbtSerialize/nbtDeserialize/safeNbtDeserialize are the package functions in item_nbt.go.
+// Not ported: legacyJsonDeserialize (deprecated upgrade path). The Player/Entity interaction methods (OnInteractBlock, OnClickAir, ...) are in
 // item_interaction.go; items that override them do so with the small player interfaces they need.
 type Item interface {
 	interactions
@@ -436,8 +435,8 @@ type stateDescriber interface {
 
 // GetStateId is a port of Item::getStateId/computeStateData, using a bit-interleave in the same
 // spirit as the PHP original's morton2d_encode (see morton2DEncode below) - it's internal to this
-// port rather than a byte-for-byte match of the C extension's bit layout, since nothing here
-// persists a state ID across processes yet (NbtSerialize/NbtDeserialize aren't ported).
+// port rather than a byte-for-byte match of the C extension's bit layout; state IDs are never
+// saved (NbtSerialize saves the item's Bedrock ID/meta/NBT).
 func (b *ItemBase) GetStateId() int {
 	writer := runtime.NewWriter(16)
 	b.self.(stateDescriber).describeState(writer)

@@ -1,12 +1,12 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/item/enchantment"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
-// itemTypeIDsFireCharge and itemTypeIDsFlintAndSteel mirror item.FIRE_CHARGE/item.FLINT_AND_STEEL
-// (pocketmine-go/pocketmine/item, not yet ported) - same reasoning as itemTypeIDsHoneycomb in
-// copper_material.go.
+// itemTypeIDsFireCharge and itemTypeIDsFlintAndSteel mirror ItemTypeIds::FIRE_CHARGE/FLINT_AND_STEEL
+// (this package can't import item) - same reasoning as itemTypeIDsHoneycomb in copper_material.go.
 const (
 	itemTypeIDsFireCharge    = 20260
 	itemTypeIDsFlintAndSteel = 20107
@@ -36,17 +36,13 @@ func (c *CandleComponent) GetBaseLightLevel() int {
 // OnInteractCandle is a port of CandleTrait::onInteract. Concrete candle block types call this
 // from their own OnInteract - see CopperComponent.OnInteractCopper's doc comment for why this
 // can't just be inherited the way a PHP trait method can.
-//
-// The `$item->hasEnchantment(VanillaEnchantments::FIRE_ASPECT())` branch of the lighting
-// condition is dropped: the enchantment package isn't ported yet, so it's treated as always
-// false, same as every other HasEnchantment check in this port.
 func (c *CandleComponent) OnInteractCandle(self Behavior, position Position, item Item) bool {
 	world, err := position.GetWorld()
 	if err != nil {
 		return false
 	}
 
-	if item.GetTypeId() == itemTypeIDsFireCharge || item.GetTypeId() == itemTypeIDsFlintAndSteel {
+	if item.GetTypeId() == itemTypeIDsFireCharge || item.GetTypeId() == itemTypeIDsFlintAndSteel || hasEnchantment(item, enchantment.VanillaFireAspect()) {
 		if c.Lit {
 			return true
 		}
@@ -54,6 +50,8 @@ func (c *CandleComponent) OnInteractCandle(self Behavior, position Position, ite
 			durable.ApplyDamage(1)
 		} else if item.GetTypeId() == itemTypeIDsFireCharge {
 			item.Pop()
+			// TODO: not sure if this is intentional, but it's what Bedrock currently does as of
+			// 1.20.10 (as in PHP)
 			world.AddSound(position.AsVector3(), sound.BlazeShootSound{})
 		}
 		world.AddSound(position.AsVector3(), sound.FlintSteelSound{})

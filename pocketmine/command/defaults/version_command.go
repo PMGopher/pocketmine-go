@@ -13,8 +13,9 @@ import (
 	"pocketmine-go/pocketmine/utils"
 )
 
-// VersionCommand is a port of pocketmine\command\defaults\VersionCommand. The PHP version and JIT
-// lines show the Go runtime version instead, and there are no plugins to describe.
+// VersionCommand is a port of pocketmine\command\defaults\VersionCommand. PHP's "PHP version"
+// and "PHP JIT" lines are replaced by a "Go version" line (the server runs on Go, which has no
+// JIT), and there are no plugins to describe.
 type VersionCommand struct{ VanillaCommand }
 
 func NewVersionCommand() *VersionCommand {
@@ -36,8 +37,7 @@ func (c *VersionCommand) Execute(sender command.Sender, commandLabel string, arg
 			utils.Green+protocol.CurrentVersion+utils.Reset,
 			utils.Green+strconv.Itoa(protocol.CurrentProtocol)+utils.Reset,
 		))
-		sender.SendMessage(lang.KnownTranslationFactory.PocketmineCommandVersionPhpVersion(utils.Green + runtime.Version() + utils.Reset))
-		sender.SendMessage(lang.KnownTranslationFactory.PocketmineCommandVersionPhpJitStatus(lang.KnownTranslationFactory.PocketmineCommandVersionPhpJitNotSupported().Format(utils.Green, utils.Reset)))
+		sender.SendMessage("Go version: " + utils.Green + runtime.Version() + utils.Reset)
 		sender.SendMessage(lang.KnownTranslationFactory.PocketmineCommandVersionOperatingSystem(utils.Green + utils.GetOS() + utils.Reset))
 		return true, nil
 	}

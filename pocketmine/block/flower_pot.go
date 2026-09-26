@@ -1,6 +1,7 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
 	"pocketmine-go/pocketmine/math"
 )
 
@@ -9,12 +10,20 @@ type blockItemDropper interface {
 	DropBlockItem(source math.Vector3, it Item)
 }
 
+// dropItem is $world->dropItem($source, $item) for this package.
+func dropItem(world World, source math.Vector3, it Item) {
+	if it == nil {
+		return
+	}
+	if dropper, ok := world.(blockItemDropper); ok {
+		dropper.DropBlockItem(source, it)
+	}
+}
+
 // FlowerPot is a port of pocketmine\block\FlowerPot.
 //
-// Keeping the plant in the FlowerPot tile (readStateFromWorld/writeStateToWorld) isn't ported:
-// there is no FlowerPot tile yet, so the plant only lives on the block instance. onInteract drops
-// the removed plant instead of adding it to the player's inventory first (block.Player has no
-// inventory).
+// onInteract drops the removed plant instead of adding it to the player's inventory first
+// (block.Player has no inventory).
 type FlowerPot struct {
 	Flowable
 
@@ -133,4 +142,32 @@ func (f *FlowerPot) GetPickedItem(addUserData bool) Item {
 		return asItemOrNil(f.plant)
 	}
 	return f.Flowable.GetPickedItem(addUserData)
+}
+
+// ReadStateFromWorld is a port of FlowerPot::readStateFromWorld.
+func (f *FlowerPot) ReadStateFromWorld() Behavior {
+	f.Block.ReadStateFromWorld()
+	f.SetPlant(nil)
+	if t, ok := f.tileAt(); ok {
+		if potTile, ok := t.(*tile.FlowerPot); ok {
+			if plant, ok := potTile.GetPlant().(Behavior); ok {
+				f.SetPlant(plant)
+			}
+		}
+	}
+	return f.self
+}
+
+// WriteStateToWorld is a port of FlowerPot::writeStateToWorld.
+func (f *FlowerPot) WriteStateToWorld() {
+	f.Block.WriteStateToWorld()
+	if t, ok := f.tileAt(); ok {
+		if potTile, ok := t.(*tile.FlowerPot); ok {
+			if f.plant == nil {
+				potTile.SetPlant(nil)
+			} else {
+				potTile.SetPlant(f.plant.Clone())
+			}
+		}
+	}
 }

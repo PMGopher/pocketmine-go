@@ -72,10 +72,10 @@ func (r *RedstoneOre) OnRandomTick() {
 	}
 }
 
-// GetDropsForCompatibleTool should return redstone dust scaled via FortuneDropHelper — needs real
-// Item construction from the unported item package (see Block.GetDropsForCompatibleTool's doc
-// comment), so this returns nil for now.
-func (r *RedstoneOre) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of RedstoneOre::getDropsForCompatibleTool.
+func (r *RedstoneOre) GetDropsForCompatibleTool(item Item) []Item {
+	return itemDrops(vanillaItemCount("redstone_dust", FortuneDiscrete(item, 4, 5)))
+}
 
 func (r *RedstoneOre) IsAffectedBySilkTouch() bool { return true }
 

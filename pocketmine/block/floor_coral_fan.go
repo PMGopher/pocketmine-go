@@ -75,7 +75,3 @@ func (f *FloorCoralFan) OnNearbyBlockChange() {
 		f.BaseCoral.OnNearbyBlockChange()
 	}
 }
-
-// AsItem should return VanillaItems.CORAL_FAN().SetCoralType(f.CoralType).SetDead(f.Dead) — needs
-// the unported item package (see Block.GetDropsForCompatibleTool's doc comment), so it's left as
-// Block's default for now.

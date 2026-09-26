@@ -219,4 +219,3 @@ func (b *Bow) CanStartUsingItem(player Player) bool {
 	h, ok := player.(arrowHolder)
 	return ok && (!h.HasFiniteResources() || h.HasArrow())
 }
-

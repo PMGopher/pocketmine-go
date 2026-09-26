@@ -112,3 +112,14 @@ func (m *MobHead) Place(tx BlockTransaction, item Item, blockReplace Behavior, b
 	}
 	return m.Block.Place(tx, item, blockReplace, blockClicked, face, clickVector, player)
 }
+
+// WriteStateToWorld is a port of MobHead::writeStateToWorld (extra block properties storage hack).
+func (m *MobHead) WriteStateToWorld() {
+	m.Block.WriteStateToWorld()
+	if t, ok := m.tileAt(); ok {
+		if headTile, ok := t.(*tile.MobHead); ok {
+			headTile.SetRotation(m.Rotation)
+			headTile.SetMobHeadType(m.MobHeadType)
+		}
+	}
+}

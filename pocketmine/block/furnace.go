@@ -1,9 +1,12 @@
 package block
 
 import (
+	"math/rand"
+
 	"pocketmine-go/pocketmine/block/tile"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/world/sound"
 )
 
 // Furnace is a port of pocketmine\block\Furnace.
@@ -53,9 +56,15 @@ func (f *Furnace) GetLightLevel() int {
 	return 0
 }
 
-// OnInteract is a port of Furnace::onInteract, minus actually opening the inventory window
-// (player.SetCurrentWindow isn't ported - see block.Chest.OnInteract's doc comment for the same
-// gap). The CanOpenWith lock check that would gate it is fully real.
+// furnaceTile is `instanceof TileFurnace`: tile.NormalFurnace, BlastFurnace and Smoker.
+type furnaceTile interface {
+	CanOpenWith(key string) bool
+	GetInventory() tile.Inventory
+	OnUpdate() bool
+	GetFurnaceType() tile.FurnaceType
+}
+
+// OnInteract is a port of Furnace::onInteract.
 func (f *Furnace) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
 	if player == nil {
 		return true
@@ -68,18 +77,40 @@ func (f *Furnace) OnInteract(item Item, face math.Facing, clickVector math.Vecto
 	if !ok {
 		return true
 	}
-	tileFurnace, ok := t.(*tile.Furnace)
+	tileFurnace, ok := t.(furnaceTile)
 	if !ok {
 		return true
 	}
 	if tileFurnace.CanOpenWith(item.GetCustomName()) {
-		// player.SetCurrentWindow(tileFurnace.GetInventory()) - not ported, see doc comment above.
+		openTileWindow(player, tileFurnace.GetInventory())
 	}
 	return true
 }
 
-// OnScheduledUpdate should drive the furnace's smelting simulation (tile.Furnace.OnUpdate, not
-// ported - needs the fuel/smelting/result inventory slots plus the crafting package, see
-// tile.Furnace's doc comment) and occasionally play a cook sound. Neither is ported, so this is a
-// no-op.
-func (f *Furnace) OnScheduledUpdate() {}
+// OnScheduledUpdate is a port of Furnace::onScheduledUpdate.
+func (f *Furnace) OnScheduledUpdate() {
+	world, err := f.position.GetWorld()
+	if err != nil {
+		return
+	}
+	t, _ := world.GetTile(f.position)
+	if furnace, ok := t.(furnaceTile); ok && furnace.OnUpdate() {
+		if rand.Intn(60) == 0 { // in vanilla this is between 1 and 5 seconds; try to average about 3
+			world.AddSound(f.position.Vector3, furnaceCookSound(furnace.GetFurnaceType()))
+		}
+		world.ScheduleDelayedBlockUpdate(f.position.Vector3, 1) //TODO: check this
+	}
+}
+
+// furnaceCookSound is a port of FurnaceType::getCookSound.
+func furnaceCookSound(t tile.FurnaceType) sound.Sound {
+	switch t {
+	case tile.FurnaceTypeBlastFurnace:
+		return sound.BlastFurnaceSound{}
+	case tile.FurnaceTypeSmoker:
+		return sound.SmokerSound{}
+	case tile.FurnaceTypeCampfire, tile.FurnaceTypeSoulCampfire:
+		return sound.CampfireSound{}
+	}
+	return sound.FurnaceSound{}
+}

@@ -2,17 +2,20 @@
 // blocks and their Bedrock block states (name + properties), for the network and for world saves.
 package blockconvert
 
-import "fmt"
+import (
+	"fmt"
+
+	"pocketmine-go/pocketmine/data/bedrock"
+)
 
 // BlockStateSerializeError is a port of pocketmine\data\bedrock\block\BlockStateSerializeException.
 type BlockStateSerializeError struct{ Message string }
 
 func (e *BlockStateSerializeError) Error() string { return e.Message }
 
-// BlockStateDeserializeError is a port of pocketmine\data\bedrock\block\BlockStateDeserializeException.
-type BlockStateDeserializeError struct{ Message string }
-
-func (e *BlockStateDeserializeError) Error() string { return e.Message }
+// BlockStateDeserializeError is a port of pocketmine\data\bedrock\block\BlockStateDeserializeException
+// (shared with the block data upgrader, which lives outside this package).
+type BlockStateDeserializeError = bedrock.BlockStateDeserializeError
 
 // UnsupportedBlockStateError is a port of
 // pocketmine\data\bedrock\block\convert\UnsupportedBlockStateException: the state is valid, but

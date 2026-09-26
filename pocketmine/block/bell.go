@@ -1,9 +1,11 @@
 package block
 
 import (
+	"pocketmine-go/pocketmine/block/tile"
 	blockutils "pocketmine-go/pocketmine/block/utils"
 	runtime "pocketmine-go/pocketmine/data/runtime"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
@@ -141,16 +143,22 @@ func (b *Bell) OnProjectileHit(projectile Projectile, hitResult math.RayTraceRes
 	}
 }
 
-// Ring is a port of Bell::ring. Broadcasting the fake update packet (for the visual swing) to
-// viewers needs block/tile.Bell and the network protocol layer, neither ported yet, so only the
-// sound is played for now - see Block.GetDropsForCompatibleTool's doc comment for the same
-// category of gap.
+// BroadcastTileDataFunc is `$world->broadcastPacketToViewers($pos, BlockActorDataPacket::create(
+// $pos, $nbt))`. Set by the world package (this package has no network code).
+var BroadcastTileDataFunc func(w World, pos math.Vector3, tag *nbt.CompoundTag)
+
+// Ring is a port of Bell::ring.
 func (b *Bell) Ring(faceHit math.Facing) {
 	world, err := b.position.GetWorld()
 	if err != nil {
 		return
 	}
 	world.AddSound(b.position.AsVector3(), sound.BellRingSound{})
+	if t, ok := world.GetTile(b.position); ok {
+		if bellTile, ok := t.(*tile.Bell); ok && BroadcastTileDataFunc != nil {
+			BroadcastTileDataFunc(world, b.position.Vector3, bellTile.CreateFakeUpdateCompound(faceHit))
+		}
+	}
 }
 
 func (b *Bell) isValidFaceToRing(faceHit math.Facing) bool {

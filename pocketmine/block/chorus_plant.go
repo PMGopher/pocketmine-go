@@ -98,7 +98,10 @@ func (c *ChorusPlant) OnNearbyBlockChange() {
 	}
 }
 
-// GetDropsForCompatibleTool should have a 50% chance of dropping VanillaItems.CHORUS_FRUIT() —
-// needs real Item construction from the unported item package (see
-// Block.GetDropsForCompatibleTool's doc comment), so this returns nil for now.
-func (c *ChorusPlant) GetDropsForCompatibleTool(item Item) []Item { return nil }
+// GetDropsForCompatibleTool is a port of ChorusPlant::getDropsForCompatibleTool.
+func (c *ChorusPlant) GetDropsForCompatibleTool(item Item) []Item {
+	if mtRand(0, 1) == 1 {
+		return itemDrops(vanillaItem("chorus_fruit"))
+	}
+	return nil
+}

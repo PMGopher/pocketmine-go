@@ -1,0 +1,1 @@
+pmmp/BedrockItemUpgradeSchema 1.18.0+bedrock-1.26.50 (CC0-1.0, see LICENSE).

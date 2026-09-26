@@ -21,12 +21,9 @@ func (i *Ice) GetLightFilter() int { return 2 }
 
 func (i *Ice) GetFrictionFactor() float64 { return 0.98 }
 
-// OnBreak is a port of Ice::onBreak. Item.HasEnchantment(SILK_TOUCH) isn't ported (the
-// enchantment system isn't ported at all yet - same "always false" convention as every other
-// HasEnchantment check in this port, see candle_component.go), so the silk-touch exemption never
-// applies; the survival-only gate is otherwise real.
+// OnBreak is a port of Ice::onBreak: broken without silk touch in survival, it turns into water.
 func (i *Ice) OnBreak(item Item, player Player, returnedItems *[]Item) bool {
-	if player == nil || player.IsSurvival() {
+	if (player == nil || player.IsSurvival()) && !hasSilkTouch(item) {
 		Melt(i.self, VanillaWater())
 		return true
 	}

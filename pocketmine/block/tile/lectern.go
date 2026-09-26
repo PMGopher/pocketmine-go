@@ -1,6 +1,7 @@
 package tile
 
 import (
+	"fmt"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/nbt"
 )
@@ -9,14 +10,11 @@ const (
 	lecternTagHasBook    = "hasBook"
 	lecternTagPage       = "page"
 	lecternTagTotalPages = "totalPages"
+	lecternTagBook       = "book"
 )
 
-// Lectern is a port of pocketmine\block\tile\Lectern, minus the book's NBT round-trip
-// (Item::safeNbtDeserialize/nbtSerialize aren't ported - see Jukebox's doc comment for the same
-// gap) and the network spawn-data translation (TypeConverter isn't ported either). The book is
-// instead held as this package's own minimal Item interface, with nil standing in for "no book" -
-// same shape as ItemFrame's framed item (see its doc comment for why there's no Air-like sentinel
-// here). ViewedPage fully round-trips through NBT.
+// Lectern is a port of pocketmine\block\tile\Lectern. The book is this package's minimal Item
+// (a WritableBookBase), nil for none.
 type Lectern struct {
 	SpawnableBase
 
@@ -39,16 +37,38 @@ func (l *Lectern) SetViewedPage(viewedPage int) { l.viewedPage = viewedPage }
 
 func (l *Lectern) GetBook() (Item, bool) { return l.book, l.book != nil }
 
-// SetBook is a port of pocketmine\block\tile\Lectern::setBook, minus cloning the incoming book
-// (the null-check is the caller's responsibility too - see ItemFrame.SetItem's doc comment for
-// the same shape).
-func (l *Lectern) SetBook(book Item) { l.book = book }
+// SetBook is a port of pocketmine\block\tile\Lectern::setBook (the block passes a copy).
+func (l *Lectern) SetBook(book Item) {
+	if isNullItem(book) {
+		l.book = nil
+	} else {
+		l.book = book
+	}
+}
 
+// isWritableBook is `$book instanceof WritableBookBase`.
+func isWritableBook(it Item) bool {
+	_, ok := it.(interface{ PageExists(pageID int) bool })
+	return ok
+}
+
+// ReadSaveData is a port of Lectern::readSaveData.
 func (l *Lectern) ReadSaveData(tag *nbt.CompoundTag) error {
 	l.viewedPage = int(tag.GetIntOr(lecternTagPage, 0))
+	itemTag, ok, err := tag.GetCompoundTag(lecternTagBook)
+	if err != nil {
+		return err
+	}
+	if ok {
+		book := loadItem(itemTag, fmt.Sprintf("Lectern (%v) book", l.GetPosition().Vector3))
+		if isWritableBook(book) && !isNullItem(book) {
+			l.book = book
+		}
+	}
 	return nil
 }
 
+// WriteSaveData is a port of Lectern::writeSaveData.
 func (l *Lectern) WriteSaveData(tag *nbt.CompoundTag) {
 	hasBook := nbt.ByteTag(0)
 	if l.book != nil {
@@ -56,12 +76,15 @@ func (l *Lectern) WriteSaveData(tag *nbt.CompoundTag) {
 	}
 	tag.SetByte(lecternTagHasBook, hasBook)
 	tag.SetInt(lecternTagPage, nbt.IntTag(l.viewedPage))
+	if l.book != nil {
+		if bookTag := saveItem(l.book, -1); bookTag != nil {
+			tag.SetTag(lecternTagBook, bookTag)
+		}
+		tag.SetInt(lecternTagTotalPages, nbt.IntTag(bookPageCount(l.book)))
+	}
 }
 
-// AddAdditionalSpawnData is a port of Lectern::addAdditionalSpawnData, minus the item-to-network-
-// NBT translation (TypeConverter isn't ported) and the total-page-count tag (would need the
-// unported item's page list) - with no real book NBT to read from anyway, this only reports
-// hasBook/page, same reduced shape as WriteSaveData above.
+// AddAdditionalSpawnData is a port of Lectern::addAdditionalSpawnData.
 func (l *Lectern) AddAdditionalSpawnData(tag *nbt.CompoundTag) {
 	hasBook := nbt.ByteTag(0)
 	if l.book != nil {
@@ -69,4 +92,10 @@ func (l *Lectern) AddAdditionalSpawnData(tag *nbt.CompoundTag) {
 	}
 	tag.SetByte(lecternTagHasBook, hasBook)
 	tag.SetInt(lecternTagPage, nbt.IntTag(l.viewedPage))
+	if l.book != nil {
+		if bookTag := networkItemNbt(l.book); bookTag != nil {
+			tag.SetTag(lecternTagBook, bookTag)
+		}
+		tag.SetInt(lecternTagTotalPages, nbt.IntTag(bookPageCount(l.book)))
+	}
 }

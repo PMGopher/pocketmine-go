@@ -13,8 +13,7 @@ import (
 )
 
 // Generator is a port of pocketmine\world\generator\Generator's core contract: GenerateChunk and
-// PopulateChunk. ConvertSeed (parsing a string world seed into an int) isn't ported - nothing
-// here takes a user-supplied string seed yet.
+// PopulateChunk (ConvertSeed is below).
 type Generator interface {
 	// GenerateChunk is a port of Generator::generateChunk, minus the ChunkManager write: PHP calls
 	// `$world->setChunk($chunkX, $chunkZ, ...)` itself; this port doesn't have a ChunkManager/World
