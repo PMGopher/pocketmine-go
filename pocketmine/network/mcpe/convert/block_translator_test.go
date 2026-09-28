@@ -5,6 +5,7 @@ import (
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/data/bedrock"
+	worldio "pocketmine-go/pocketmine/world/format/io"
 )
 
 func TestBlockTranslatorTranslatesVanillaBlocks(t *testing.T) {
@@ -37,5 +38,21 @@ func TestBlockTranslatorFallback(t *testing.T) {
 	tr := NewBlockTranslator()
 	if got := tr.InternalIDToNetworkID(1 << 30); got != tr.FallbackStateID() {
 		t.Errorf("an unknown state translated to %d, want the info_update fallback %d", got, tr.FallbackStateID())
+	}
+}
+
+// A vanilla block with no block here (moss) is sent as itself, not as "update!".
+func TestPassthroughStateKeepsItsRuntimeID(t *testing.T) {
+	moss, ok := bedrock.RuntimeIDFor("minecraft:moss_block", map[string]any{})
+	if !ok {
+		t.Fatal("moss_block isn't in the palette")
+	}
+	stateID, err := worldio.GetBlockStateDeserializer().DeserializeOrPassthrough(bedrock.BlockStates()[moss])
+	if err != nil {
+		t.Fatal(err)
+	}
+	translator := NewBlockTranslator()
+	if got := translator.InternalIDToNetworkID(stateID); got != moss {
+		t.Fatalf("network ID = %d, want %d (fallback is %d)", got, moss, translator.FallbackStateID())
 	}
 }

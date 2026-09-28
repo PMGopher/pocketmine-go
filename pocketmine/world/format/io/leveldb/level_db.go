@@ -203,7 +203,7 @@ func (p *LevelDB) deserializeBlockPalette(stream *binaryutils.BinaryStream, logg
 		}
 		stream.SetOffset(newOffset)
 
-		//TODO: remember data for unknown states so we can implement them later
+		// Vanilla states with no block here pass through unchanged (DeserializeOrPassthrough).
 		blockStateData, err := p.BlockDataUpgrader.UpgradeBlockStateNbt(blockStateNbt)
 		if err != nil {
 			// while not ideal, this is not a fatal error
@@ -211,7 +211,7 @@ func (p *LevelDB) deserializeBlockPalette(stream *binaryutils.BinaryStream, logg
 			palette = append(palette, p.unknownState())
 			continue
 		}
-		stateID, err := p.BlockStateDeserializer.Deserialize(blockStateData)
+		stateID, err := p.BlockStateDeserializer.DeserializeOrPassthrough(blockStateData)
 		if err != nil {
 			var unsupported *blockconvert.UnsupportedBlockStateError
 			if errors.As(err, &unsupported) {
@@ -463,7 +463,7 @@ func (p *LevelDB) deserializeLegacyExtraData(index string, chunkVersion int, log
 			continue
 		}
 		// assume this won't throw
-		blockStateID, err := p.BlockStateDeserializer.Deserialize(blockStateData)
+		blockStateID, err := p.BlockStateDeserializer.DeserializeOrPassthrough(blockStateData)
 		if err != nil {
 			blockStateID = int(p.unknownState())
 		}

@@ -218,7 +218,8 @@ Details in [AGENTS.md](AGENTS.md#6-plan--roadmap).
 ## Known issues
 
 - Blocks that PocketMine-MP 5.44.4 itself doesn't implement (moss, kelp, seagrass, dripstone, ...)
-  load as the "update!" block when a vanilla world is opened, exactly like in PHP.
+  are kept as they are when a vanilla world is opened (shown and saved unchanged, like Dragonfly),
+  but have no behaviour: they break instantly and drop nothing. PHP turns them into "update!".
 - Beacons have no window or effects and note blocks don't play when clicked: PocketMine-MP 5.44.4
   has no logic for either (only the beacon's light and the note block's stored pitch).
 

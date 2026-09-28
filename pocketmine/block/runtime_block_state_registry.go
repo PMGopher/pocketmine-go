@@ -216,3 +216,20 @@ func (r *RuntimeBlockStateRegistry) GetAllKnownStates() []Behavior {
 	}
 	return result
 }
+
+// RegisterUnknownState registers one UnknownBlock state (the block FromStateId returns for an
+// unregistered state ID), so the world has its light, collision and blast tables. It isn't in
+// PHP: it backs the vanilla states this port passes through unchanged instead of turning them into
+// "update!" blocks (see blockconvert.RegisterPassthroughStates).
+func (r *RuntimeBlockStateRegistry) RegisterUnknownState(stateID int) {
+	blk := r.FromStateId(stateID)
+	if _, ok := blk.(*UnknownBlock); !ok {
+		panic(fmt.Sprintf("State ID %d is already used by %s", stateID, blk.GetName()))
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.typeIndex[blk.GetTypeId()]; !ok {
+		r.typeIndex[blk.GetTypeId()] = blk.Clone()
+	}
+	r.fillStaticArrays(stateID, blk)
+}

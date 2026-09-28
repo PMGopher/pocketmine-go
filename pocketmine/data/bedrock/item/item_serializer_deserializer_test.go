@@ -42,6 +42,9 @@ func TestAllVanillaItemsSerializableAndDeserializable(t *testing.T) {
 func TestAllVanillaBlocksSerializableAndDeserializable(t *testing.T) {
 	serializer, deserializer := worldio.GetItemSerializer(), worldio.GetItemDeserializer()
 	for _, state := range block.GetRuntimeBlockStateRegistry().GetAllKnownStates() {
+		if _, unknown := state.(*block.UnknownBlock); unknown {
+			continue // pass-through vanilla states have no item form (Player.PickBlock skips them too)
+		}
 		blockItem, err := state.(interface{ AsItem() (block.Item, error) }).AsItem()
 		if err != nil {
 			t.Fatal(err)

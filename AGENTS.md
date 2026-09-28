@@ -267,9 +267,14 @@ smithing recipes, beacon effects or note block sounds.
   interfaces (same idea as `block.Behavior`). Packages below `entity` get behaviour through small
   function hooks set in `init()` (e.g. `block.SpawnFallingBlockFunc`, `world.DropItemFunc`,
   `world.LoadEntityFunc`); grep for `Func =` to find them.
-- Vanilla worlds load, but blocks PocketMine-MP 5.44.4 doesn't implement (moss, kelp, seagrass,
-  dripstone, ...) become the "update!" block (logged as "Errors decoding blocks"), and unknown tile
-  types (e.g. `PotentSulfurBlock`) are deleted with a warning, exactly like PHP.
+- Vanilla worlds load. Blocks PocketMine-MP 5.44.4 doesn't implement (moss, kelp, seagrass,
+  dripstone, ...) pass through unchanged, like Dragonfly (owner's decision, 2026-09-28; PHP turns
+  them into "update!"): every palette state the vanilla mappings can't deserialize gets its own
+  `UnknownBlock` state ID at startup (`blockconvert.RegisterPassthroughStates`), which LevelDB
+  reads with `DeserializeOrPassthrough` and which serializes back to the same state data and
+  runtime ID. They have no behaviour (instant break, no drops). Only states that aren't in the
+  palette at all still become "update!" (logged as "Errors decoding blocks"). Unknown tile types
+  (e.g. `PotentSulfurBlock`) are still deleted with a warning, exactly like PHP.
 - Tiles, items and blocks that `block` can't reach directly (it can't import `world`, `item`,
   `player`, `data/bedrock`) go through hooks set in `init()`: `tile.*Func` (hooks.go, container.go),
   `block.ExplodeFunc`, `BroadcastTileDataFunc`, `PopItemFunc`/`CloneItemFunc`,

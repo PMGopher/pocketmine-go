@@ -282,6 +282,7 @@ func New(gen generator.Generator, translator *convert.BlockTranslator, knownBloc
 	w.skyLightUpdate = light.NewSkyLightUpdate(w.subChunkExplorer, w.lightFilters, w.directSkyLightBlockers)
 	w.blockLightUpdate = light.NewBlockLightUpdate(w.subChunkExplorer, w.lightFilters, w.lightEmitters)
 
+	worldformatio.GetBlockStateRegistrar() // registers the pass-through vanilla states first
 	for _, blk := range block.GetRuntimeBlockStateRegistry().GetAllKnownStates() {
 		w.registerTemplate(blk)
 	}

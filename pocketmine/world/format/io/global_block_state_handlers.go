@@ -32,6 +32,7 @@ func GetBlockStateRegistrar() *blockconvert.BlockSerializerDeserializerRegistrar
 		serializer := blockconvert.NewBlockObjectToStateSerializer()
 		globalRegistrar = blockconvert.NewBlockSerializerDeserializerRegistrar(deserializer, serializer)
 		blockconvert.InitVanillaBlockMappings(globalRegistrar)
+		blockconvert.RegisterPassthroughStates(globalRegistrar)
 	})
 	return globalRegistrar
 }
