@@ -1,7 +1,9 @@
 package world
 
 import (
+	"errors"
 	"fmt"
+	"pocketmine-go/pocketmine/world/format/io/exception"
 
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/event"
@@ -69,8 +71,17 @@ func (w *World) loadChunk(chunkX, chunkZ int) *format.Chunk {
 		return nil
 	}
 	loadedChunkData, err := w.provider.LoadChunk(chunkX, chunkZ)
-	if err != nil && w.logger != nil {
-		w.logger.Critical(fmt.Sprintf("Failed to load chunk x=%d z=%d: %v", chunkX, chunkZ, err))
+	if err != nil {
+		var dbErr *exception.DatabaseError
+		if errors.As(err, &dbErr) {
+			// Like PHP's LevelDBException, which World::loadChunk doesn't catch: a damaged database
+			// is fatal. Treating the chunk as ungenerated would generate new terrain over the real
+			// one, and saving would overwrite it.
+			panic(fmt.Errorf("world %q: failed to read chunk x=%d z=%d from the world's database, the world files may be damaged: %w", w.GetFolderName(), chunkX, chunkZ, err))
+		}
+		if w.logger != nil {
+			w.logger.Critical(fmt.Sprintf("Failed to load chunk x=%d z=%d: %v", chunkX, chunkZ, err))
+		}
 	}
 	if err != nil || loadedChunkData == nil {
 		w.knownUngeneratedChunks[key] = true

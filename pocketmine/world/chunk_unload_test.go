@@ -1,7 +1,11 @@
 package world
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"pocketmine-go/pocketmine/block"
+	"strings"
 	"testing"
 	"time"
 )
@@ -65,4 +69,47 @@ func TestGetBlockAtOutsideTheWorldIsAir(t *testing.T) {
 			t.Errorf("GetBlockAt(3, %d, 3) = %s, want air", y, w.GetBlockAt(3, y, 3).GetName())
 		}
 	}
+}
+
+// A damaged database file is fatal like PHP's LevelDBException: the chunk mustn't be treated as
+// ungenerated, which would generate new terrain over the real one and save it.
+func TestDamagedDatabaseIsNotRegenerated(t *testing.T) {
+	dir := t.TempDir()
+	w := newTestWorld()
+	if err := w.OpenProvider(dir); err != nil {
+		t.Fatal(err)
+	}
+	// Enough chunks for LevelDB to write them to a table file (.ldb), not only its log.
+	for x := 0; x < 48; x++ {
+		for z := 0; z < 48; z++ {
+			w.GetOrLoadChunk(x, z)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	tables, _ := filepath.Glob(filepath.Join(dir, "db", "*.ldb"))
+	if len(tables) == 0 {
+		t.Skip("no table file written")
+	}
+	for _, table := range tables {
+		info, _ := os.Stat(table)
+		_ = os.Truncate(table, info.Size()-10) // cut the table footer, like an incomplete copy
+	}
+
+	w2 := newTestWorld()
+	if err := w2.OpenProvider(dir); err != nil {
+		t.Skipf("the damaged database didn't open at all: %v", err)
+	}
+	defer w2.Close()
+	defer func() {
+		p := recover()
+		if p == nil {
+			t.Fatal("loading a chunk from a damaged database didn't stop the server")
+		}
+		if msg := fmt.Sprint(p); !strings.Contains(msg, "may be damaged") {
+			t.Errorf("unexpected panic: %v", msg)
+		}
+	}()
+	w2.loadChunk(3, 3)
 }

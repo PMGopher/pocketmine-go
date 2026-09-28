@@ -418,7 +418,7 @@ func (p *LevelDB) get(key string) ([]byte, bool, error) {
 		if errors.Is(err, leveldb.ErrNotFound) {
 			return nil, false, nil
 		}
-		return nil, false, err
+		return nil, false, exception.NewDatabaseError(err)
 	}
 	return v, true, nil
 }
