@@ -20,11 +20,7 @@ import (
 // blob cache (the client enabled it), the biomes are sent as a blob hash and the payload only
 // holds the border block count.
 func LevelChunkPacket(chunkX, chunkZ int, chunk *format.Chunk, cache *ClientBlobCache) *packet.LevelChunk {
-	return levelChunkPacket(chunkX, chunkZ, &cachedChunk{
-		subChunkCount: serializer.GetSubChunkCount(chunk),
-		biomes:        serializer.SerializeBiomes(chunk),
-		payload:       serializer.SerializeBiomesPayload(chunk),
-	}, cache)
+	return levelChunkPacket(chunkX, chunkZ, newCachedChunk(chunk), cache)
 }
 
 // levelChunkPacket builds the LevelChunk packet from a chunk's cached data (see ChunkCache).
@@ -50,8 +46,11 @@ func levelChunkPacket(chunkX, chunkZ int, data *cachedChunk, cache *ClientBlobCa
 // the session's blob cache, or nil when the client doesn't use one.
 func HandleSubChunkRequest(w *world.World, pk *packet.SubChunkRequest, cache *ClientBlobCache) *packet.SubChunk {
 	entries := make([]protocol.SubChunkEntry, 0, len(pk.Offsets))
+	// A request usually asks for every sub-chunk of a few chunks: each chunk's column heights are
+	// computed once for all of its sub-chunks instead of once per sub-chunk (24x fewer walks).
+	heights := map[*format.Chunk]*columnHeights{}
 	for _, offset := range pk.Offsets {
-		entries = append(entries, subChunkEntry(w, pk.Position, offset, cache))
+		entries = append(entries, subChunkEntry(w, pk.Position, offset, cache, heights))
 	}
 	return &packet.SubChunk{
 		CacheEnabled:    cache != nil,
@@ -63,7 +62,7 @@ func HandleSubChunkRequest(w *world.World, pk *packet.SubChunkRequest, cache *Cl
 
 // subChunkEntry serialises the sub-chunk at centre+offset (centre's Y is an absolute sub-chunk
 // index, format.MinSubChunkIndex..MaxSubChunkIndex for the overworld).
-func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.SubChunkOffset, cache *ClientBlobCache) protocol.SubChunkEntry {
+func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.SubChunkOffset, cache *ClientBlobCache, heights map[*format.Chunk]*columnHeights) protocol.SubChunkEntry {
 	subY := int(centre[1]) + int(offset[1])
 	if subY < format.MinSubChunkIndex || subY > format.MaxSubChunkIndex {
 		return protocol.SubChunkEntry{Result: protocol.SubChunkResultIndexOutOfBounds, Offset: offset}
@@ -73,7 +72,12 @@ func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.
 		return protocol.SubChunkEntry{Result: protocol.SubChunkResultChunkNotFound, Offset: offset}
 	}
 
-	heightMapType, heightMap := subChunkHeightMap(chunk, subY)
+	columns, ok := heights[chunk]
+	if !ok {
+		columns = newColumnHeights(chunk)
+		heights[chunk] = columns
+	}
+	heightMapType, heightMap := subChunkHeightMap(columns, subY)
 	entry := protocol.SubChunkEntry{
 		Offset:              offset,
 		HeightMapType:       heightMapType,
@@ -109,16 +113,31 @@ func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.
 // subChunkHeightMap builds the per-column height map of sub-chunk subY: for every column, the height
 // of its highest block relative to the sub-chunk's base, 16 if it's in a sub-chunk above and -1 if
 // it's below. If every column is above (or below), only the type is sent.
-func subChunkHeightMap(chunk *format.Chunk, subY int) (byte, protocol.Optional[protocol.HeightMap]) {
-	var heightMap protocol.HeightMap
-	allHigher, allLower := true, true
-	base := subY << 4
+// columnHeights is the Y of the highest block of every column of a chunk (z, x), or
+// format.MinSubChunkIndex<<4 for an empty column.
+type columnHeights [16][16]int
+
+func newColumnHeights(chunk *format.Chunk) *columnHeights {
+	var h columnHeights
 	for z := 0; z < 16; z++ {
 		for x := 0; x < 16; x++ {
 			y, ok := chunk.GetHighestBlockAt(x, z)
 			if !ok {
 				y = format.MinSubChunkIndex << 4
 			}
+			h[z][x] = y
+		}
+	}
+	return &h
+}
+
+func subChunkHeightMap(columns *columnHeights, subY int) (byte, protocol.Optional[protocol.HeightMap]) {
+	var heightMap protocol.HeightMap
+	allHigher, allLower := true, true
+	base := subY << 4
+	for z := 0; z < 16; z++ {
+		for x := 0; x < 16; x++ {
+			y := columns[z][x]
 			switch other := y >> 4; {
 			case other > subY:
 				heightMap[z][x], allLower = 16, false

@@ -262,25 +262,43 @@ func (p *PalettedBlockArray) CollectGarbage() {
 		return // already maximally compact: one entry, no words
 	}
 
-	indices := make([]int, subChunkBlockCount)
-	used := make(map[int32]bool, len(p.palette))
-	for i := 0; i < subChunkBlockCount; i++ {
-		idx := p.paletteIndexAt(i)
-		indices[i] = idx
-		used[p.palette[idx]] = true
+	// Decode every block's palette index once, word by word (no per-block division), and mark the
+	// referenced entries in a slice (a map keyed by value was most of the main thread's time while
+	// chunks were saved on unload).
+	indices := make([]uint16, subChunkBlockCount)
+	bits := uint(p.bitsPerBlock)
+	blocksPerWord := 32 / p.bitsPerBlock
+	mask := uint32(1)<<bits - 1
+	used := make([]bool, len(p.palette))
+	i := 0
+	for _, word := range p.words {
+		for k := 0; k < blocksPerWord && i < subChunkBlockCount; k++ {
+			idx := uint16(word & mask)
+			indices[i] = idx
+			used[idx] = true
+			word >>= bits
+			i++
+		}
 	}
 
-	newPalette := make([]int32, 0, len(used))
-	newIndex := make(map[int32]int, len(used))
-	remap := make([]int, len(p.palette)) // old palette index -> new palette index
+	newPalette := make([]int32, 0, len(p.palette))
+	newIndex := make(map[int32]int, len(p.palette))
+	remap := make([]uint16, len(p.palette)) // old palette index -> new palette index
 	for oldIdx, value := range p.palette {
-		if !used[value] {
+		if !used[oldIdx] {
+			continue
+		}
+		if existing, ok := newIndex[value]; ok { // duplicate value: merge
+			remap[oldIdx] = uint16(existing)
 			continue
 		}
 		newIdx := len(newPalette)
 		newPalette = append(newPalette, value)
 		newIndex[value] = newIdx
-		remap[oldIdx] = newIdx
+		remap[oldIdx] = uint16(newIdx)
+	}
+	if len(newPalette) == len(p.palette) {
+		return // every entry is used and distinct: nothing to collect
 	}
 
 	p.palette = newPalette
@@ -290,8 +308,16 @@ func (p *PalettedBlockArray) CollectGarbage() {
 		p.words = nil
 		return
 	}
+	bits = uint(p.bitsPerBlock)
+	blocksPerWord = 32 / p.bitsPerBlock
 	p.words = make([]uint32, wordCountFor(p.bitsPerBlock))
-	for i := 0; i < subChunkBlockCount; i++ {
-		p.setPaletteIndexAt(i, remap[indices[i]])
+	i = 0
+	for w := range p.words {
+		var word uint32
+		for k := 0; k < blocksPerWord && i < subChunkBlockCount; k++ {
+			word |= uint32(remap[indices[i]]) << (uint(k) * bits)
+			i++
+		}
+		p.words[w] = word
 	}
 }

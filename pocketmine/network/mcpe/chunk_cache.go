@@ -26,8 +26,21 @@ type ChunkCache struct {
 
 type cachedChunk struct {
 	subChunkCount int
-	biomes        []byte // SerializeBiomes: the biome blob
+	biomes        []byte // SerializeBiomes: the biome blob (a view of payload, not a copy)
 	payload       []byte // SerializeBiomesPayload: biomes + border block count
+}
+
+// newCachedChunk serializes chunk's LevelChunk data once: the biome blob the client blob cache
+// hashes is the payload without its trailing border block count, so both share one buffer (it
+// used to be serialized and stored twice, ~20 MB for a few hundred chunks).
+func newCachedChunk(chunk *format.Chunk) *cachedChunk {
+	payload := serializer.SerializeBiomesPayload(chunk)
+	n := len(payload) - 1
+	return &cachedChunk{
+		subChunkCount: serializer.GetSubChunkCount(chunk),
+		biomes:        payload[:n:n],
+		payload:       payload,
+	}
 }
 
 var (
@@ -75,11 +88,7 @@ func (c *ChunkCache) request(chunkX, chunkZ int, chunk *format.Chunk) *cachedChu
 	c.mu.Unlock()
 
 	c.world.RegisterChunkListener(c, chunkX, chunkZ)
-	cached := &cachedChunk{
-		subChunkCount: serializer.GetSubChunkCount(chunk),
-		biomes:        serializer.SerializeBiomes(chunk),
-		payload:       serializer.SerializeBiomesPayload(chunk),
-	}
+	cached := newCachedChunk(chunk)
 	c.mu.Lock()
 	c.caches[key] = cached
 	c.mu.Unlock()
@@ -115,7 +124,7 @@ func (c *ChunkCache) CalculateCacheSize() int {
 	defer c.mu.Unlock()
 	size := 0
 	for _, cached := range c.caches {
-		size += len(cached.biomes) + len(cached.payload)
+		size += len(cached.payload) // biomes is a view of payload
 	}
 	return size
 }
