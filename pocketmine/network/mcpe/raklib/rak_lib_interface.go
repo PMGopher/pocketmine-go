@@ -247,8 +247,11 @@ func (r *RakLibInterface) onRawPacketReceive(address string, port int, payload [
 	r.network.ProcessRawPacket(r, address, port, payload)
 }
 
-func loginKey(identity login.IdentityData) string {
-	return identity.Identity + "\x00" + identity.DisplayName
+// loginKey identifies one login attempt: the account plus the client's per-login random ID, so
+// the same account logging in from two game instances (e.g. twice on one computer) doesn't share
+// (and overwrite, then delete) the other's pending login.
+func loginKey(identity login.IdentityData, clientData login.ClientData) string {
+	return fmt.Sprintf("%s\x00%s\x00%d\x00%s", identity.Identity, identity.DisplayName, clientData.ClientRandomID, clientData.SelfSignedID)
 }
 
 func splitAddr(addr net.Addr) (string, int) {
@@ -332,15 +335,15 @@ func (r *RakLibInterface) allow(addr net.Addr, identity login.IdentityData, clie
 	}
 
 	r.pendingMu.Lock()
-	r.pending[loginKey(identity)] = &pendingLogin{info: info, authenticated: authenticated, authRequired: ev.IsAuthRequired()}
+	r.pending[loginKey(identity, clientData)] = &pendingLogin{info: info, authenticated: authenticated, authRequired: ev.IsAuthRequired()}
 	r.pendingMu.Unlock()
 	return "", true
 }
 
 // fetchResourcePacks is NetworkSession::onServerLoginSuccess's PlayerResourcePackOfferEvent.
-func (r *RakLibInterface) fetchResourcePacks(identity login.IdentityData, _ login.ClientData, current []*resource.Pack) []*resource.Pack {
+func (r *RakLibInterface) fetchResourcePacks(identity login.IdentityData, clientData login.ClientData, current []*resource.Pack) []*resource.Pack {
 	r.pendingMu.Lock()
-	pending := r.pending[loginKey(identity)]
+	pending := r.pending[loginKey(identity, clientData)]
 	r.pendingMu.Unlock()
 	if pending == nil {
 		return current
@@ -383,8 +386,9 @@ func (r *RakLibInterface) onClientConnect(conn *minecraft.Conn) {
 	ip, port := splitAddr(conn.RemoteAddr())
 
 	r.pendingMu.Lock()
-	pending := r.pending[loginKey(conn.IdentityData())]
-	delete(r.pending, loginKey(conn.IdentityData()))
+	key := loginKey(conn.IdentityData(), conn.ClientData())
+	pending := r.pending[key]
+	delete(r.pending, key)
 	r.pendingMu.Unlock()
 
 	r.server.Lock()
