@@ -98,7 +98,7 @@ func (m *SimpleChunkManager) GetBlockAt(x, y, z int) block.Behavior {
 // SetBlockAt is a port of SimpleChunkManager::setBlockAt.
 func (m *SimpleChunkManager) SetBlockAt(x, y, z int, blk block.Behavior) error {
 	chunk, ok := m.GetChunk(x>>4, z>>4)
-	if !ok {
+	if !ok || !m.IsInWorld(x, y, z) {
 		return fmt.Errorf("Cannot set block at coordinates x=%d,y=%d,z=%d, terrain is not loaded or out of bounds", x, y, z)
 	}
 	stateID := int32(blk.GetStateId())

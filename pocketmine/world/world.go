@@ -542,8 +542,13 @@ func (w *World) Translator() *convert.BlockTranslator { return w.translator }
 // falls back to air; this only happens for corrupted data.
 func (w *World) GetBlockAt(x, y, z int) block.Behavior {
 	stateID := int32(block.VanillaAir().GetStateId())
-	if chunk := w.generateChunkOnly(x>>4, z>>4); chunk != nil {
-		stateID = chunk.GetBlockStateID(x&0xf, y, z&0xf)
+	// Outside the world's height (or its x/z limits) is air, like PHP (isInWorld); the chunk would
+	// panic for a y outside its sub-chunks (a client clicking at the world's top or bottom crashed
+	// the server through syncBlocksNearby).
+	if w.IsInWorld(x, y, z) {
+		if chunk := w.generateChunkOnly(x>>4, z>>4); chunk != nil {
+			stateID = chunk.GetBlockStateID(x&0xf, y, z&0xf)
+		}
 	}
 	tpl, ok := w.stateTemplates[stateID]
 	if !ok {

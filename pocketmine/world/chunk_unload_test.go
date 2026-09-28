@@ -1,6 +1,7 @@
 package world
 
 import (
+	"pocketmine-go/pocketmine/block"
 	"testing"
 	"time"
 )
@@ -51,5 +52,17 @@ func TestUnusedChunksAreUnloaded(t *testing.T) {
 			}
 		}
 		t.Errorf("%d chunks still loaded (%d of them not even queued for unloading)", left, kept)
+	}
+}
+
+// World::getBlockAt returns air outside the world's height instead of reading a chunk (clicking at
+// the top or bottom of the world crashed the server through syncBlocksNearby).
+func TestGetBlockAtOutsideTheWorldIsAir(t *testing.T) {
+	w := newTestWorld()
+	w.GetOrLoadChunk(0, 0)
+	for _, y := range []int{YMin - 1, YMin - 50, YMax, YMax + 10} {
+		if w.GetBlockAt(3, y, 3).GetTypeId() != block.AIR {
+			t.Errorf("GetBlockAt(3, %d, 3) = %s, want air", y, w.GetBlockAt(3, y, 3).GetName())
+		}
 	}
 }

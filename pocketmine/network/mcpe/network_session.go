@@ -539,8 +539,17 @@ func (s *NetworkSession) HandleDataPacket(pk packet.Packet) error {
 		return nil
 	}
 	s.trace.record("<-", pk)
-	if err := s.gamePacketLimiter.Decrement(1); err != nil {
-		return err
+	switch pk.(type) {
+	case *packet.SubChunkRequest, *packet.ClientCacheBlobStatus:
+		// Not counted: the client sends these in reply to the chunks we send it (one or more per
+		// LevelChunk in sub-chunk request mode, plus blob cache status), which PHP's limit of 2
+		// game packets per tick doesn't account for, since PocketMine-MP sends full chunks the
+		// client never asks for. Counting them kicked players ("Exceeded rate limit for Game
+		// Packets") while their view distance loaded. They're bounded by the chunks we send.
+	default:
+		if err := s.gamePacketLimiter.Decrement(1); err != nil {
+			return err
+		}
 	}
 
 	handled := s.handler != nil
