@@ -18,18 +18,21 @@ func init() {
 
 // SetDefaultCommands is a port of SimpleCommandMap::setDefaultCommands.
 //
-// Not ported yet: give, clear and enchant/effect's item/effect name lookups where they need
-// StringToItemParser (not ported), particle, timings (report upload) and dumpmemory (PHP-specific).
+// Not ported: dumpmemory (PocketMine-MP's MemoryDump of the PHP heap has no Go counterpart).
 func SetDefaultCommands(m *command.SimpleCommandMap) {
 	m.RegisterAll("pocketmine", []command.CommandLike{
 		NewBanCommand(),
 		NewBanIpCommand(),
 		NewBanListCommand(),
+		NewClearCommand(),
 		NewDefaultGamemodeCommand(),
 		NewDeopCommand(),
 		NewDifficultyCommand(),
+		NewEffectCommand(),
+		NewEnchantCommand(),
 		NewGamemodeCommand(),
 		NewGarbageCollectorCommand(),
+		NewGiveCommand(),
 		NewHelpCommand(),
 		NewKickCommand(),
 		NewKillCommand(),
@@ -38,6 +41,7 @@ func SetDefaultCommands(m *command.SimpleCommandMap) {
 		NewOpCommand(),
 		NewPardonCommand(),
 		NewPardonIpCommand(),
+		NewParticleCommand(),
 		NewPluginsCommand(),
 		NewSaveCommand(),
 		NewSaveOffCommand(),
@@ -50,6 +54,7 @@ func SetDefaultCommands(m *command.SimpleCommandMap) {
 		NewStopCommand(),
 		NewTeleportCommand(),
 		NewTellCommand(),
+		NewTimingsCommand(),
 		NewTimeCommand(),
 		NewTitleCommand(),
 		NewTransferServerCommand(),
@@ -69,6 +74,10 @@ const (
 type VanillaCommand struct {
 	command.Command
 }
+
+// IsVanillaCommand marks the default commands for SimpleCommandMap::registerAlias's
+// `$command instanceof VanillaCommand` (see command.VanillaCommandMarker).
+func (VanillaCommand) IsVanillaCommand() {}
 
 func newVanillaCommand(name string, description, usage any, aliases []string, permission string) VanillaCommand {
 	c := VanillaCommand{Command: command.InitCommand(name, description, usage, aliases)}

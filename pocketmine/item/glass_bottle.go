@@ -1,8 +1,11 @@
 package item
 
-// GlassBottle is a port of pocketmine\item\GlassBottle. OnInteractBlock (filling with water to
-// produce a Potion) needs a real Player/Block/World - see the Item interface's doc comment on
-// Player/Entity-interaction methods.
+import (
+	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/math"
+)
+
+// GlassBottle is a port of pocketmine\item\GlassBottle.
 type GlassBottle struct {
 	ItemBase
 }
@@ -17,4 +20,17 @@ func (g *GlassBottle) Clone() Item {
 	c := *g
 	c.rebind(&c)
 	return &c
+}
+
+// OnInteractBlock is a port of GlassBottle::onInteractBlock: clicking water fills the bottle.
+func (g *GlassBottle) OnInteractBlock(player Player, blockReplace, blockClicked block.Behavior, face math.Facing, clickVector math.Vector3, returnedItems *[]Item) ItemUseResult {
+	if blockClicked.GetTypeId() != block.WATER {
+		return ItemUseResultNone
+	}
+	g.Pop()
+	potion := VanillaItem("potion")
+	potion.(*Potion).SetType(PotionTypeWater)
+	*returnedItems = append(*returnedItems, potion)
+
+	return ItemUseResultSuccess
 }

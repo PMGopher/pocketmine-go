@@ -8,8 +8,7 @@ const (
 	fireworkRocketTagExplosions           = "Explosions"
 )
 
-// FireworkRocket is a port of pocketmine\item\FireworkRocket. OnInteractBlock (spawning the
-// firework entity) needs a real Player/Block/World - see the Item interface's doc comment.
+// FireworkRocket is a port of pocketmine\item\FireworkRocket.
 type FireworkRocket struct {
 	ItemBase
 

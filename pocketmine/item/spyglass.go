@@ -1,8 +1,6 @@
 package item
 
-// Spyglass is a port of pocketmine\item\Spyglass. CanStartUsingItem (always true - needs a real
-// Player) isn't ported - see the Item interface's doc comment on Player/Entity-interaction
-// methods.
+// Spyglass is a port of pocketmine\item\Spyglass (its use is in item_use.go).
 type Spyglass struct {
 	ItemBase
 }

@@ -1,7 +1,8 @@
 package item
 
-// CocoaBeans is a port of pocketmine\item\CocoaBeans. GetBlock (should return VanillaBlocks.COCOA_POD())
-// isn't ported - see StringItem's doc comment for why.
+import "pocketmine-go/pocketmine/block"
+
+// CocoaBeans is a port of pocketmine\item\CocoaBeans.
 type CocoaBeans struct {
 	ItemBase
 }
@@ -17,3 +18,6 @@ func (c *CocoaBeans) Clone() Item {
 	cl.rebind(&cl)
 	return &cl
 }
+
+// GetBlock is a port of CocoaBeans::getBlock.
+func (x *CocoaBeans) GetBlock() block.Behavior { return block.VanillaBlock("cocoa_pod") }

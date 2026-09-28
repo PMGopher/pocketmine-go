@@ -10,7 +10,7 @@ import (
 //
 // PHP's Button is abstract (getActivationTime is abstract); Go has no abstract methods, so
 // ActivationTime is a plain field, set by each concrete button type's constructor (WoodenButton,
-// StoneButton, etc. — not yet ported) instead of an overridden method. Like Button itself, this
+// StoneButton) instead of an overridden method. Like Button itself, this
 // struct isn't meant to be instantiated directly: it has no Clone() of its own, so it doesn't
 // satisfy Behavior on its own — only a concrete leaf type embedding it (and implementing Clone)
 // does, exactly mirroring PHP's abstract class.

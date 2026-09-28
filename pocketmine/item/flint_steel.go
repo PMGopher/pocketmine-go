@@ -1,12 +1,12 @@
 package item
 
+import (
+	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/world/sound"
+)
+
 // FlintSteel is a port of pocketmine\item\FlintSteel.
-//
-// OnInteractBlock (igniting fire on the clicked air block, then applyDamage(1)) needs
-// VanillaBlocks.FIRE() and a real Player/Block/World - see the Item interface's doc comment for
-// why those Player/Entity-interaction methods aren't part of Item here yet, so it's not ported.
-// GetMaxDurability and the rest of the Durable/Tool machinery (damage tracking, NBT round trip)
-// are fully real, though.
 type FlintSteel struct {
 	Tool
 }
@@ -25,3 +25,21 @@ func (f *FlintSteel) Clone() Item {
 }
 
 func (f *FlintSteel) GetMaxDurability() int { return 65 }
+
+// OnInteractBlock is a port of FlintSteel::onInteractBlock: fire is lit on the clicked air block.
+func (f *FlintSteel) OnInteractBlock(player Player, blockReplace, blockClicked block.Behavior, face math.Facing, clickVector math.Vector3, returnedItems *[]Item) ItemUseResult {
+	if blockReplace.GetTypeId() != block.AIR {
+		return ItemUseResultNone
+	}
+	pos := blockReplace.GetPosition()
+	world, err := pos.GetWorld()
+	if err != nil {
+		return ItemUseResultNone
+	}
+	_ = world.SetBlock(pos, block.VanillaBlock("fire"))
+	world.AddSound(pos.Add(0.5, 0.5, 0.5), sound.FlintSteelSound{})
+
+	f.ApplyDamage(1)
+
+	return ItemUseResultSuccess
+}

@@ -6,8 +6,10 @@
 // or pocketmine.yml key can be overridden with --key=value, e.g. --server-port=19133
 // (ServerConfigGroup's getopt).
 //
-// Not ported: the platform/PHP dependency checks, the setup wizard (--no-wizard is accepted and
-// ignored; server.properties is created with defaults) and ThreadManager (goroutines end with the
+// The set-up wizard runs when the data folder has no server.properties, unless --no-wizard is
+// given, like PocketMine-MP.
+//
+// Not ported: the platform/PHP dependency checks and ThreadManager (goroutines end with the
 // process).
 package main
 
@@ -26,6 +28,7 @@ import (
 	"pocketmine-go/pocketmine/log"
 	"pocketmine-go/pocketmine/server"
 	"pocketmine-go/pocketmine/utils"
+	"pocketmine-go/pocketmine/wizard"
 
 	// Linked for its init(): the default commands (SimpleCommandMap::setDefaultCommands).
 	_ "pocketmine-go/pocketmine/command/defaults"
@@ -142,6 +145,13 @@ func run() int {
 	}
 	log.SetGlobal(logger)
 
+	if !fileExists(filepath.Join(dataPath, "server.properties")) && !hasOpt(pocketmine.OptNoWizard) {
+		installer := wizard.NewSetupWizard(dataPath)
+		if !installer.Run() {
+			return -1
+		}
+	}
+
 	srv, err := server.NewWithPluginPath(dataPath, pluginPath, logger)
 	if err != nil {
 		logger.Emergency(err.Error())
@@ -165,4 +175,9 @@ func run() int {
 	logger.Info("Stopping other threads")
 	fmt.Println(utils.FormatReset)
 	return 0
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

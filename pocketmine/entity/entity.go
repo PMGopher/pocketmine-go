@@ -44,6 +44,7 @@ import (
 	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/utils"
 	"pocketmine-go/pocketmine/world"
+	"pocketmine-go/pocketmine/world/particle"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
@@ -55,7 +56,12 @@ const stepClipMultiplier = 0.4
 
 var entityCount atomic.Int64
 
-func init() { entityCount.Store(1) }
+func init() {
+	entityCount.Store(1)
+	// FloatingTextParticle's fake entity takes a runtime ID from the same counter, like PHP.
+	particle.NextEntityRuntimeIDFunc = NextRuntimeID
+	particle.AirStateIDFunc = func() int32 { return int32(block.VanillaAir().GetStateId()) }
+}
 
 // NextRuntimeID is a port of Entity::nextRuntimeId: a new runtime entity ID for a new entity.
 func NextRuntimeID() int { return int(entityCount.Add(1) - 1) }

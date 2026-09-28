@@ -1,8 +1,8 @@
 package item
 
-// Carrot is a port of pocketmine\item\Carrot. GetBlock (should return VanillaBlocks.CARROTS())
-// isn't ported - GetBlock isn't part of the Item interface here at all yet (see the Item
-// interface's doc comment), and needs the unported block registry regardless.
+import "pocketmine-go/pocketmine/block"
+
+// Carrot is a port of pocketmine\item\Carrot.
 type Carrot struct {
 	Food
 }
@@ -22,3 +22,6 @@ func (c *Carrot) Clone() Item {
 func (c *Carrot) GetFoodRestore() int { return 3 }
 
 func (c *Carrot) GetSaturationRestore() float64 { return 4.8 }
+
+// GetBlock is a port of Carrot::getBlock.
+func (x *Carrot) GetBlock() block.Behavior { return block.VanillaBlock("carrots") }

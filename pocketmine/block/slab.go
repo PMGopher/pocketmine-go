@@ -43,7 +43,7 @@ func (s *Slab) CanBePlacedAt(blockReplace Behavior, clickVector math.Vector3, fa
 		return true
 	}
 
-	if replace, ok := blockReplace.(*Slab); ok && replace.SlabTypeValue != blockutils.SlabTypeDouble && replace.HasSameTypeId(s.self) {
+	if replace, ok := asSlab(blockReplace); ok && replace.SlabTypeValue != blockutils.SlabTypeDouble && replace.HasSameTypeId(s.self) {
 		if replace.SlabTypeValue == blockutils.SlabTypeTop {
 			return clickVector.Y <= 0.5 || (!isClickedBlock && face == math.Up)
 		}
@@ -54,7 +54,7 @@ func (s *Slab) CanBePlacedAt(blockReplace Behavior, clickVector math.Vector3, fa
 }
 
 func (s *Slab) Place(tx BlockTransaction, item Item, blockReplace Behavior, blockClicked Behavior, face math.Facing, clickVector math.Vector3, player Player) bool {
-	if replace, ok := blockReplace.(*Slab); ok && replace.SlabTypeValue != blockutils.SlabTypeDouble && replace.HasSameTypeId(s.self) &&
+	if replace, ok := asSlab(blockReplace); ok && replace.SlabTypeValue != blockutils.SlabTypeDouble && replace.HasSameTypeId(s.self) &&
 		((replace.SlabTypeValue == blockutils.SlabTypeTop && (clickVector.Y <= 0.5 || face == math.Up)) ||
 			(replace.SlabTypeValue == blockutils.SlabTypeBottom && (clickVector.Y >= 0.5 || face == math.Down))) {
 		// Clicked in empty half of existing slab
@@ -101,4 +101,17 @@ func (s *Slab) GetDropsForCompatibleTool(item Item) []Item {
 	}
 	drop.SetCount(count)
 	return []Item{drop}
+}
+
+// slabBaser is `instanceof Slab`: every Slab subtype embeds Slab.
+type slabBaser interface{ slabBase() *Slab }
+
+func (s *Slab) slabBase() *Slab { return s }
+
+// asSlab is `$b instanceof Slab ? $b : null`.
+func asSlab(b Behavior) (*Slab, bool) {
+	if baser, ok := b.(slabBaser); ok {
+		return baser.slabBase(), true
+	}
+	return nil, false
 }

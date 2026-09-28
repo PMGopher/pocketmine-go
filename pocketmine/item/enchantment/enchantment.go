@@ -1,11 +1,5 @@
-// Package enchantment is a port of the parts of pocketmine\item\enchantment that items and entities
-// need at runtime: Enchantment and its Protection/MeleeWeapon subtypes, EnchantmentInstance,
-// Rarity, ItemFlags, IncompatibleEnchantmentRegistry, VanillaEnchantments and
-// StringToEnchantmentParser.
-//
-// Not ported yet: the enchanting-table machinery (EnchantingHelper beyond GenerateSeed,
-// EnchantingOption, AvailableEnchantmentRegistry, ItemEnchantmentTags/TagRegistry) - it needs the
-// unported inventory transaction/enchanting-table flow to be useful.
+// Package enchantment is a port of pocketmine\item\enchantment. EnchantingHelper::enchantItem
+// needs VanillaItems, so it's item.EnchantItem.
 //
 // This package sits below pocketmine/item (items store EnchantmentInstances) and pocketmine/entity,
 // so the entities MeleeWeaponEnchantment acts on are the local Entity interface below.

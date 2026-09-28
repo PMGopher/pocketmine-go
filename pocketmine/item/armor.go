@@ -42,8 +42,7 @@ func (a *Armor) GetMaxDurability() int { return a.ArmorInfo.GetMaxDurability() }
 
 func (a *Armor) GetDefensePoints() int { return a.ArmorInfo.GetDefensePoints() }
 
-// GetArmorSlot mirrors Armor::getArmorSlot - the index into pocketmine\inventory\ArmorInventory,
-// which isn't ported, so this is just the raw slot number for now.
+// GetArmorSlot is a port of Armor::getArmorSlot: the index into ArmorInventory.
 func (a *Armor) GetArmorSlot() int { return a.ArmorInfo.GetArmorSlot() }
 
 func (a *Armor) GetMaxStackSize() int { return 1 }

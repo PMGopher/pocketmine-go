@@ -35,7 +35,7 @@ func (w *World) UseBreakOnWith(vector math.Vector3, it item.Item, player ItemUse
 	vector = vector.Floor()
 
 	chunkX, chunkZ := vector.FloorX()>>4, vector.FloorZ()>>4
-	if !w.IsChunkLoaded(chunkX, chunkZ) {
+	if !w.IsChunkLoaded(chunkX, chunkZ) || w.IsChunkLocked(chunkX, chunkZ) {
 		return false
 	}
 
@@ -79,9 +79,9 @@ func (w *World) UseBreakOnWith(vector math.Vector3, it item.Item, player ItemUse
 		}
 
 		if player.IsAdventureLiteral() && !ev.IsCancelled() {
-			// LegacyStringToItemParser (resolving the CanDestroy names to blocks) isn't ported, so no
-			// entry can match and adventure players can't break anything, as when none is set.
-			ev.Cancel()
+			if !adventureListAllows(it.GetCanDestroy(), target) {
+				ev.Cancel()
+			}
 		}
 
 		event.Call(ev)
@@ -259,8 +259,9 @@ func (w *World) UseItemOn(vector math.Vector3, it item.Item, face math.Facing, c
 			ev.Cancel()
 		}
 		if player.IsAdventureLiteral() && !ev.IsCancelled() {
-			// See UseBreakOnWith: CanPlaceOn entries can't be resolved without LegacyStringToItemParser.
-			ev.Cancel()
+			if !adventureListAllows(it.GetCanPlaceOn(), blockClicked) {
+				ev.Cancel()
+			}
 		}
 		event.Call(ev)
 		if ev.IsCancelled() {
@@ -291,4 +292,22 @@ func (w *World) UseItemOn(vector math.Vector3, it item.Item, face math.Facing, c
 	it.Pop()
 
 	return true
+}
+
+// adventureListAllows is the loop World::useBreakOn and World::useItemOn run over an item's
+// CanDestroy/CanPlaceOn entries for a player in adventure mode: true if one of them names the
+// target block's type. PHP lets a LegacyStringToItemParserException from an invalid entry escape
+// (failing the whole packet); here an invalid entry just doesn't match.
+func adventureListAllows(entries map[string]string, target block.Behavior) bool {
+	itemParser := item.GetLegacyStringToItemParser()
+	for _, v := range entries {
+		entry, err := itemParser.Parse(v)
+		if err != nil {
+			continue
+		}
+		if entry.GetBlock().GetTypeId() == target.GetTypeId() { // Block::hasSameTypeId
+			return true
+		}
+	}
+	return false
 }

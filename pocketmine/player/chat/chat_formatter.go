@@ -18,14 +18,9 @@ type Formatter interface {
 // StandardChatFormatter is a port of pocketmine\player\chat\StandardChatFormatter.
 type StandardChatFormatter struct{}
 
-// chatTypeTextKey mirrors KnownTranslationFactory::chat_type_text's real translation key
-// ("chat.type.text", vanilla Minecraft's own well-known chat message format string) - the
-// generated KnownTranslationFactory itself isn't ported (hundreds of wrapper functions over the
-// language files, out of scope on its own), so this constructs the Translatable directly.
-const chatTypeTextKey = "chat.type.text"
-
+// Format is a port of StandardChatFormatter::format.
 func (StandardChatFormatter) Format(username, message string) any {
-	return lang.NewTranslatable(chatTypeTextKey, []any{username, message})
+	return lang.KnownTranslationFactory.ChatTypeText(username, message)
 }
 
 // LegacyRawChatFormatter is a port of pocketmine\player\chat\LegacyRawChatFormatter: a template

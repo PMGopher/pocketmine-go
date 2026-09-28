@@ -1,8 +1,7 @@
 package item
 
-// FishingRod is a port of pocketmine\item\FishingRod. Casting/reeling logic is marked //TODO even
-// in the PHP original (needs the unported entity package), so only its Durable durability state
-// is ported here.
+// FishingRod is a port of pocketmine\item\FishingRod. Casting and reeling are //TODO in PHP too, so
+// only the durability is ported.
 type FishingRod struct {
 	Durable
 }

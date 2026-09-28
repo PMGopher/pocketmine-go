@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 
 	"pocketmine-go/pocketmine/color"
@@ -223,17 +224,76 @@ func (FlameParticle) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet
 	return standardParticle(particleIDFlame, 0, pos)
 }
 
-// FloatingTextParticle is a port of pocketmine\world\particle\FloatingTextParticle. Real PHP spawns
-// a real (invisible, no-AI) fake entity carrying the text as its nametag, using
-// AddActorPacket/SetActorDataPacket with a real EntityMetadataFlags/EntityMetadataProperties
-// dictionary and Entity::nextRuntimeId() for identity. None of that entity-metadata/spawn-packet
-// infrastructure exists anywhere in this port yet (no other feature needs it either), so this is a
-// documented gap rather than a guess, matching this port's rule for gaps requiring an entire
-// unported subsystem.
-type FloatingTextParticle struct{ Text, Title string }
+// FloatingTextParticle hooks: this package can't import entity (Entity::nextRuntimeId) or block
+// (VanillaBlocks::AIR()), which set them in their init().
+var (
+	NextEntityRuntimeIDFunc func() int
+	AirStateIDFunc          func() int32
+)
 
-func (p *FloatingTextParticle) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
-	return nil
+// FloatingTextParticle is a port of pocketmine\world\particle\FloatingTextParticle: an invisible,
+// tiny falling block entity whose always-shown name tag is the text. Each Encode removes the
+// previous entity and adds it again (so changing the text and adding the particle again updates
+// it); an invisible particle is only removed. ("TODO: HACK!" in PHP too.)
+type FloatingTextParticle struct {
+	Text, Title string
+
+	entityID  int
+	hasEntity bool
+	invisible bool
+}
+
+// NewFloatingTextParticle is a port of FloatingTextParticle::__construct.
+func NewFloatingTextParticle(text, title string) *FloatingTextParticle {
+	return &FloatingTextParticle{Text: text, Title: title}
+}
+
+func (p *FloatingTextParticle) GetText() string         { return p.Text }
+func (p *FloatingTextParticle) SetText(text string)     { p.Text = text }
+func (p *FloatingTextParticle) GetTitle() string        { return p.Title }
+func (p *FloatingTextParticle) SetTitle(title string)   { p.Title = title }
+func (p *FloatingTextParticle) IsInvisible() bool       { return p.invisible }
+func (p *FloatingTextParticle) SetInvisible(value bool) { p.invisible = value }
+
+// Encode is a port of FloatingTextParticle::encode.
+func (p *FloatingTextParticle) Encode(pos math.Vector3, translator blockNetworkTranslator) []packet.Packet {
+	var pks []packet.Packet
+	if !p.hasEntity {
+		if NextEntityRuntimeIDFunc == nil {
+			return nil
+		}
+		p.entityID, p.hasEntity = NextEntityRuntimeIDFunc(), true
+	} else {
+		pks = append(pks, &packet.RemoveActor{EntityUniqueID: int64(p.entityID)})
+	}
+
+	if !p.invisible {
+		name := p.Title
+		if p.Text != "" {
+			name += "\n" + p.Text
+		}
+		var airNetworkID int32
+		if AirStateIDFunc != nil && translator != nil {
+			airNetworkID = translator.NetworkIDForCachedState(AirStateIDFunc())
+		}
+		metadata := protocol.EntityMetadata{
+			protocol.EntityDataKeyFlags:             int64(1) << protocol.EntityDataFlagNoAI,
+			protocol.EntityDataKeyScale:             float32(0.01), //zero causes problems on debug builds
+			protocol.EntityDataKeyWidth:             float32(0),
+			protocol.EntityDataKeyHeight:            float32(0),
+			protocol.EntityDataKeyName:              name,
+			protocol.EntityDataKeyVariant:           airNetworkID,
+			protocol.EntityDataKeyAlwaysShowNameTag: uint8(1),
+		}
+		pks = append(pks, &packet.AddActor{
+			EntityUniqueID:  int64(p.entityID), //TODO: actor unique ID
+			EntityRuntimeID: uint64(p.entityID),
+			EntityType:      "minecraft:falling_block",                                  // EntityIds::FALLING_BLOCK
+			Position:        mgl32.Vec3{float32(pos.X), float32(pos.Y), float32(pos.Z)}, //TODO: check offset (0.49?)
+			EntityMetadata:  metadata,
+		})
+	}
+	return pks
 }
 
 // HappyVillagerParticle is a port of pocketmine\world\particle\HappyVillagerParticle.
@@ -278,19 +338,14 @@ func (p InstantEnchantParticle) Encode(pos math.Vector3, _ blockNetworkTranslato
 	return standardParticle(particleIDMobSpellInstant, p.Color.ToARGB(), pos)
 }
 
-// ItemBreakParticle is a port of pocketmine\world\particle\ItemBreakParticle. Stores the item's
-// bare type ID rather than a whole item.Item - same reasoning as BlockBreakParticle, and this
-// port's item package isn't imported here for the same "avoid a future import cycle" reason.
-//
-// Real PHP encodes ($networkId << 16) | $networkMeta via a real item network translator
-// (TypeConverter::getItemTranslator). This port has no item network translator yet (no other
-// feature needs one either - items aren't sent over the network anywhere in this port so far), so
-// ItemTypeID is used directly as a placeholder network ID with meta 0, a documented approximation
-// rather than a fabricated translator.
-type ItemBreakParticle struct{ ItemTypeID int }
+// ItemBreakParticle is a port of pocketmine\world\particle\ItemBreakParticle. It holds the item's
+// network ID and meta (TypeConverter::getItemTranslator()->toNetworkId($item)) instead of the
+// item: this package can't import item or network/mcpe/convert. NewItemBreakParticle in
+// network/mcpe/convert builds one from an item.
+type ItemBreakParticle struct{ NetworkID, NetworkMeta int }
 
 func (p ItemBreakParticle) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
-	return standardParticle(particleIDItemBreak, int32(p.ItemTypeID)<<16, pos)
+	return standardParticle(particleIDItemBreak, int32(p.NetworkID<<16|p.NetworkMeta), pos)
 }
 
 // LavaDripParticle is a port of pocketmine\world\particle\LavaDripParticle.

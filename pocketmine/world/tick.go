@@ -540,6 +540,7 @@ func (w *World) sendChangedBlocks() {
 
 // CreateBlockUpdatePackets is a port of World::createBlockUpdatePackets.
 func (w *World) CreateBlockUpdatePackets(blocks []math.Vector3) []packet.Packet {
+	blocks = w.withNeighbourDependentBlocks(blocks)
 	packets := make([]packet.Packet, 0, len(blocks))
 	for _, b := range blocks {
 		x, y, z := b.FloorX(), b.FloorY(), b.FloorZ()
@@ -575,7 +576,7 @@ func (w *World) CreateBlockUpdatePackets(blocks []math.Vector3) []packet.Packet 
 		}
 		packets = append(packets, &packet.UpdateBlock{
 			Position:          blockPosition,
-			NewBlockRuntimeID: uint32(w.translator.InternalIDToNetworkID(fullBlock.GetStateId())),
+			NewBlockRuntimeID: uint32(w.translator.NetworkIDForBlock(fullBlock)),
 			Flags:             packet.BlockUpdateNetwork,
 			Layer:             0, // UpdateBlockPacket::DATA_LAYER_NORMAL
 		})
@@ -585,6 +586,38 @@ func (w *World) CreateBlockUpdatePackets(blocks []math.Vector3) []packet.Packet 
 		}
 	}
 	return packets
+}
+
+// withNeighbourDependentBlocks adds to blocks the neighbours whose 1.26.50 network state depends
+// on them (a fence next to a changed block may connect to it now: see
+// convert.BlockTranslator.NetworkIDForBlock). PocketMine-MP (1.26.30) has no such states, so it
+// only sends the changed blocks.
+func (w *World) withNeighbourDependentBlocks(blocks []math.Vector3) []math.Vector3 {
+	type pos struct{ x, y, z int }
+	seen := make(map[pos]bool, len(blocks))
+	for _, b := range blocks {
+		seen[pos{b.FloorX(), b.FloorY(), b.FloorZ()}] = true
+	}
+	result := blocks
+	for _, b := range blocks {
+		x, y, z := b.FloorX(), b.FloorY(), b.FloorZ()
+		for _, side := range math.HorizontalFacing {
+			n := math.NewVector3(float64(x), float64(y), float64(z)).GetSide(side, 1)
+			p := pos{n.FloorX(), n.FloorY(), n.FloorZ()}
+			if seen[p] || !w.IsInWorld(p.x, p.y, p.z) {
+				continue
+			}
+			chunk, ok := w.GetChunk(p.x>>4, p.z>>4)
+			if !ok {
+				continue
+			}
+			if w.translator.DependsOnNeighbours(int(chunk.GetBlockStateID(p.x&0xf, p.y, p.z&0xf))) {
+				seen[p] = true
+				result = append(result, n)
+			}
+		}
+	}
+	return result
 }
 
 // broadcastPacketToPlayersUsingChunk is a port of World::broadcastPacketToPlayersUsingChunk.

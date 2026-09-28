@@ -14,6 +14,11 @@ const (
 	itemTypeIDsPowderSnowBucket = 20258
 	itemTypeIDsLingeringPotion  = 20259
 	itemTypeIDsBamboo           = 20005
+	itemTypeIDsDye              = 20097
+	itemTypeIDsLeatherBoots     = 20144
+	itemTypeIDsLeatherCap       = 20145
+	itemTypeIDsLeatherPants     = 20146
+	itemTypeIDsLeatherTunic     = 20147
 )
 
 // VanillaItemFunc returns a new instance of the named VanillaItems entry (e.g. "bucket"). This

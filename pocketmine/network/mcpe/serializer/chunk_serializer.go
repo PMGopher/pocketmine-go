@@ -5,6 +5,8 @@ package serializer
 import (
 	"bytes"
 	"math"
+	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/data/bedrock"
 
 	gtnbt "github.com/sandertv/gophertunnel/minecraft/nbt"
 
@@ -15,8 +17,8 @@ import (
 )
 
 // Overworld subchunk index bounds (ChunkSerializer::getDimensionChunkBounds' DimensionIds::OVERWORLD
-// case) - the only dimension this port sends chunks for so far. The Nether ([0,7]) and End
-// ([0,15]) bounds aren't ported since nothing constructs a Nether/End World yet.
+// case). PocketMine-MP sends every world as the overworld (NetworkSession always passes
+// DimensionIds::OVERWORLD, a Nether-generated world included), so the other cases are never used.
 const (
 	overworldMinSubChunkIndex = format.MinSubChunkIndex
 	overworldMaxSubChunkIndex = format.MaxSubChunkIndex
@@ -36,10 +38,9 @@ func GetSubChunkCount(chunk *format.Chunk) int {
 	return 0
 }
 
-// SerializeFullChunk is a port of ChunkSerializer::serializeFullChunk, hard-coded to the overworld
-// dimension and always using network (non-persistent, runtime-ID-based) block state IDs - the
-// persistent (world-save, NBT-based) block state path isn't ported, since nothing in this port
-// writes chunks to disk yet, only sends them over the network.
+// SerializeFullChunk is a port of ChunkSerializer::serializeFullChunk for the overworld with
+// network (runtime ID) block states, the only way PocketMine-MP calls it for the network; worlds
+// are saved by the world providers' own serializers.
 //
 // cmd/pocketmine-go sends chunks in sub-chunk request mode instead (SerializeBiomesPayload +
 // SerializeSubChunk), which is what Bedrock 1.26.50 servers known to work use; this full-chunk
@@ -50,7 +51,7 @@ func SerializeFullChunk(chunk *format.Chunk, translator *convert.BlockTranslator
 	subChunkCount := GetSubChunkCount(chunk)
 	writtenCount := 0
 	for y := overworldMinSubChunkIndex; writtenCount < subChunkCount; y, writtenCount = y+1, writtenCount+1 {
-		buf = append(buf, SerializeSubChunk(chunk.GetSubChunk(y), y, translator)...)
+		buf = append(buf, SerializeSubChunk(chunk.GetSubChunk(y), y, translator, nil)...)
 	}
 
 	buf = append(buf, SerializeBiomes(chunk)...)
@@ -105,11 +106,16 @@ func SerializeBiomes(chunk *format.Chunk) []byte {
 // this writes sub-chunk format version 9, which carries the sub-chunk's absolute Y index after the
 // layer count. Version 9 is what the vanilla server and Dragonfly send, and what the sub-chunk
 // request system requires. y is the sub-chunk index (format.MinSubChunkIndex..MaxSubChunkIndex).
-func SerializeSubChunk(subChunk *format.SubChunk, y int, translator *convert.BlockTranslator) []byte {
+func SerializeSubChunk(subChunk *format.SubChunk, y int, translator *convert.BlockTranslator, blockAt func(x, y, z int) block.Behavior) []byte {
 	layers := subChunk.GetBlockLayers()
 	buf := []byte{9, byte(len(layers)), byte(int8(y))} // version, layer count, sub-chunk Y index
 
 	for _, layer := range layers {
+		networkIDs := false
+		if blockAt != nil && hasNeighbourDependentStates(layer, translator) {
+			layer = networkLayer(layer, translator, blockAt)
+			networkIDs = true
+		}
 		bitsPerBlock := layer.GetBitsPerBlock()
 		buf = append(buf, byte(bitsPerBlock<<1)|1) // |1 = non-persistent (network runtime IDs)
 		buf = append(buf, layer.GetWordArray()...)
@@ -118,20 +124,54 @@ func SerializeSubChunk(subChunk *format.SubChunk, y int, translator *convert.Blo
 		if bitsPerBlock != 0 {
 			buf = append(buf, binaryutils.WriteVarInt(int32(len(palette)))...)
 		}
-		for _, internalStateID := range palette {
-			buf = append(buf, binaryutils.WriteVarInt(translator.NetworkIDForCachedState(internalStateID))...)
+		for _, stateID := range palette {
+			if !networkIDs {
+				stateID = translator.NetworkIDForCachedState(stateID)
+			}
+			buf = append(buf, binaryutils.WriteVarInt(stateID)...)
 		}
 	}
 	return buf
 }
 
-// serializeBiomePalette is a port of ChunkSerializer::serializeBiomePalette. LegacyBiomeIdToStringIdMap
-// isn't ported (no PocketMine-MP source checked out for it - like BiomeIds, it's part of the
-// vendored pocketmine/bedrock-data-adjacent data this port hasn't needed to pull in yet), so this
-// skips the "does this legacy biome ID have a valid string mapping" validation the PHP original
-// does and writes every biome ID as-is. Every biome ID this port currently ever writes is a single
-// hard-coded valid value (see world/generator's Flat generator), so that validation gap has no
-// practical effect yet.
+// hasNeighbourDependentStates reports whether layer has blocks whose 1.26.50 network state
+// depends on their neighbours (fences, panes, bars, tripwire, stairs: see
+// BlockTranslator.NetworkIDForBlock).
+func hasNeighbourDependentStates(layer *format.PalettedBlockArray, translator *convert.BlockTranslator) bool {
+	for _, stateID := range layer.GetPalette() {
+		if translator.DependsOnNeighbours(int(stateID)) {
+			return true
+		}
+	}
+	return false
+}
+
+// networkLayer is layer with network runtime IDs instead of internal state IDs, the blocks that
+// depend on their neighbours getting their state from the block read from the world (blockAt).
+func networkLayer(layer *format.PalettedBlockArray, translator *convert.BlockTranslator, blockAt func(x, y, z int) block.Behavior) *format.PalettedBlockArray {
+	var result *format.PalettedBlockArray
+	for x := 0; x < format.SubChunkEdgeLength; x++ {
+		for z := 0; z < format.SubChunkEdgeLength; z++ {
+			for y := 0; y < format.SubChunkEdgeLength; y++ {
+				stateID := layer.Get(x, y, z)
+				var networkID int32
+				if translator.DependsOnNeighbours(int(stateID)) {
+					networkID = translator.NetworkIDForBlock(blockAt(x, y, z))
+				} else {
+					networkID = translator.NetworkIDForCachedState(stateID)
+				}
+				if result == nil {
+					result = format.NewPalettedBlockArray(networkID)
+				}
+				result.Set(x, y, z, networkID)
+			}
+		}
+	}
+	return result
+}
+
+// serializeBiomePalette is a port of ChunkSerializer::serializeBiomePalette: biome IDs the client
+// doesn't know are sent as ocean (the 1.18.0 client crashes on bogus biomes, PHP's comment says).
 func serializeBiomePalette(biomes *format.PalettedBlockArray) []byte {
 	bitsPerBlock := biomes.GetBitsPerBlock()
 	buf := []byte{byte(bitsPerBlock<<1) | 1} // |1 = non-persistence bit; has no effect on biomes (always integer IDs), same as the PHP original's comment
@@ -141,7 +181,11 @@ func serializeBiomePalette(biomes *format.PalettedBlockArray) []byte {
 	if bitsPerBlock != 0 {
 		buf = append(buf, binaryutils.WriteVarInt(int32(len(palette)))...)
 	}
+	biomeIDMap := bedrock.GetLegacyBiomeIdToStringIdMap()
 	for _, biomeID := range palette {
+		if _, known := biomeIDMap.LegacyToString(int(biomeID)); !known {
+			biomeID = 0 // BiomeIds::OCEAN
+		}
 		buf = append(buf, binaryutils.WriteVarInt(biomeID)...)
 	}
 	return buf

@@ -1,7 +1,6 @@
 package item
 
-// BeetrootSoup is a port of pocketmine\item\BeetrootSoup. GetResidue (should return
-// VanillaItems.BOWL()) isn't ported - see Food's doc comment for why.
+// BeetrootSoup is a port of pocketmine\item\BeetrootSoup (its use is in item_use.go).
 type BeetrootSoup struct {
 	Food
 }

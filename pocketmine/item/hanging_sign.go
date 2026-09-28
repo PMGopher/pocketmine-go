@@ -5,10 +5,7 @@ import (
 	"pocketmine-go/pocketmine/math"
 )
 
-// HangingSign is a port of pocketmine\item\HangingSign. GetPlacementTransaction (choosing between
-// the wall/edge-ceiling/center-ceiling ready block variants based on clicked face and sneak state)
-// isn't ported - it needs world.BlockTransaction and tryPlacementTransaction, neither of which
-// exist in this port yet (see Item's doc comment for the same category of gap).
+// HangingSign is a port of pocketmine\item\HangingSign.
 type HangingSign struct {
 	ItemBase
 
@@ -34,6 +31,22 @@ func (h *HangingSign) Clone() Item {
 	c.WallVariant = h.WallVariant.Clone()
 	c.rebind(&c)
 	return &c
+}
+
+// GetPlacementTransaction is a port of HangingSign::getPlacementTransaction.
+func (h *HangingSign) GetPlacementTransaction(blockReplace, blockClicked block.Behavior, face math.Facing, clickVector math.Vector3, player Player) *block.BlockTransactionImpl {
+	if face != math.Down {
+		return TryPlacementTransaction(h, h.WallVariant.Clone(), blockReplace, blockClicked, face, clickVector, player)
+	}
+	//ceiling edges sign has stricter placement conditions than ceiling center sign, so try that first
+	var ceilingEdgeTx *block.BlockTransactionImpl
+	if player == nil || !player.IsSneaking() {
+		ceilingEdgeTx = TryPlacementTransaction(h, h.EdgePointCeilingVariant.Clone(), blockReplace, blockClicked, face, clickVector, player)
+	}
+	if ceilingEdgeTx != nil {
+		return ceilingEdgeTx
+	}
+	return TryPlacementTransaction(h, h.CenterPointCeilingVariant.Clone(), blockReplace, blockClicked, face, clickVector, player)
 }
 
 // GetBlockForFace is a port of HangingSign::getBlock - "we don't have enough information here to

@@ -23,7 +23,7 @@ const (
 
 // Sign is a port of pocketmine\block\tile\Sign.
 //
-// Deprecated in the PHP original too - see block.BaseSign (not ported yet).
+// Deprecated in the PHP original too - see block.BaseSign.
 type Sign struct {
 	SpawnableBase
 

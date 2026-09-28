@@ -26,15 +26,9 @@ func (s *Sword) GetAttackPoints() int { return s.Tier.GetBaseAttackPoints() }
 
 func (s *Sword) GetBlockToolHarvestLevel() int { return 1 }
 
-// GetMiningEfficiency is a port of Sword::getMiningEfficiency: swords break any block 1.5x faster
-// than an empty hand, on top of Tool's usual isCorrectTool gate (inlined here rather than reached
-// via Tool.GetMiningEfficiency's self-dispatch, since Sword needs to scale its result too).
+// GetMiningEfficiency is a port of Sword::getMiningEfficiency.
 func (s *Sword) GetMiningEfficiency(isCorrectTool bool) float64 {
-	base := 1.0
-	if isCorrectTool {
-		base = s.GetBaseMiningEfficiency()
-	}
-	return base * 1.5
+	return s.Tool.GetMiningEfficiency(isCorrectTool) * 1.5 //swords break any block 1.5x faster than hand
 }
 
 func (s *Sword) GetBaseMiningEfficiency() float64 { return 10 }

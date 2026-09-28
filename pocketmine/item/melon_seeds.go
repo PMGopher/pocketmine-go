@@ -1,7 +1,8 @@
 package item
 
-// MelonSeeds is a port of pocketmine\item\MelonSeeds. GetBlock (should return VanillaBlocks.MELON_STEM())
-// isn't ported - see StringItem's doc comment for why.
+import "pocketmine-go/pocketmine/block"
+
+// MelonSeeds is a port of pocketmine\item\MelonSeeds.
 type MelonSeeds struct {
 	ItemBase
 }
@@ -17,3 +18,6 @@ func (m *MelonSeeds) Clone() Item {
 	c.rebind(&c)
 	return &c
 }
+
+// GetBlock is a port of MelonSeeds::getBlock.
+func (x *MelonSeeds) GetBlock() block.Behavior { return block.VanillaBlock("melon_stem") }

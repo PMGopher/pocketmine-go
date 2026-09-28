@@ -7,8 +7,7 @@ import (
 	runtime "pocketmine-go/pocketmine/data/runtime"
 )
 
-// Potion is a port of pocketmine\item\Potion. GetResidue (VanillaItems.GLASS_BOTTLE()) and
-// CanStartUsingItem (needs a real Player) aren't ported - see the Item interface's doc comment.
+// Potion is a port of pocketmine\item\Potion (its use is in item_use.go).
 type Potion struct {
 	ItemBase
 

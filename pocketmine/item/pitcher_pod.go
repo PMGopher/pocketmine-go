@@ -1,7 +1,8 @@
 package item
 
-// PitcherPod is a port of pocketmine\item\PitcherPod. GetBlock (should return VanillaBlocks.PITCHER_CROP())
-// isn't ported - see StringItem's doc comment for why.
+import "pocketmine-go/pocketmine/block"
+
+// PitcherPod is a port of pocketmine\item\PitcherPod.
 type PitcherPod struct {
 	ItemBase
 }
@@ -17,3 +18,6 @@ func (p *PitcherPod) Clone() Item {
 	c.rebind(&c)
 	return &c
 }
+
+// GetBlock is a port of PitcherPod::getBlock.
+func (x *PitcherPod) GetBlock() block.Behavior { return block.VanillaBlock("pitcher_crop") }

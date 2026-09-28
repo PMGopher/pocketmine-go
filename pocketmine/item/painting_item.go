@@ -1,8 +1,6 @@
 package item
 
-// PaintingItem is a port of pocketmine\item\PaintingItem. Not ported: onInteractBlock (placing a
-// Painting entity against the clicked block) - it needs the Player item-use flow (see the Item
-// interface's doc comment).
+// PaintingItem is a port of pocketmine\item\PaintingItem.
 type PaintingItem struct {
 	ItemBase
 }

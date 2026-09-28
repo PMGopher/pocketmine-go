@@ -67,8 +67,9 @@ func (j *Jukebox) EjectRecord() {
 		if world, err := j.position.GetWorld(); err == nil {
 			dropItem(world, j.position.Add(0.5, 1, 0.5), j.RecordItem)
 		}
+		record := j.RecordItem
 		j.RecordItem = nil
-		j.StopSound()
+		j.stopRecordSound(record)
 	}
 }
 
@@ -86,8 +87,17 @@ func (j *Jukebox) StartSound() {
 	}
 }
 
-func (j *Jukebox) StopSound() {
-	j.addSound(sound.RecordStopSound{})
+func (j *Jukebox) StopSound() { j.stopRecordSound(j.RecordItem) }
+
+// stopRecordSound plays RecordStopSound, naming record so its named sound stops too (see
+// sound.RecordSound's Encode).
+func (j *Jukebox) stopRecordSound(record Record) {
+	stop := sound.RecordStopSound{}
+	if record != nil {
+		recordType := record.GetRecordType()
+		stop.RecordType = &recordType
+	}
+	j.addSound(stop)
 }
 
 func (j *Jukebox) OnBreak(item Item, player Player, returnedItems *[]Item) bool {
@@ -127,12 +137,14 @@ func (j *Jukebox) ReadStateFromWorld() Behavior {
 	return j.self
 }
 
+// addSound plays a record sound at the centre of the jukebox, where the vanilla server plays it
+// (BDS 1.26.52: PlaySound record.13 at x+0.5, y+0.5, z+0.5); PHP uses $this->position (the corner).
 func (j *Jukebox) addSound(s sound.Sound) {
 	world, err := j.position.GetWorld()
 	if err != nil {
 		return
 	}
-	world.AddSound(j.position.Vector3, s)
+	world.AddSound(j.position.Add(0.5, 0.5, 0.5), s)
 }
 
 func (j *Jukebox) setSelf() {
@@ -158,7 +170,16 @@ func init() {
 		pos := t.GetPosition()
 		if w, ok := pos.GetWorld(); ok {
 			if world, ok := w.(World); ok {
-				world.AddSound(pos.Vector3, sound.RecordStopSound{})
+				stop := sound.RecordStopSound{}
+				if j, ok := t.(*tile.Jukebox); ok {
+					if record, has := j.GetRecord(); has {
+						if r, ok := record.(Record); ok {
+							recordType := r.GetRecordType()
+							stop.RecordType = &recordType
+						}
+					}
+				}
+				world.AddSound(pos.Add(0.5, 0.5, 0.5), stop) // centre, see Jukebox.addSound
 			}
 		}
 	}

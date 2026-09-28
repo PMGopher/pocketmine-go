@@ -1115,14 +1115,12 @@ func (h *InGamePacketHandler) handleLecternUpdate(pk *packet.LecternUpdate) bool
 	pos := pk.Position
 	chunkX, chunkZ := int(pos[0])>>4, int(pos[2])>>4
 	w := h.player.GetWorld()
-	// World::isChunkLocked: chunks are only locked by async population, which this port doesn't
-	// have (generation is synchronous), so no chunk is ever locked.
-	if !w.IsChunkLoaded(chunkX, chunkZ) {
+	if !w.IsChunkLoaded(chunkX, chunkZ) || w.IsChunkLocked(chunkX, chunkZ) {
 		return false
 	}
 
 	lectern, ok := w.GetBlockAt(int(pos[0]), int(pos[1]), int(pos[2])).(*block.Lectern)
-	if ok && h.player.CanInteract(blockVec(pos).Add(0.5, 0.5, 0.5), 15) {
+	if ok && h.player.CanInteract(blockVec(pos), 15) {
 		if !lectern.OnPageTurn(int(pk.Page)) {
 			h.syncBlocksNearby(blockVec(pos), nil)
 		}

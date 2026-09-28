@@ -18,12 +18,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
+	"gopkg.in/yaml.v3"
 
 	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/block"
 	"pocketmine-go/pocketmine/command"
 	"pocketmine-go/pocketmine/console"
 	"pocketmine-go/pocketmine/crafting"
+	"pocketmine-go/pocketmine/crash"
 	"pocketmine-go/pocketmine/data/bedrock"
 	"pocketmine-go/pocketmine/entity"
 	"pocketmine-go/pocketmine/event"
@@ -40,6 +42,7 @@ import (
 	"pocketmine-go/pocketmine/network/upnp"
 	"pocketmine-go/pocketmine/permission"
 	"pocketmine-go/pocketmine/player"
+	"pocketmine-go/pocketmine/plugin"
 	"pocketmine-go/pocketmine/resourcepacks"
 	"pocketmine-go/pocketmine/scheduler"
 	"pocketmine-go/pocketmine/timings"
@@ -87,9 +90,12 @@ func init() {
 
 // Server is a port of pocketmine\Server.
 //
-// Not ported (see AGENTS.md): plugins (PluginManager: the design is undecided, so there are no
-// plugin schedulers to tick and no plugin enable phases), the update checker,
-// anonymous usage statistics (SendUsageTask), crash dumps, the signal handler (main.go handles
+// Plugins are compiled-in Go plugins (see plugin.RegisterGoPlugin); PharPluginLoader and
+// ScriptPluginLoader load PHP code and have no counterpart. A panic in the tick or in packet
+// handling makes a crash dump like an uncaught exception in PHP (see crash_dump.go).
+//
+// Not ported (see AGENTS.md): the update checker, anonymous usage statistics (SendUsageTask),
+// the signal handler (main.go handles
 // SIGINT/SIGTERM), compression settings (gophertunnel compresses; network.batch-threshold is
 // passed on as its compression threshold) and the AuthKeyProvider (gophertunnel verifies logins).
 type Server struct {
@@ -100,6 +106,11 @@ type Server struct {
 	logger     log.Logger
 	dataPath   string
 	pluginPath string
+
+	pluginManager *plugin.PluginManager
+
+	// lastExceptionError is PHP's global $lastExceptionError: the crash ExceptionHandler records.
+	lastExceptionError *crash.Crash
 
 	configGroup   *ServerConfigGroup
 	language      *lang.Language
@@ -207,6 +218,9 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 	}
 
 	timings.Init()
+	timings.ServerInfoFunc = func() (string, string, string) {
+		return s.GetVersion(), s.GetName(), s.GetPocketMineVersion()
+	}
 
 	for _, dir := range []string{dataPath, pluginPath, filepath.Join(dataPath, "worlds"), filepath.Join(dataPath, "players")} {
 		if err := os.MkdirAll(dir, 0o777); err != nil {
@@ -386,11 +400,46 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 
 	s.playerDataProvider = player.NewDatFilePlayerDataProvider(filepath.Join(s.dataPath, "players"))
 
+	pluginGraylist, err := s.loadPluginGraylist()
+	if err != nil {
+		logger.Emergency(err.Error())
+		return nil, err
+	}
+	pluginDataDirectory := filepath.Join(s.dataPath, "plugin_data")
+	if s.configGroup.GetPropertyBool(YmlPluginsLegacyDataDir, true) {
+		pluginDataDirectory = ""
+	}
+	if s.pluginManager, err = plugin.NewPluginManager(s, pluginDataDirectory, pluginGraylist); err != nil {
+		return nil, err
+	}
+	s.pluginManager.RegisterInterface(plugin.NewGoPluginLoader())
+
+	loadErrorCount := 0
+	s.pluginManager.LoadPlugins(s.pluginPath, &loadErrorCount)
+	if loadErrorCount > 0 {
+		message := s.language.Translate(lang.KnownTranslationFactory.PocketminePluginSomeLoadErrors())
+		logger.Emergency(message)
+		s.ForceShutdown()
+		return nil, fmt.Errorf("%s", message)
+	}
+	if !s.EnablePlugins(plugin.EnableOrderStartup) {
+		message := s.language.Translate(lang.KnownTranslationFactory.PocketminePluginSomeEnableErrors())
+		logger.Emergency(message)
+		s.ForceShutdown()
+		return nil, fmt.Errorf("%s", message)
+	}
+
 	if !s.startupPrepareWorlds() {
+		s.ForceShutdown()
 		return nil, fmt.Errorf("%s", s.language.Translate(lang.KnownTranslationFactory.PocketmineLevelDefaultError()))
 	}
-	// PluginEnableOrder::POSTWORLD: registerServerAliases (no plugins to enable).
-	s.commandMap.RegisterServerAliases()
+
+	if !s.EnablePlugins(plugin.EnableOrderPostworld) {
+		message := s.language.Translate(lang.KnownTranslationFactory.PocketminePluginSomeEnableErrors())
+		logger.Emergency(message)
+		s.ForceShutdown()
+		return nil, fmt.Errorf("%s", message)
+	}
 	return s, nil
 }
 
@@ -685,13 +734,10 @@ func (s *Server) Start() error {
 	highlight, reset := utils.Aqua, utils.Reset
 	github := pocketmine.GithubURL
 	splash := "\n\n"
+	// PHP also links PocketMine-MP's Discord, documentation, Poggit, donations and translations;
+	// this port only links its own repository and issue tracker.
 	for _, link := range []*lang.Translatable{
-		lang.KnownTranslationFactory.PocketmineServerUrlDiscord(highlight + "https://discord.pmmp.io" + reset),
-		lang.KnownTranslationFactory.PocketmineServerUrlDocs(highlight + "https://doc.pmmp.io" + reset),
-		lang.KnownTranslationFactory.PocketmineServerUrlSourceCode(highlight + github + reset),
-		lang.KnownTranslationFactory.PocketmineServerUrlFreePlugins(highlight + "https://poggit.pmmp.io/plugins" + reset),
-		lang.KnownTranslationFactory.PocketmineServerUrlDonations(highlight + "https://patreon.com/pocketminemp" + reset),
-		lang.KnownTranslationFactory.PocketmineServerUrlTranslations(highlight + "https://translate.pocketmine.net" + reset),
+		lang.KnownTranslationFactory.PocketmineServerUrlSourceCode(highlight + github + ".git" + reset),
 		lang.KnownTranslationFactory.PocketmineServerUrlBugReporting(highlight + github + "/issues" + reset),
 	} {
 		splash += "- " + s.language.Translate(link) + "\n"
@@ -727,7 +773,7 @@ func (s *Server) tickProcessor() {
 		s.mu.Lock()
 		running := s.isRunning.Load()
 		if running {
-			s.tick()
+			s.tickOrCrash()
 		}
 		next := s.nextTick
 		s.mu.Unlock()
@@ -755,7 +801,7 @@ func (s *Server) tick() {
 
 	s.tickCounter++
 
-	// PluginManager::tickSchedulers: plugins aren't ported, so there are no schedulers to tick.
+	s.pluginManager.TickSchedulers(int(s.tickCounter))
 
 	timings.SchedulerAsync.StartTiming()
 	if _, err := s.asyncPool.CollectTasks(); err != nil {
@@ -875,6 +921,11 @@ func (s *Server) ForceShutdown() {
 	s.hasStopped = true
 	s.isRunning.Store(false)
 	s.stopOnce.Do(func() { close(s.stopped) })
+
+	if s.pluginManager != nil {
+		s.logger.Debug("Disabling all plugins")
+		s.pluginManager.DisablePlugins()
+	}
 
 	if s.network != nil {
 		s.network.GetSessionManager().Close(s.configGroup.GetPropertyString(YmlSettingsShutdownMessage, "Server closed"), nil)
@@ -1441,8 +1492,22 @@ func (s *Server) QueryListPlugins() bool {
 	return s.configGroup.GetPropertyBool(YmlSettingsQueryPlugins, true)
 }
 
-// GetQueryPlugins is PluginManager::getPlugins for QueryInfo: plugins aren't ported.
-func (s *Server) GetQueryPlugins() []query.Plugin { return nil }
+// GetQueryPlugins is PluginManager::getPlugins for QueryInfo.
+func (s *Server) GetQueryPlugins() []query.Plugin {
+	if s.pluginManager == nil {
+		return nil
+	}
+	var result []query.Plugin
+	for _, p := range s.pluginManager.GetPlugins() {
+		result = append(result, queryPlugin{p})
+	}
+	return result
+}
+
+// queryPlugin is a plugin as QueryInfo lists it (name and version).
+type queryPlugin struct{ plugin.Plugin }
+
+func (p queryPlugin) GetVersion() string { return p.GetDescription().GetVersion() }
 
 func (s *Server) GetOnlinePlayerNames() []string {
 	names := make([]string, 0, len(s.playerList))
@@ -1472,3 +1537,60 @@ var (
 	_ query.Server   = (*Server)(nil)
 	_ command.Server = (*Server)(nil)
 )
+
+// pluginListYml is resources/plugin_list.yml, copied to the data folder on first start.
+//
+//go:embed resources/plugin_list.yml
+var pluginListYml []byte
+
+// loadPluginGraylist is the plugin_list.yml part of Server::__construct.
+func (s *Server) loadPluginGraylist() (*plugin.PluginGraylist, error) {
+	graylistFile := filepath.Join(s.dataPath, "plugin_list.yml")
+	if !fileExists(graylistFile) {
+		if err := os.WriteFile(graylistFile, pluginListYml, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	data, err := os.ReadFile(graylistFile)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load %s: %w", graylistFile, err)
+	}
+	var array map[string]any
+	if err := yaml.Unmarshal(data, &array); err != nil || array == nil {
+		return nil, fmt.Errorf("Failed to load %s: Expected array for root", graylistFile)
+	}
+	graylist, err := plugin.PluginGraylistFromArray(array)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load %s: %s", graylistFile, err.Error())
+	}
+	return graylist, nil
+}
+
+// GetPluginManager is a port of Server::getPluginManager.
+func (s *Server) GetPluginManager() *plugin.PluginManager { return s.pluginManager }
+
+// GetPluginCommand is a port of Server::getPluginCommand (nil if name isn't a plugin command).
+func (s *Server) GetPluginCommand(name string) command.PluginOwned {
+	if c, ok := s.commandMap.GetCommand(name).(command.PluginOwned); ok {
+		return c
+	}
+	return nil
+}
+
+// EnablePlugins is a port of Server::enablePlugins.
+func (s *Server) EnablePlugins(order plugin.EnableOrder) bool {
+	allSuccess := true
+	for _, p := range s.pluginManager.GetPlugins() {
+		if !p.IsEnabled() && p.GetDescription().GetOrder() == order {
+			if !s.pluginManager.EnablePlugin(p) {
+				allSuccess = false
+			}
+		}
+	}
+
+	if order == plugin.EnableOrderPostworld {
+		s.commandMap.RegisterServerAliases()
+	}
+
+	return allSuccess
+}

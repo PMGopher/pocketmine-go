@@ -46,8 +46,9 @@ func GetItemDataUpgrader() *itemupgrade.ItemDataUpgrader {
 	return itemDataUpgrader
 }
 
-// init gives the item package Item::nbtSerialize/nbtDeserialize, which go through these handlers
-// (item can't import this package: it imports item).
+// init gives the item package Item::nbtSerialize/nbtDeserialize and LegacyStringToItemParser's
+// upgrade + deserialize step, which go through these handlers (item can't import this package: it
+// imports item).
 func init() {
 	item.NbtSerializeFunc = func(it item.Item, slot *int) (*nbt.CompoundTag, error) {
 		stack, err := GetItemSerializer().SerializeStack(it, slot)
@@ -69,5 +70,12 @@ func init() {
 			return nil, &data.SavedDataLoadingError{Message: err.Error(), Cause: err}
 		}
 		return it, nil
+	}
+	item.LegacyItemDataFunc = func(legacyID string, meta int) (item.Item, error) {
+		itemData, err := GetItemDataUpgrader().UpgradeItemTypeDataString(legacyID, meta, 1, nil)
+		if err != nil {
+			return nil, err
+		}
+		return GetItemDeserializer().DeserializeStack(itemData)
 	}
 }

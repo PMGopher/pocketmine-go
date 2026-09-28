@@ -4,8 +4,7 @@ import (
 	"pocketmine-go/pocketmine/entity/effect"
 )
 
-// MilkBucket is a port of pocketmine\item\MilkBucket. GetResidue (VanillaItems.BUCKET()) and
-// CanStartUsingItem aren't ported - see Food's and the Item interface's doc comments.
+// MilkBucket is a port of pocketmine\item\MilkBucket (its use is in item_use.go).
 type MilkBucket struct {
 	ItemBase
 }

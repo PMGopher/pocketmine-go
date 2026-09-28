@@ -10,8 +10,7 @@ import (
 // StraightOnlyRail is a port of pocketmine\block\StraightOnlyRail: a simple non-curvable rail.
 //
 // Like Button/Crops, this isn't meant to be instantiated directly - it has no Clone() of its own.
-// Its concrete subtypes (DetectorRail, ActivatorRail, PoweredRail - not yet ported, all need
-// RailPoweredByRedstoneTrait for their extra "powered" state) must embed it and implement Clone.
+// Its concrete subtypes (DetectorRail, ActivatorRail, PoweredRail) embed it and implement Clone.
 type StraightOnlyRail struct {
 	Flowable
 

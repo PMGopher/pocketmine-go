@@ -5,8 +5,7 @@ import (
 	"pocketmine-go/pocketmine/entity/effect"
 )
 
-// SuspiciousStew is a port of pocketmine\item\SuspiciousStew. GetResidue (VanillaItems.BOWL())
-// isn't ported - see Food's doc comment.
+// SuspiciousStew is a port of pocketmine\item\SuspiciousStew (its use is in item_use.go).
 type SuspiciousStew struct {
 	Food
 

@@ -174,15 +174,20 @@ func TestIsInWorldRespectsVerticalBounds(t *testing.T) {
 
 func TestUseBreakOnReplacesBlockWithAir(t *testing.T) {
 	w := newTestWorld()
-	if got := w.GetBlockAt(5, 0, 5); got.GetTypeId() != block.BEDROCK {
-		t.Fatalf("precondition failed: expected bedrock at (5,0,5), got %d", got.GetTypeId())
+	w.GetOrLoadChunk(0, 0)
+	if got := w.GetBlockAt(5, 62, 5); got.GetTypeId() != block.DIRT {
+		t.Fatalf("precondition failed: expected dirt at (5,62,5), got %d", got.GetTypeId())
 	}
 
-	if !w.UseBreakOn(block.NewPosition(5, 0, 5, w).AsVector3()) {
+	if !w.UseBreakOn(block.NewPosition(5, 62, 5, w).AsVector3()) {
 		t.Fatal("expected UseBreakOn to report success")
 	}
-	if got := w.GetBlockAt(5, 0, 5); got.GetTypeId() != block.AIR {
+	if got := w.GetBlockAt(5, 62, 5); got.GetTypeId() != block.AIR {
 		t.Errorf("GetBlockAt after UseBreakOn = %d, want AIR (%d)", got.GetTypeId(), block.AIR)
+	}
+	// World::useBreakOn refuses unbreakable blocks.
+	if w.UseBreakOn(block.NewPosition(5, 0, 5, w).AsVector3()) {
+		t.Error("UseBreakOn broke bedrock")
 	}
 }
 

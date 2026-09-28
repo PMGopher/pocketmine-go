@@ -7,6 +7,7 @@ import (
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/math"
 	"pocketmine-go/pocketmine/nbt"
+	"pocketmine-go/pocketmine/network/mcpe/convert"
 	"pocketmine-go/pocketmine/world"
 	"pocketmine-go/pocketmine/world/sound"
 )
@@ -45,7 +46,7 @@ func (i *IceBomb) OnHit(event entityevent.ProjectileHit) {
 	pos := i.GetPosition()
 
 	w.AddSound(pos, sound.IceBombHitSound{})
-	itemBreak := itemBreakParticle(item.VanillaIceBomb())
+	itemBreak := convert.NewItemBreakParticle(item.VanillaIceBomb())
 	for n := 0; n < 6; n++ {
 		w.AddParticle(pos, itemBreak)
 	}

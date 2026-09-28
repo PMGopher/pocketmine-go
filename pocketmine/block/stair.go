@@ -25,6 +25,11 @@ func NewStair(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo) *St
 	return s
 }
 
+// stairBaser is `instanceof Stair`: every stairs type embeds Stair.
+type stairBaser interface{ stairBase() *Stair }
+
+func (s *Stair) stairBase() *Stair { return s }
+
 func (s *Stair) Clone() Behavior {
 	c := *s
 	c.rebind(&c)
@@ -117,8 +122,12 @@ func (s *Stair) getPossibleCornerFacing(oppositeFacing bool) (math.Facing, bool)
 		checkFacing = math.Opposite(s.Facing)
 	}
 	side := s.GetSide(checkFacing, 1)
-	other, ok := side.(*Stair)
-	if ok && other.UpsideDown == s.UpsideDown && math.FacingAxis(other.Facing) != math.FacingAxis(s.Facing) {
+	baser, ok := side.(stairBaser) // $side instanceof Stair (any stairs type embeds Stair)
+	if !ok {
+		return 0, false
+	}
+	other := baser.stairBase()
+	if other.UpsideDown == s.UpsideDown && math.FacingAxis(other.Facing) != math.FacingAxis(s.Facing) {
 		return other.Facing, true
 	}
 	return 0, false

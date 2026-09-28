@@ -25,6 +25,10 @@ type BlockTranslator struct {
 
 	fallbackStateData bedrock.BlockStateData
 	fallbackStateID   int32
+
+	// derivedCache and derivedIDCache back DependsOnNeighbours and NetworkIDForBlock.
+	derivedCache   map[int]bool
+	derivedIDCache map[string]int32
 }
 
 // NewBlockTranslator is a port of BlockTranslator::__construct, with the dictionary being the
@@ -38,6 +42,8 @@ func NewBlockTranslator() *BlockTranslator {
 	return &BlockTranslator{
 		serializer:        worldio.GetBlockStateSerializer(),
 		networkIDCache:    map[int]int32{},
+		derivedCache:      map[int]bool{},
+		derivedIDCache:    map[string]int32{},
 		fallbackStateData: fallback,
 		fallbackStateID:   fallbackID,
 	}

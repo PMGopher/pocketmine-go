@@ -1,8 +1,7 @@
 package item
 
-// Boat is a port of pocketmine\item\Boat. Placing/spawning the boat entity (marked //TODO even in
-// the PHP original) needs the unported entity package, so only the type/fuel/stack-size state is
-// ported here.
+// Boat is a port of pocketmine\item\Boat. Placing the boat entity is //TODO in PHP too, so only
+// the type, fuel and stack size are ported.
 type Boat struct {
 	ItemBase
 

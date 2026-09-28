@@ -775,7 +775,7 @@ func (s *NetworkSession) SyncMovement(pos math.Vector3, yaw, pitch *float64, mod
 		p = *pitch
 	}
 	offset := s.player.GetOffsetPosition(pos)
-	s.SendDataPacket(&packet.MovePlayer{
+	pk := &packet.MovePlayer{
 		EntityRuntimeID: uint64(s.player.GetID()),
 		Position:        mgl32.Vec3{float32(offset.X), float32(offset.Y), float32(offset.Z)},
 		Pitch:           float32(p),
@@ -784,7 +784,15 @@ func (s *NetworkSession) SyncMovement(pos math.Vector3, yaw, pitch *float64, mod
 		Mode:            mode,
 		OnGround:        s.player.IsOnGround(),
 		//TODO: riding entity ID, tick
-	})
+	}
+	if mode == packet.MoveModeTeleport {
+		// MovePlayerPacket::simple's teleportCause/teleportItem (0, 0), which PHP's protocol writes for
+		// every MODE_TELEPORT packet. gophertunnel makes them optional; the 1.26.51 client dropped the
+		// connection ("Block") after every teleport (tp, respawn, ender pearl) while they were left
+		// out. Dragonfly sets them the same way.
+		pk.TeleportData = protocol.Option(protocol.TeleportData{TeleportCause: packet.TeleportCauseUnknown})
+	}
+	s.SendDataPacket(pk)
 
 	if h, ok := s.handler.(inGameHandler); ok {
 		h.SetForceMoveSync(true)

@@ -1,6 +1,12 @@
 package item
 
-import "pocketmine-go/pocketmine/nbt"
+import (
+	"fmt"
+	stdmath "math"
+	"unicode/utf8"
+
+	"pocketmine-go/pocketmine/nbt"
+)
 
 const (
 	WrittenBookGenerationOriginal   = 0
@@ -15,8 +21,7 @@ const (
 	writtenBookTagTitle      = "title"
 )
 
-// WrittenBook is a port of pocketmine\item\WrittenBook. The PHP constructor's UTF-8/length
-// validation on SetAuthor/SetTitle isn't ported - see WritableBookPage's doc comment for why.
+// WrittenBook is a port of pocketmine\item\WrittenBook.
 type WrittenBook struct {
 	WritableBookBase
 
@@ -53,11 +58,30 @@ func (w *WrittenBook) SetGeneration(generation int) {
 
 func (w *WrittenBook) GetAuthor() string { return w.Author }
 
-func (w *WrittenBook) SetAuthor(author string) { w.Author = author }
+// checkWrittenBookString is WrittenBook::setAuthor/setTitle's checks: at most Limits::INT16_MAX
+// bytes and valid UTF-8 (InvalidArgumentException, a panic here).
+func checkWrittenBookString(s, name string) {
+	if len(s) > stdmath.MaxInt16 {
+		panic(fmt.Sprintf("%s must be at most %d bytes, but have %d bytes", name, stdmath.MaxInt16, len(s)))
+	}
+	if !utf8.ValidString(s) {
+		panic(name + " must be valid UTF-8")
+	}
+}
+
+// SetAuthor is a port of WrittenBook::setAuthor.
+func (w *WrittenBook) SetAuthor(author string) {
+	checkWrittenBookString(author, "Author")
+	w.Author = author
+}
 
 func (w *WrittenBook) GetTitle() string { return w.Title }
 
-func (w *WrittenBook) SetTitle(title string) { w.Title = title }
+// SetTitle is a port of WrittenBook::setTitle.
+func (w *WrittenBook) SetTitle(title string) {
+	checkWrittenBookString(title, "Title")
+	w.Title = title
+}
 
 // deserializeCompoundTag/serializeCompoundTag extend WritableBookBase's own pair, the same
 // self-dispatch participation described on Durable's.

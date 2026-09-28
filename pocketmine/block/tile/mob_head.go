@@ -19,7 +19,7 @@ var errInvalidSkullType = errors.New("invalid skull type tag value")
 
 // MobHead is a port of pocketmine\block\tile\MobHead.
 //
-// Deprecated in the PHP original too - see block.MobHead (not ported yet).
+// Deprecated in the PHP original too - see block.MobHead.
 //
 // MobHeadTypeIdMap's byte<->MobHeadType mapping is a straightforward 0-6 sequential assignment
 // matching declaration order (confirmed against the PHP source), so this uses int(MobHeadType)

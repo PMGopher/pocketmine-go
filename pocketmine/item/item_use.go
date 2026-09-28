@@ -89,8 +89,7 @@ func (m *MilkBucket) CanStartUsingItem(player Player) bool { return true }
 // CanStartUsingItem is a port of Spyglass::canStartUsingItem.
 func (s *Spyglass) CanStartUsingItem(player Player) bool { return true }
 
-// CanStartUsingItem is a port of GoatHorn::canStartUsingItem. (GoatHorn::onClickAir plays
-// GoatHornSound, which the sound package doesn't have yet.)
+// CanStartUsingItem is a port of GoatHorn::canStartUsingItem.
 func (g *GoatHorn) CanStartUsingItem(player Player) bool { return true }
 
 // armorWearer is the part of Player Armor::onClickAir needs.
@@ -108,11 +107,12 @@ func (a *Armor) OnClickAir(player Player, directionVector math.Vector3, returned
 		return ItemUseResultNone
 	}
 	existing := w.GetArmorItem(a.GetArmorSlot())
-	thisCopy := a.Clone().(*Armor)
-	newItem := thisCopy.PopCount(1).(*Armor)
+	// a.self is the concrete armor item (e.g. TurtleHelmet, which embeds Armor).
+	thisCopy := a.self.Clone()
+	newItem := thisCopy.PopCount(1)
 	w.SetArmorItem(a.GetArmorSlot(), newItem)
 	w.SetItemInHand(existing)
-	if s := newItem.GetMaterial().GetEquipSound(); s != nil {
+	if s := newItem.(interface{ GetMaterial() ArmorMaterial }).GetMaterial().GetEquipSound(); s != nil {
 		w.BroadcastSound(s)
 	}
 	if !thisCopy.IsNull() {

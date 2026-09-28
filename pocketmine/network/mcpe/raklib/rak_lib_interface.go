@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,6 +44,9 @@ type Server interface {
 	GetResourcePackManager() *resourcepacks.ResourcePackManager
 	// ErrorLog is where gophertunnel's and go-raknet's own errors are logged.
 	ErrorLog() *slog.Logger
+	// ExceptionHandler is Server::exceptionHandler: it writes a crash dump for a panic recovered
+	// from packet handling and ends the process. The server lock must not be held.
+	ExceptionHandler(p any, pcs []uintptr)
 }
 
 // pendingLogin is what the login phase (LoginPacketHandler, run from gophertunnel's Allow
@@ -436,9 +440,15 @@ func (r *RakLibInterface) onPacketReceive(conn *minecraft.Conn, session *mcpe.Ne
 	name := session.GetDisplayName()
 	defer func() {
 		if p := recover(); p != nil {
+			pcs := make([]uintptr, 64)
+			pcs = pcs[:runtime.Callers(2, pcs)]
 			//record the name of the player who caused the crash, to make it easier to find the reproducing steps
 			r.logger.Emergency("Crash occurred while handling a packet from session: " + name)
-			panic(p)
+			// PHP rethrows to the main thread's exception handler, which writes a crash dump. The
+			// packet is handled with the server lock held (see handleConn).
+			r.server.Unlock()
+			r.server.ExceptionHandler(p, pcs)
+			r.server.Lock() // only reached when the server was already stopping
 		}
 	}()
 	if err := session.HandleDataPacket(pk); err != nil {

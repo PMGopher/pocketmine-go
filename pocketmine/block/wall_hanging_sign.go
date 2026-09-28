@@ -17,6 +17,8 @@ func NewWallHangingSign(idInfo *BlockIdentifier, name string, typeInfo *BlockTyp
 		BaseSign: BaseSign{
 			Transparent:       Transparent{NewBlock(idInfo, name, typeInfo)},
 			WoodTypeComponent: NewWoodTypeComponent(woodType),
+			Text:              blockutils.NewSignText(nil, nil, false), // new SignText()
+			BackText:          blockutils.NewSignText(nil, nil, false),
 		},
 		HorizontalFacingComponent: NewHorizontalFacingComponent(),
 	}

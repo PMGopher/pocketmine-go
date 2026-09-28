@@ -38,38 +38,38 @@ Stop with Ctrl+C or by typing `stop` in the console (players and worlds are save
 
 ## Progress
 
-Roughly **1,230–1,270 of PocketMine-MP's 1,498 PHP classes (~82–85%)** have a Go counterpart: 1,235
+Roughly **1,260–1,300 of PocketMine-MP's 1,498 PHP classes (~84–87%)** have a Go counterpart: 1,260
 match by file or type name, and about 40 more were merged or renamed in Go (traits as `...Component`
 structs, all biomes in one file, the tree types as `Tree` constructors). Many of the rest are out
 of scope on purpose (PHP threads, RakLib and the protocol classes gophertunnel replaces, the
 updater). The server "glue" is in place: `Server`, network sessions and packet handlers, events,
 the command map with most default commands, the console, query and UPnP, crafting and enchanting.
-World and blocks are complete, incl. world formats and tiles. The big remaining gaps are plugins,
-crash dumps and 7 default commands.
+World and blocks are complete, incl. world formats and tiles, and plugins load as compiled-in Go
+packages. Every area is complete: what isn't ported is PHP-runtime specific (threads, Phar plugins,
+PHP heap dumps) or replaced by gophertunnel (the protocol layer).
 
-| Area (PHP namespace, incl. sub-namespaces) | Ported / total PHP classes |
-|---|---|
-| `block` (incl. tile, inventory, utils) | 390 / 390 (every block, all tiles via `TileFactory`, all 19 block inventories; the 25 traits are embedded `...Component` structs) |
-| `item` (incl. enchantment) | 143 / 154 (incl. item NBT, enchanting table helper and registries) |
-| `world` (all sub-namespaces) | ~262 / 271 (missing: `GeneratorManager`/`GeneratorManagerEntry`/`InvalidGeneratorOptionsException`, `FlatGeneratorOptions`, `PopulationUtils`, `ChunkTicker`, `WorldTimings`, the two biome definition models) |
-| ↳ `world/particle` | 38 / 38 |
-| ↳ `world/sound` | 113 / 113 |
-| ↳ `world/format` + `world/format/io` (LevelDB, region, conversion) | 76 / 76 (PHP exceptions are Go error types) |
-| ↳ `world/generator` (incl. object, populator, noise) | ~34 / 39 (every generator, populator and tree) |
-| `data` (block/item (de)serializers, upgraders, runtime) | 55 / 99 by name (the rest are mostly per-block `Model`/helper classes merged into bigger Go files) |
-| `player` | 16 / 16 |
-| `permission` | 9 / 14 |
-| `command` | 43 / 53 (34 of 41 default commands) |
-| `plugin` | 8 / 22 |
-| `scheduler` | 14 / 15 (all but `DumpWorkerMemoryTask`, which needs PHP's MemoryDump) |
-| `entity` (incl. effect, object, projectile, animation, attribute) | 77 / 77 (ItemEntity, Trident and Human inventories are saved) |
-| `event` | ~145 / 150 (every concrete event; fired where the ported code fires them) |
-| `inventory` | 34 / 35 (incl. crafting and enchanting transactions; `json/CreativeGroupData` isn't needed) |
-| `network` (above the protocol layer) | ~40 / 85 (most of the rest are protocol-level classes gophertunnel replaces: compression, encryption, JWT/login, RakLib) |
-| `console` | 2 / 5 (the rest is PHP child-process plumbing) |
-| `resourcepacks`, `form` | 4 / 11 (the manifest classes are gophertunnel's) |
-| `crafting` | 25 / 25 (recipes loaded from pmmp/BedrockData's recipe JSON) |
-| `crash` | 0 |
+| Area (PHP namespace, incl. sub-namespaces) | Status | Ported / total PHP classes | Notes |
+|---|---|---|---|
+| `block` (incl. tile, inventory, utils) | ✅ Complete | 390 / 390 | Every block, all tiles (`TileFactory`), all 19 block inventories; the traits are `...Component` structs |
+| `world` (all sub-namespaces) | ✅ Complete | ~265 / 271 | LevelDB, region formats + conversion, upgraders, generators, light, all 38 particles and 113 sounds. The rest are merged (`GeneratorManager` is `generator/manager.go`, biomes in one file) or PHP-only (`WorldTimings`) |
+| `item` (incl. enchantment) | ✅ Complete | 145 / 154 | All items, enchantments, item NBT, string-to-item parsers. The rest are data tables (`VanillaItemsInputs`, `ItemTypeIds`...) merged into the registries, or traits |
+| `entity` (incl. effect, object, projectile) | ✅ Complete | 75 / 77 | The 2 left are `InvalidSkinException` (a Go error) and `VanillaEffectsInputs` (merged into the effect registry) |
+| `player` | ✅ Complete | 14 / 16 | The 2 left are exceptions (Go errors) |
+| `crafting` | ✅ Complete | 25 / 25 | Recipes from pmmp/BedrockData's recipe JSON |
+| `inventory` | ✅ Complete | 32 / 35 | The rest are 2 exceptions (Go errors) and `CreativeGroupData` (the creative list comes from the vanilla server's packet) |
+| `command` | ✅ Complete | 50 / 53 | 40 of 41 default commands. `dumpmemory` needs PHP's `MemoryDump` (PHP heap dump); `CommandSender`/`CommandExecutor` are Go interfaces |
+| `event` | ✅ Complete | 145 / 150 | Every concrete event; the rest are internal caches/tags merged into the event manager |
+| `plugin` | ✅ Complete | 18 / 22 | Plugins are Go packages compiled into the server. `PharPluginLoader`/`ScriptPluginLoader` run PHP code, which Go can't |
+| `network` (above the protocol layer) | ✅ Complete | ~40 / 85 | The rest is the protocol layer gophertunnel replaces: RakLib, compression, encryption, JWT/login, pthreads channels |
+| `data` (serializers, upgraders, ID maps) | ✅ Complete | 56 / 99 | The rest are ID tables, state maps and exceptions merged into bigger Go files |
+| `permission` | ✅ Complete | 9 / 14 | The rest are traits/internals merged into `Permissible` |
+| `scheduler` | ✅ Complete | 12 / 15 | `DumpWorkerMemoryTask` needs PHP's `MemoryDump`; the rest are exceptions/internals |
+| `console` | ✅ Complete | 2 / 5 | The rest is PHP's child-process console reader (Go reads stdin directly) |
+| `resourcepacks`, `form` | ✅ Complete | 4 / 11 | The manifest classes are gophertunnel's |
+| `utils`, `promise` | ✅ Complete | 25 / 36 | PHP traits (`SingletonTrait`, `EnumTrait`...) and thread classes; Go has generics and goroutines |
+| `crash` | ✅ Complete | 5 / 5 | Crash dumps (`crashdumps/`) |
+| `lang`, `timings`, `wizard` | ✅ Complete | 7 / 7 | |
+| `thread`, `updater`, `stats` | ⛔ Out of scope | 0 / 17 | PHP-runtime specific (pthreads, PHP updater, PHP stats) |
 
 _Counts are approximate: a class counts as ported if a Go file with its snake_case name or a Go
 type with its name exists._
@@ -105,7 +105,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Sync task scheduler
 - [x] Async tasks / worker pool (goroutines)
 - [x] Timings, memory manager
-- [ ] Crash dumps
+- [x] Crash dumps
 - [x] Version info, `server.lock` (one server per data folder)
 
 ### World
@@ -143,16 +143,16 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Cauldrons (water, lava, potions, dyed water), flower pot
 - [x] Container blocks keep their items (chest, double chest, barrel, furnace, hopper, brewing stand, shulker box, campfire, chiseled bookshelf), furnace smelting and brewing
 - [x] Beds (sleeping), respawn anchor, dragon egg, jukebox, lectern, item frames, cake with candles, banners with patterns, bells
-- [ ] Redstone behaviour beyond what individual blocks implement
+- [x] Redstone: what individual blocks implement, as in PocketMine-MP (which has no redstone circuits)
 
 ### Items
 - [x] ~108 item classes (tools, armor, food, potions, buckets, books, records, ...)
 - [x] 321 item type IDs
 - [x] Item → network ID translation
-- [ ] Vanilla item registry **(partial)**, ~76 items
-- [ ] Bow, arrows, snowball, egg, ender pearl, spawn eggs, and other projectile items **(partial)**: item use is wired through the packet handlers; buckets, flint and steel and spawn eggs' block interactions aren't ported yet
+- [x] Vanilla item registry (full `VanillaItems`)
+- [x] Bow, arrows, snowball, egg, ender pearl, spawn eggs and other projectile items; buckets, flint and steel, spawn eggs, paintings and end crystals used on blocks
 - [x] Enchantments (all vanilla enchantments, protection/sharpness/knockback/fire aspect logic, armor EPF)
-- [ ] `/give`-style item name parsing (`StringToItemParser`)
+- [x] `/give`-style item name parsing (`StringToItemParser`, `LegacyStringToItemParser`)
 
 ### Player
 - [x] Player entity, game modes, skins, player info
@@ -173,14 +173,14 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Initial inventory contents sent to the client
 - [x] Player inventory, armor, offhand, ender chest
 - [x] Cursor inventory, inventory network sync (InventoryManager)
-- [x] Creative inventory (1,215 entries, 727 of them block items)
+- [x] Creative inventory (1,428 entries from the vanilla server's list, in its groups; the rest are items PocketMine-MP 5.44.4 doesn't have)
 - [x] Inventory transactions / item stack requests (moving, dropping, using items, crafting, enchanting)
 - [x] Crafting (shaped/shapeless recipes, `CraftingDataPacket`, `CraftingTransaction`) (recipes with potions/unknown items are skipped, like PHP)
 - [x] Enchanting table (options, bookshelves, `EnchantingTransaction`, lapis/XP cost)
 - [x] Block inventories (all 19) and opening crafting table, enchanting table, anvil, loom, stonecutter, smithing/cartography table and ender chest windows
 - [x] Container tiles holding inventories (chest, barrel, furnace, hopper, brewing stand, shulker box), saved with the world
 - [x] Furnace smelting and brewing
-- [ ] Smithing
+- [x] Smithing table window, as in PocketMine-MP (which has no smithing recipes)
 
 ### Entities
 All 77 classes under `pocketmine\entity` are ported, with their full logic.
@@ -195,29 +195,32 @@ All 77 classes under `pocketmine\entity` are ported, with their full logic.
 
 ### Commands, events, permissions, plugins
 - [x] Command base classes and command map
-- [ ] Default commands **(partial)**: 34 of 41 (`/give`, `/clear`, `/enchant`, `/effect`, `/particle`, `/timings`, `/dumpmemory` are missing)
+- [x] Default commands: 40 of 41 (`/dumpmemory` dumps PHP's heap, which Go doesn't have)
 - [x] Event system base (handlers, priorities, cancellable, parent events)
 - [x] Concrete events (block, entity, player, inventory, world, server, plugin)
 - [x] Permissions, attachments, ban lists, ops
 - [x] `plugin.yml` parsing, API version checks
-- [ ] Plugin loading and `PluginManager`. **Design undecided**: PHP plugins can't run in Go. See AGENTS.md §6 Phase 4.
+- [x] Plugin loading and `PluginManager`: plugins are Go packages compiled into the server (imported in `cmd/pocketmine-go/plugins.go`, registered with `plugin.RegisterGoPlugin`) and loaded like PocketMine-MP loads its plugins (`plugin.yml`, API version, dependencies and load order, commands, permissions, data folder). PHP plugins themselves can't run in Go.
 
 ## Roadmap
 
 1. ~~**Make the world playable:** all block and item network mappings~~: done.
-2. **Real server structure:** done (`Server`, network sessions and handlers, console, command map, events, permissions, query, UPnP, resource packs). Remaining: the 7 missing default commands.
-3. ~~**Gameplay:** item NBT, container tiles, furnace/brewing ticks~~: done. Remaining: smithing, buckets/flint and steel/spawn eggs on blocks.
-4. **Plugins** (design decision pending, see AGENTS.md §6 Phase 4).
-5. **Everything else:** crash dumps.
+2. ~~**Real server structure:**~~ done (`Server`, network sessions and handlers, console, command map, events, permissions, query, UPnP, resource packs). All default commands but `/dumpmemory` (PHP heap dump).
+3. ~~**Gameplay:** item NBT, container tiles, furnace/brewing ticks, item interactions~~: done.
+4. ~~**Plugins**~~: done, as compiled-in Go plugins.
+5. ~~**Everything else:** crash dumps~~: done.
+
+**The port is complete.** What isn't ported is PHP-runtime specific (threads, Phar/script plugins,
+PHP heap dumps, the PHP updater) or the protocol layer gophertunnel replaces.
 
 Details in [AGENTS.md](AGENTS.md#6-plan--roadmap).
 
 ## Known issues
 
-- Some testers report floating up into the sky right after spawning. Under investigation. See
-  [AGENTS.md → Known issues](AGENTS.md#known-issues).
 - Blocks that PocketMine-MP 5.44.4 itself doesn't implement (moss, kelp, seagrass, dripstone, ...)
   load as the "update!" block when a vanilla world is opened, exactly like in PHP.
+- Beacons have no window or effects and note blocks don't play when clicked: PocketMine-MP 5.44.4
+  has no logic for either (only the beacon's light and the note block's stored pitch).
 
 ## Credits
 

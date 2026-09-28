@@ -1,8 +1,6 @@
 package item
 
-// EndCrystal is a port of pocketmine\item\EndCrystal. Not ported: onInteractBlock (placing an
-// EndCrystal entity on obsidian/bedrock) - it needs the Player item-use flow (see the Item
-// interface's doc comment).
+// EndCrystal is a port of pocketmine\item\EndCrystal.
 type EndCrystal struct {
 	ItemBase
 }

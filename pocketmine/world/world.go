@@ -957,13 +957,11 @@ func (w *World) IsInWorld(x, y, z int) bool {
 		z >= int32Min && z <= int32Max
 }
 
-// UseBreakOn is the simplified (no item/player/particles/drops) form of World::useBreakOn that
-// block.World documents as the only form the block package itself needs - replaces the block with
-// air and reports success unconditionally, matching the existing test doubles' behaviour
-// throughout the block package's own test suite.
+// UseBreakOn is World::useBreakOn($vector) with its defaults (no item, no player, no particles):
+// what blocks call when they break themselves (lost support, ...). It drops the block's drops and
+// runs Block::onBreak and the tile's onBlockDestroyed, like any other break.
 func (w *World) UseBreakOn(pos math.Vector3) bool {
-	_ = w.SetBlock(block.NewPosition(pos.X, pos.Y, pos.Z, w), block.VanillaAir())
-	return true
+	return w.UseBreakOnWith(pos, nil, nil, false, nil)
 }
 
 // fullCubeChecker is the local surface GetSafeSpawn's flatness checks need - IsFullCube is

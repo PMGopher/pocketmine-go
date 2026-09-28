@@ -43,6 +43,11 @@ func (t *Thin) Clone() Behavior {
 	return &c
 }
 
+// GetConnections is the sides the pane or bars connect to, as worked out by ReadStateFromWorld
+// (PHP's protected $connections). The 1.26.50 network state needs them (see
+// convert.BlockTranslator).
+func (t *Thin) GetConnections() map[math.Facing]bool { return t.Connections }
+
 func (t *Thin) ReadStateFromWorld() Behavior {
 	t.Block.ReadStateFromWorld()
 

@@ -35,6 +35,10 @@ func (b *Bed) Clone() Behavior {
 	return &c
 }
 
+// DescribeBlockItemState is ColoredTrait::describeBlockItemState: the colour is part of the bed's
+// item (the item meta), so beds of every colour are different items.
+func (b *Bed) DescribeBlockItemState(w runtime.DataDescriber) { b.DescribeColor(w) }
+
 func (b *Bed) DescribeBlockOnlyState(w runtime.DataDescriber) {
 	b.DescribeHorizontalFacing(w)
 	w.Bool(&b.Occupied)

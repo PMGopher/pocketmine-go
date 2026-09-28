@@ -10,14 +10,27 @@ import (
 	"pocketmine-go/pocketmine/nbt"
 )
 
-// ItemIdentifier is a port of pocketmine\item\ItemIdentifier. The PHP FromBlock() named
-// constructor (needing ItemTypeIds::fromBlockTypeId, a registry lookup) isn't ported - nothing
-// constructs an ItemIdentifier from a block yet.
+// ItemIdentifier is a port of pocketmine\item\ItemIdentifier.
 type ItemIdentifier struct {
 	TypeId int
 }
 
 func NewItemIdentifier(typeId int) ItemIdentifier { return ItemIdentifier{TypeId: typeId} }
+
+// ItemTypeIDFromBlockTypeID is a port of ItemTypeIds::fromBlockTypeId: a block item's type ID is
+// the negated block type ID.
+func ItemTypeIDFromBlockTypeID(blockTypeID int) int {
+	if blockTypeID < 0 {
+		panic("Block type IDs cannot be negative")
+	}
+	//negative item type IDs are treated as block IDs
+	return -blockTypeID
+}
+
+// NewItemIdentifierFromBlock is a port of ItemIdentifier::fromBlock.
+func NewItemIdentifierFromBlock(blockTypeID int) ItemIdentifier {
+	return NewItemIdentifier(ItemTypeIDFromBlockTypeID(blockTypeID))
+}
 
 // ItemUseResult is a port of pocketmine\item\ItemUseResult.
 type ItemUseResult int

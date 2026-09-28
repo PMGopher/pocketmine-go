@@ -1,7 +1,6 @@
 package item
 
-// RabbitStew is a port of pocketmine\item\RabbitStew. GetResidue (should return
-// VanillaItems.BOWL()) isn't ported - see Food's doc comment for why.
+// RabbitStew is a port of pocketmine\item\RabbitStew (its use is in item_use.go).
 type RabbitStew struct {
 	Food
 }

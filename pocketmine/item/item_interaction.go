@@ -13,6 +13,18 @@ type Player = block.Player
 // Entity is what the item interaction methods receive for pocketmine\entity\Entity.
 type Entity = block.Entity
 
+// EntityWorldFunc is $entity->getWorld() for the item interaction methods (PHP's
+// `$player->getWorld()`). It's set by the entity package, since this package can't import world.
+var EntityWorldFunc func(e Entity) block.World
+
+// entityWorld is $entity->getWorld(); nil if the hook isn't installed.
+func entityWorld(e Entity) block.World {
+	if EntityWorldFunc == nil {
+		return nil
+	}
+	return EntityWorldFunc(e)
+}
+
 // interactions is the part of the Item interface for Player/Entity interactions (see Item).
 type interactions interface {
 	// GetBlock is a port of Item::getBlock: the block corresponding to this item (air for

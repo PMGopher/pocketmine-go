@@ -29,11 +29,14 @@ var entityIdentifiersData []byte
 //go:embed assets/biome_definitions.bin
 var biomeDefinitionsData []byte
 
-// creativeContentData is an encoded CreativeContent packet payload for Bedrock 1.26.50, the source
-// of the vanilla creative items (convert's CreativeInventory loader). PHP loads them from
-// BedrockData's creative files, which have no 1.26.50 release yet, so this is the packet Dragonfly
-// sends (MIT, see assets/LICENSE-dragonfly), captured from the wire. It uses the item network IDs
-// of required_item_list.json, which comes from the same source.
+// creativeContentData is an encoded CreativeContent packet payload, the source of the vanilla
+// creative items (convert's CreativeInventory loader). PHP loads them from BedrockData's creative
+// files, which are extracted from the vanilla server and have no 1.26.50 release yet, so this is
+// the packet the vanilla server (BDS 1.26.52, block-network-ids-are-hashes=false) sends, captured
+// with a gophertunnel client: 1,980 entries in 124 groups. Its item runtime IDs are identical to
+// required_item_list.json (all 2,076) and every block item's block runtime ID names the right block
+// in canonical_block_states.nbt. It replaced Dragonfly's packet, which only lists the ~1,500 items
+// Dragonfly implements (no flower pot, cauldron, ...).
 //
 //go:embed assets/creative_content.bin
 var creativeContentData []byte

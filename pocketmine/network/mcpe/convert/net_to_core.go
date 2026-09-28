@@ -3,6 +3,7 @@ package convert
 import (
 	"fmt"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
+	"reflect"
 
 	"pocketmine-go/pocketmine/item"
 	"pocketmine-go/pocketmine/nbt"
@@ -91,6 +92,20 @@ func anyToNbt(value any) nbt.Tag {
 			tags = append(tags, MapToNbt(child))
 		}
 		return newListTag(tags)
+	}
+	// gophertunnel decodes TAG_Byte_Array and TAG_Int_Array into fixed-size arrays ([N]byte,
+	// [N]int32) when the target is map[string]any; dropping them lost e.g. firework colours.
+	if rv := reflect.ValueOf(value); rv.Kind() == reflect.Array {
+		switch rv.Type().Elem().Kind() {
+		case reflect.Uint8:
+			b := make([]byte, rv.Len())
+			reflect.Copy(reflect.ValueOf(b), rv)
+			return nbt.ByteArrayTag(b)
+		case reflect.Int32:
+			ints := make([]int32, rv.Len())
+			reflect.Copy(reflect.ValueOf(ints), rv)
+			return nbt.IntArrayTag(ints)
+		}
 	}
 	return nil
 }

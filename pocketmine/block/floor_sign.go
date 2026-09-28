@@ -16,6 +16,8 @@ func NewFloorSign(idInfo *BlockIdentifier, name string, typeInfo *BlockTypeInfo,
 	f := &FloorSign{BaseSign: BaseSign{
 		Transparent:       Transparent{NewBlock(idInfo, name, typeInfo)},
 		WoodTypeComponent: NewWoodTypeComponent(woodType),
+		Text:              blockutils.NewSignText(nil, nil, false), // new SignText()
+		BackText:          blockutils.NewSignText(nil, nil, false),
 	}}
 	f.Init(f)
 	return f

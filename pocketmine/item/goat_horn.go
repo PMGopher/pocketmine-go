@@ -1,14 +1,14 @@
 package item
 
 import (
-	runtime "pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/data/runtime"
+	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/world/sound"
 )
 
 const itemCooldownTagGoatHorn = "goat_horn"
 
-// GoatHorn is a port of pocketmine\item\GoatHorn. OnClickAir (playing the horn sound) and
-// CanStartUsingItem need a real Player/World - see the Item interface's doc comment on
-// Player/Entity-interaction methods.
+// GoatHorn is a port of pocketmine\item\GoatHorn.
 type GoatHorn struct {
 	ItemBase
 
@@ -41,4 +41,12 @@ func (g *GoatHorn) describeState(w runtime.DataDescriber) {
 	t := int(g.HornType)
 	w.BoundedIntAuto(int(GoatHornTypePonder), int(GoatHornTypeDream), &t)
 	g.HornType = GoatHornType(t)
+}
+
+// OnClickAir is a port of GoatHorn::onClickAir: the horn's sound is played where the player is.
+func (g *GoatHorn) OnClickAir(player Player, directionVector math.Vector3, returnedItems *[]Item) ItemUseResult {
+	if world := entityWorld(player); world != nil {
+		world.AddSound(player.GetPosition(), sound.GoatHornSound{HornType: int(g.HornType)})
+	}
+	return ItemUseResultSuccess
 }

@@ -1,9 +1,9 @@
 package item
 
+import "pocketmine-go/pocketmine/block"
+
 // StringItem is a port of pocketmine\item\StringItem (named to avoid colliding with Go's string
-// type). GetBlock (should return VanillaBlocks.TRIPWIRE()) isn't ported - GetBlock isn't part of
-// the Item interface here at all yet (see the Item interface's doc comment), and needs the
-// unported block registry regardless.
+// type).
 type StringItem struct {
 	ItemBase
 }
@@ -19,3 +19,6 @@ func (s *StringItem) Clone() Item {
 	c.rebind(&c)
 	return &c
 }
+
+// GetBlock is a port of StringItem::getBlock.
+func (x *StringItem) GetBlock() block.Behavior { return block.VanillaBlock("tripwire") }

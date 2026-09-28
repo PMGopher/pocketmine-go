@@ -4,8 +4,7 @@ import (
 	"pocketmine-go/pocketmine/entity/effect"
 )
 
-// HoneyBottle is a port of pocketmine\item\HoneyBottle. GetResidue (VanillaItems.GLASS_BOTTLE())
-// isn't ported - see Food's doc comment.
+// HoneyBottle is a port of pocketmine\item\HoneyBottle (its use is in item_use.go).
 type HoneyBottle struct {
 	Food
 }

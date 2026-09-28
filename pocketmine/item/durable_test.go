@@ -1,6 +1,7 @@
 package item
 
 import (
+	"pocketmine-go/pocketmine/item/enchantment"
 	"testing"
 
 	"pocketmine-go/pocketmine/block"
@@ -124,5 +125,23 @@ func TestToolGetMiningEfficiency(t *testing.T) {
 	}
 	if eff := f.GetMiningEfficiency(false); eff != 1 {
 		t.Errorf("GetMiningEfficiency(false) = %v, want 1", eff)
+	}
+}
+
+// TestToolEfficiencyEnchantment checks Tool::getMiningEfficiency's Efficiency bonus (level^2 + 1).
+func TestToolEfficiencyEnchantment(t *testing.T) {
+	pickaxe := VanillaItem("diamond_pickaxe")
+	base := pickaxe.GetMiningEfficiency(true)
+	pickaxe.AddEnchantment(enchantment.NewEnchantmentInstance(enchantment.VanillaEfficiency(), 3))
+	if got := pickaxe.GetMiningEfficiency(true); got != base+10 {
+		t.Errorf("Efficiency III pickaxe = %v, want %v + 10", got, base)
+	}
+	if got := pickaxe.GetMiningEfficiency(false); got != 1 {
+		t.Errorf("wrong tool = %v, want 1", got)
+	}
+	sword := VanillaItem("diamond_sword")
+	sword.AddEnchantment(enchantment.NewEnchantmentInstance(enchantment.VanillaEfficiency(), 1))
+	if got := sword.GetMiningEfficiency(true); got != (10+2)*1.5 {
+		t.Errorf("Efficiency I sword = %v, want %v", got, (10+2)*1.5)
 	}
 }

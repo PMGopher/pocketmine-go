@@ -534,15 +534,27 @@ type RecordSound struct {
 	RecordType blockutils.RecordType
 }
 
+// Encode sends the record as a named PlaySound ("record.13", volume and pitch 1), like the vanilla
+// server (BDS 1.26.52, captured) does, instead of PHP's LevelSoundEvent RECORD_*: the 1.26 client
+// ties a PlaySound record to the jukebox and stops it itself when the jukebox loses its record or is
+// broken, while a LevelSoundEvent record kept playing (ejecting didn't stop it, a second disc played
+// over the first one, breaking the jukebox didn't stop it).
 func (s RecordSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
-	return nonActorSound(recordSoundTypes[s.RecordType], pos, false, -1)
+	return []packet.Packet{&packet.PlaySound{SoundName: recordSoundTypes[s.RecordType], Position: vec3(pos), Volume: 1, Pitch: 1}}
 }
 
-// RecordStopSound is a port of pocketmine\world\sound\RecordStopSound.
-type RecordStopSound struct{}
+// RecordStopSound is a port of pocketmine\world\sound\RecordStopSound. RecordType, when set, also
+// stops that record's named sound (see RecordSound.Encode), which is what the client plays now.
+type RecordStopSound struct {
+	RecordType *blockutils.RecordType
+}
 
-func (RecordStopSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
-	return nonActorSound(packet.SoundEventRecordNull, pos, false, -1)
+func (s RecordStopSound) Encode(pos math.Vector3, _ blockNetworkTranslator) []packet.Packet {
+	pks := nonActorSound(packet.SoundEventRecordNull, pos, false, -1)
+	if s.RecordType != nil {
+		pks = append(pks, &packet.StopSound{SoundName: recordSoundTypes[*s.RecordType]})
+	}
+	return pks
 }
 
 // FizzSound is a port of pocketmine\world\sound\FizzSound.

@@ -16,6 +16,8 @@ func NewCeilingCenterHangingSign(idInfo *BlockIdentifier, name string, typeInfo 
 	c := &CeilingCenterHangingSign{BaseSign: BaseSign{
 		Transparent:       Transparent{NewBlock(idInfo, name, typeInfo)},
 		WoodTypeComponent: NewWoodTypeComponent(woodType),
+		Text:              blockutils.NewSignText(nil, nil, false), // new SignText()
+		BackText:          blockutils.NewSignText(nil, nil, false),
 	}}
 	c.Init(c)
 	return c

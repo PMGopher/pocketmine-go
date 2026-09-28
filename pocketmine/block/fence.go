@@ -42,6 +42,10 @@ func (f *Fence) Clone() Behavior {
 
 func (f *Fence) GetThickness() float64 { return 0.25 }
 
+// GetConnections is the sides the fence connects to, as worked out by ReadStateFromWorld (PHP's
+// protected $connections). The 1.26.50 network state needs them (see convert.BlockTranslator).
+func (f *Fence) GetConnections() map[math.Facing]bool { return f.Connections }
+
 func (f *Fence) ReadStateFromWorld() Behavior {
 	f.Block.ReadStateFromWorld()
 

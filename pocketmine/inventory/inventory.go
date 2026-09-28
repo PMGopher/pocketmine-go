@@ -28,9 +28,9 @@ type InventoryListener interface {
 // their own storage is ready, and implement the handful of methods BaseInventory has no sensible
 // default for (GetSize/GetItem/InternalSetItem/InternalSetContents/GetContents).
 //
-// getViewers/onOpen/onClose keep working (just identity tracking), but
-// onSlotChange/onContentChange's network-sync calls to viewer.getNetworkSession().getInvManager()
-// aren't ported (needs the unported network/player packages) - listeners still fire correctly.
+// onSlotChange/onContentChange's network sync (viewer.getNetworkSession().getInvManager()) reaches
+// the client through the InventoryManager's inventory listeners, which it registers on every
+// inventory it tracks (this package can't import network/player).
 type Inventory interface {
 	GetSize() int
 	GetMaxStackSize() int
@@ -96,24 +96,8 @@ func (b *BaseInventory) Init(self inventoryStorage) {
 // validators inventory transactions consult before placing an item in a slot.
 func (b *BaseInventory) GetSlotValidators() *utils.ObjectSet[SlotValidator] { return b.validators }
 
-// newEmptyItem returns a fresh always-empty Item, standing in for the PHP original's
-// VanillaItems::AIR() sentinel (the item registry isn't ported, so a real Air item can't be
-// constructed) - every place PHP returns/compares against Air uses this instead. Count is forced
-// to 0 so IsNull() is true and Equals() against anything real is false, matching Air's role.
-func newEmptyItem() item.Item {
-	e := &emptyItem{}
-	e.Init(e, item.NewItemIdentifier(0), "Air")
-	e.SetCount(0)
-	return e
-}
-
-type emptyItem struct {
-	item.ItemBase
-}
-
-// Clone returns a fresh empty item rather than copying self - emptyItem carries no state beyond
-// being empty, so there's nothing to preserve across the clone.
-func (e *emptyItem) Clone() item.Item { return newEmptyItem() }
+// newEmptyItem is VanillaItems::AIR(), what PHP stores in and returns for an empty slot.
+func newEmptyItem() item.Item { return item.VanillaAir() }
 
 func (b *BaseInventory) GetMaxStackSize() int { return b.maxStackSize }
 

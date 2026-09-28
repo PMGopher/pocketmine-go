@@ -49,7 +49,7 @@ func (d *Door) ReadStateFromWorld() Behavior {
 	if d.Top {
 		otherSide = math.Down
 	}
-	if other, ok := d.GetSide(otherSide, 1).(*Door); ok && other.HasSameTypeId(d.self) {
+	if other, ok := asDoor(d.GetSide(otherSide, 1)); ok && other.HasSameTypeId(d.self) {
 		if d.Top {
 			d.Facing = other.Facing
 			d.Open = other.Open
@@ -94,7 +94,7 @@ func (d *Door) canBeSupportedAt(blk Behavior) bool {
 }
 
 func (d *Door) OnNearbyBlockChange() {
-	_, downIsDoor := d.GetSide(math.Down, 1).(*Door)
+	_, downIsDoor := asDoor(d.GetSide(math.Down, 1))
 	if !d.canBeSupportedAt(d.self) && !downIsDoor {
 		if world, err := d.position.GetWorld(); err == nil {
 			world.UseBreakOn(d.position.AsVector3()) // this will delete both halves if they exist
@@ -124,8 +124,8 @@ func (d *Door) Place(tx BlockTransaction, item Item, blockReplace Behavior, bloc
 		d.HingeRight = true
 	}
 
-	topHalf := d.Clone().(*Door)
-	topHalf.Top = true
+	topHalf := d.self.Clone()
+	topHalf.(doorBaser).doorBase().Top = true
 
 	tx.AddBlock(blockReplace.GetPosition(), d.self)
 	tx.AddBlock(blockUp.GetPosition(), topHalf)
@@ -144,9 +144,9 @@ func (d *Door) OnInteract(item Item, face math.Facing, clickVector math.Vector3,
 	if err != nil {
 		panic(err)
 	}
-	if other, ok := d.GetSide(otherSide, 1).(*Door); ok && other.HasSameTypeId(d.self) {
+	if other, ok := asDoor(d.GetSide(otherSide, 1)); ok && other.HasSameTypeId(d.self) {
 		other.Open = d.Open
-		if err := world.SetBlock(other.GetPosition(), other); err != nil {
+		if err := world.SetBlock(other.GetPosition(), other.self); err != nil {
 			panic(err)
 		}
 	}
@@ -176,4 +176,17 @@ func (d *Door) GetAffectedBlocks() []Behavior {
 		return []Behavior{d.self, other}
 	}
 	return d.Block.GetAffectedBlocks()
+}
+
+// doorBaser is `instanceof Door`: every Door subtype embeds Door.
+type doorBaser interface{ doorBase() *Door }
+
+func (d *Door) doorBase() *Door { return d }
+
+// asDoor is `$b instanceof Door ? $b : null`.
+func asDoor(b Behavior) (*Door, bool) {
+	if baser, ok := b.(doorBaser); ok {
+		return baser.doorBase(), true
+	}
+	return nil, false
 }

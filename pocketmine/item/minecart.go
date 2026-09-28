@@ -1,8 +1,7 @@
 package item
 
-// Minecart is a port of pocketmine\item\Minecart. Placing/spawning the minecart entity (marked
-// //TODO even in the PHP original) needs the unported entity package, so only MaxStackSize is
-// ported here.
+// Minecart is a port of pocketmine\item\Minecart. Placing the minecart entity is //TODO in PHP too, so
+// only the stack size is ported.
 type Minecart struct {
 	ItemBase
 }

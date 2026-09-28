@@ -5,8 +5,7 @@ import (
 	"pocketmine-go/pocketmine/entity/effect"
 )
 
-// Medicine is a port of pocketmine\item\Medicine. GetResidue (VanillaItems.GLASS_BOTTLE()) and
-// CanStartUsingItem (needs a real Player) aren't ported - see the Item interface's doc comment.
+// Medicine is a port of pocketmine\item\Medicine (its use is in item_use.go).
 type Medicine struct {
 	ItemBase
 

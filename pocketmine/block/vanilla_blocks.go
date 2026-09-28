@@ -1035,8 +1035,8 @@ func (r *vanillaBlocksRegistry) registerWoodenBlocks() {
 			return NewWoodenTrapdoor(id, name+" Trapdoor", woodenDoorBreakInfo, woodType)
 		})
 
-		// The sign item callbacks (getSignItemCallback/getHangingSignItemCallback) aren't passed: the Go
-		// sign constructors don't take them (sign items aren't ported yet).
+		// The sign item callbacks (getSignItemCallback/getHangingSignItemCallback) aren't passed:
+		// BaseSign.AsItem looks the wood type's sign item up itself.
 		r.registerDelayed(idName("sign"), func(id *BlockIdentifier) Behavior { return NewFloorSign(id, name+" Sign", signBreakInfo, woodType) }, tileSign)
 		r.registerDelayed(idName("wall_sign"), func(id *BlockIdentifier) Behavior { return NewWallSign(id, name+" Wall Sign", signBreakInfo, woodType) }, tileSign)
 

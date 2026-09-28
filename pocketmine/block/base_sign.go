@@ -3,6 +3,7 @@ package block
 import (
 	"fmt"
 	stdmath "math"
+	"pocketmine-go/pocketmine/color"
 	"pocketmine-go/pocketmine/event"
 	blockevent "pocketmine-go/pocketmine/event/block"
 	"pocketmine-go/pocketmine/utils"
@@ -13,8 +14,8 @@ import (
 	"pocketmine-go/pocketmine/world/sound"
 )
 
-// itemTypeIDsBoneMeal etc. mirror item.* constants (pocketmine-go/pocketmine/item, not yet
-// ported) - same reasoning as itemTypeIDsHoneycomb in copper_material.go.
+// itemTypeIDsBoneMeal etc. mirror item.* constants: this package can't import item (item imports
+// block) - same reasoning as itemTypeIDsHoneycomb in copper_material.go.
 const (
 	itemTypeIDsBoneMeal    = 20017
 	itemTypeIDsCocoaBeans  = 20073
@@ -62,7 +63,7 @@ func (b *BaseSign) ReadStateFromWorld() Behavior {
 		return b.self
 	}
 	t, _ := world.GetTile(b.position)
-	if signTile, ok := t.(*tile.Sign); ok {
+	if signTile, ok := asSignTile(t); ok {
 		b.Text = signTile.GetText()
 		b.BackText = signTile.GetBackText()
 		b.Waxed = signTile.IsWaxed()
@@ -70,6 +71,18 @@ func (b *BaseSign) ReadStateFromWorld() Behavior {
 		b.EditorEntityRuntimeID, b.HasEditor = int(editorID), hasEditor
 	}
 	return b.self
+}
+
+// asSignTile is `$tile instanceof TileSign`: a sign or a hanging sign tile (HangingSign extends
+// Sign in PHP).
+func asSignTile(t Tile) (*tile.Sign, bool) {
+	switch st := t.(type) {
+	case *tile.Sign:
+		return st, true
+	case *tile.HangingSign:
+		return &st.Sign, true
+	}
+	return nil, false
 }
 
 func (b *BaseSign) IsSolid() bool { return false }
@@ -239,6 +252,9 @@ func (b *BaseSign) OnInteract(item Item, face math.Facing, clickVector math.Vect
 
 	if hasDyeColor {
 		rgb := dyeColor.GetRgbValue()
+		if dyeColor == blockutils.DyeColorBlack {
+			rgb = color.NewColor(0, 0, 0)
+		}
 		text := b.getFaceText(frontFace)
 		if rgb.ToARGB() != text.GetBaseColor().ToARGB() {
 			if b.doSignChange(blockutils.NewSignText(sliceOfSignTextLines(text), &rgb, text.IsGlowing()), player, item, frontFace) {
@@ -345,7 +361,7 @@ func (b *BaseSign) UpdateFaceText(author Player, authorName string, frontFace bo
 func (b *BaseSign) WriteStateToWorld() {
 	b.Block.WriteStateToWorld()
 	if t, ok := b.tileAt(); ok {
-		if signTile, ok := t.(*tile.Sign); ok {
+		if signTile, ok := asSignTile(t); ok {
 			signTile.SetText(b.Text)
 			signTile.SetBackText(b.BackText)
 			signTile.SetWaxed(b.Waxed)

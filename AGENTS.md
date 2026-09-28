@@ -53,8 +53,8 @@ go run ./cmd/pocketmine-go --debug.level=2    # debug log lines (pocketmine.yml 
   entries (sub-chunk format **version 9**). This matches the vanilla server and Dragonfly on
   1.26.50. PocketMine-MP 5.44.4 still sends full chunks with version 8 sub-chunks, but it only
   supports up to 1.26.30. A 1.26.51 client disconnected with "Block" (ClientDisconnection-90)
-  while we sent full chunks with v8 sub-chunks; the switch to Dragonfly's proven path is the fix
-  for that (not yet confirmed with a real client at the time of writing).
+  while we sent full chunks with v8 sub-chunks; the switch to Dragonfly's proven path fixed
+  that (confirmed with a real 1.26.51 Windows client).
 - Clients that enable the **client blob cache** (`ClientCacheStatus`, e.g. the Windows client) get
   their chunks through it (`network/mcpe/client_blob_cache.go`, as Dragonfly does): biomes and
   sub-chunks are sent as xxHash64 hashes and `ClientCacheBlobStatus` is answered with
@@ -190,7 +190,7 @@ be diffed mechanically (see §7).
 ## 5. Current status (summary)
 
 Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §7):
-**roughly 1,230–1,270 of 1,498 PHP classes (~82–85%)** have a Go counterpart (1,235 by exact file/type name; merged or renamed ones such as traits-as-components, biomes and tree types add ~40). Much of the rest is out of scope (threads, RakLib/protocol, updater):
+**roughly 1,260–1,300 of 1,498 PHP classes (~84–87%)** have a Go counterpart (1,260 by exact file/type name; merged or renamed ones such as traits-as-components, biomes and tree types add ~40). Much of the rest is out of scope (threads, RakLib/protocol, updater):
 
 | Area | State |
 |---|---|
@@ -202,10 +202,12 @@ Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §
 | player | **Complete** (`Player` with every PHP method that has its dependencies: chunk streaming, block interaction, item use, combat, death/respawn, forms, titles, game modes, permissions, broadcast channels, player data). |
 | event | **Every concrete event** (block, entity, player, inventory, world, server, plugin), fired where the ported code fires them. Event inheritance: `event.DeclareParent` (see `event/parents.go`). |
 | network | **Complete above the wire**, incl. `CraftingDataCache` and enchanting options: `NetworkSession`, `RakLibInterface` (on gophertunnel), `InventoryManager`, `ChunkCache`, `CreativeInventoryCache`, broadcasters, rate limiter, `PreSpawn`/`InGame`/`Death` packet handlers, `ItemStackRequestExecutor`, query, UPnP, resource packs, `DataPacket*Event`. |
-| server core | **Complete except crash dumps**: `Server` (pocketmine.yml, language, ops/whitelist/bans, broadcast channels, TPS, title tick, query regeneration, memory manager, async pool, shutdown), console reader/sender, `MainLogger` + `server.log`, `server.lock`. `/version` shows the Go version instead of PHP's (no JIT line); `/status` adds goroutines, OS threads, Go heap, RSS (`utils.ProcessRSS`) and GC count, since PHP's memory numbers don't mean the same thing for Go. |
-| command | Command map + **34 of 41 default commands** (`command/defaults`). Missing: give, clear, enchant, effect (need `StringToItemParser`/string-to-enchantment/effect parsers), particle, timings, dumpmemory. |
+| server core | **Complete**: `Server` (pocketmine.yml, language, ops/whitelist/bans, broadcast channels, TPS, title tick, query regeneration, memory manager, async pool, shutdown), console reader/sender, `MainLogger` + `server.log`, `server.lock`. `/version` shows the Go version instead of PHP's (no JIT line); `/status` adds goroutines, OS threads, Go heap, RSS (`utils.ProcessRSS`) and GC count, since PHP's memory numbers don't mean the same thing for Go. |
+| command | **Complete**: command map + 40 of 41 default commands (`command/defaults`); `dumpmemory` dumps PHP's heap (`MemoryDump`), out of scope. |
 | crafting | **All 25 `pocketmine\crafting` classes.** Recipes load from pmmp/BedrockData's JSON (`data/bedrock/assets/recipes`); recipes with an item that can't be deserialized are skipped (like PHP). `CraftingTransaction`/`EnchantingTransaction` are wired into `ItemStackRequestExecutor`. Furnace and brewing stand ticks run from their blocks' scheduled updates. |
-| not started | plugin loading, crash dumps. |
+| plugin | **18 of 22 classes**: `PluginManager`, `PluginBase`, `PluginLogger`, graylist, load triage, loadability checker and a Go plugin loader (`go_plugin_loader.go`). Plugins are Go packages compiled into the server (option (a) of Phase 4): imported in `cmd/pocketmine-go/plugins.go`, registered with `plugin.RegisterGoPlugin`, then loaded like PHP loads the plugins folder. `PharPluginLoader`/`ScriptPluginLoader` are PHP-only. |
+| crash | **Complete** (`pocketmine/crash`, wired in `server/crash_dump.go`). |
+| out of scope | `thread/`, `updater/`, `stats/`, Phar/script plugin loaders, `MemoryDump`, RakLib/protocol classes (gophertunnel). **Every other area is complete.** |
 
 ### How gophertunnel changes the login/spawn flow
 
@@ -225,28 +227,28 @@ unauthenticated and its XUID is discarded (PHP would still keep a verified XUID)
 
 ### What a player can do today
 
-Connect (online or offline mode), spawn in a generated Normal world, walk around with chunks
-streaming in, break and place blocks (those with network mappings), use items, move items in the
-inventory, open containers, use the creative inventory (items with network mappings), chat, run
+Connect (online or offline mode), spawn in a generated world or a world copied from vanilla
+Bedrock / PHP PocketMine-MP (region worlds are converted), walk around with chunks streaming in,
+break and place blocks, use items, move items in the inventory, store items in chests and other
+containers (saved with the world), smelt and brew, see signs/banners/beds/item frames as saved,
+watch water and lava flow and fire spread, grow crops and trees with bone meal, sleep in beds, use
+the creative inventory, chat, run
 commands (op/whitelist/ban/gamemode/tp/time/...), see other players, PvP, take fall damage, die and
 respawn, regenerate health from food, lose hunger. The world and players save on shutdown and on
 autosave; `stop` or Ctrl+C shuts down cleanly.
 
 ### What a player cannot do yet
 
-Use buckets, flint and steel or spawn eggs on blocks (those item interactions aren't ported); use
-smithing tables; use plugins.
+Nothing PocketMine-MP 5.44.4 supports is missing. Like PocketMine-MP, there are no redstone circuits,
+smithing recipes, beacon effects or note block sounds.
 
 ### Known issues
 
-- **Floating up / flying after spawn.** Reported by a tester (2026-09-24): right after spawning the
-  player drifted up into the sky. Commit `697dfa7` fixed a related bug (client-requested flight was
-  never denied, so the swim-up gesture enabled flying). **Probable cause found (not yet confirmed
-  in a client):** `StartGame` was sent the *feet* position and `PlayerAuthInput`'s position (the
-  client's *eye* position) was stored as the feet position, so every player was 1.62 blocks too
-  high server-side (and to other players). `PreSpawnPacketHandler` now sends `Human::getOffsetPosition` (feet +
-  1.621) in `StartGame` and subtracts 1.62 from `PlayerAuthInput`, like PHP. If the bug is still
-  seen, check `UpdateAbilities` ordering and leftover `MayFly`/`Flying` state.
+- ~~Floating up / flying after spawn~~ (fixed, confirmed by the tester): `StartGame` was sent the
+  *feet* position and `PlayerAuthInput`'s *eye* position was stored as the feet position, so
+  every player was 1.62 blocks too high server-side. `PreSpawnPacketHandler` now sends
+  `Human::getOffsetPosition` (feet + 1.621) in `StartGame` and subtracts 1.62 from
+  `PlayerAuthInput`, like PHP; commit `697dfa7` also denies client-requested flight.
 - Movement is still client-authoritative: `Player.HandleMovement` (port of
   `Player::handleMovement`) only rejects moves > 15 blocks per tick; no anti-fly.
 - Chunk generation/population is asynchronous like PHP: `World.RequestChunkPopulation` /
@@ -274,8 +276,22 @@ smithing tables; use plugins.
   `PlayerSpawnFunc`/`SetPlayerSpawnFunc`, `TreeTransactionFunc`. A test that doesn't import the
   package setting a hook sees the gap (the hook is nil) instead of a crash.
 - The creative inventory is now built from the core `CreativeInventory`
-  (`CreativeInventoryCache`, like PHP) instead of the vendored 1.26.50 packet, 1,215 entries
-  (727 block items).
+  (`CreativeInventoryCache`, like PHP). Its source (`assets/creative_content.bin`) is the
+  CreativeContent packet captured from BDS 1.26.52 (1,980 entries; 1,428 load, the rest are items
+  PocketMine-MP 5.44.4 doesn't have). It used to be Dragonfly's packet, which only lists what
+  Dragonfly implements (no flower pot, cauldron, bed, ...).
+- Beacon (no window/effects) and note block (no sound on click/hit) are as in PocketMine-MP 5.44.4,
+  which has no logic for them. The owner decided to keep them that way (2026-09-28).
+- Blocks that break themselves (lost support, ...) call `World.UseBreakOn`, which is PHP's full
+  `useBreakOn($pos)` (drops, `onBreak`, tile `onBlockDestroyed`); it used to only set air.
+- Jukebox records are sent like the vanilla server does (captured from BDS 1.26.52 with
+  `.work/jbcap`): `PlaySound "record.13"` at the block centre, not PHP's `LevelSoundEvent RECORD_*`,
+  which the 1.26 client didn't stop on eject/break. Stopping also sends `StopSound` with the name.
+- Signs: `Player.OpenSignEditor` (Player::openSignEditor) opens the editor and records the editor
+  on the sign's tile; hanging sign tiles (`tile.HangingSign`) count as sign tiles (`asSignTile`).
+  Without these, no sign could be written on.
+- Teleports (`SyncMovement` with `MoveModeTeleport`) must carry `TeleportData`: without it the
+  1.26.51 client left with "Block" after /tp, respawn and ender pearls.
 - Threading: packet handling and the tick share `Server`'s lock (`mcpe.Server` embeds
   `sync.Locker`). Code called from a packet handler or the tick already holds it; never call
   `Server.Lock` from there. `Server.Shutdown` is safe either way (the `stop` command calls it from
@@ -293,10 +309,10 @@ something a person can see working in the client.
    `VanillaBlocks`. This unblocks everything else visual.
 2. ~~**Finish `VanillaBlocks` / `VanillaItems`**~~ Done. Remaining:
    `StringToItemParser` (needed for `/give` and plugins).
-3. **Held item + hotbar**: handle `MobEquipment`, replace `bareHandItem`.
-4. **Block placing** via `InventoryTransaction` `UseItem` (click-block) → `World.UseItemOn`.
-5. **Chat broadcast** (`Text` packet → all players, with the `chat` formatters already ported).
-6. **Investigate the spawn/floating issue** above.
+3. ~~**Held item + hotbar**~~ Done (`MobEquipment`).
+4. ~~**Block placing**~~ Done (`InventoryTransaction` `UseItem` → `World.UseItemOn`).
+5. ~~**Chat broadcast**~~ Done.
+6. ~~**Spawn/floating issue**~~ Fixed (see Known issues).
 
 ### Phase 2: Real server structure
 Done: `Server` (pocketmine.yml, ops/whitelist/bans, broadcast channels, async pool, memory
@@ -317,7 +333,7 @@ upload), crash dumps.
 - ~~All trees, `TreeFactory`, async generation~~: done.
 
 ### Phase 4: Plugins
-- **Open design decision:** PHP plugins can't run in Go. Options are (a) compile-time Go plugins
+- **Decided: (a), compile-time Go plugins** (done, see §5). The options were (a) compile-time Go plugins
   registered via an interface (simplest, like Dragonfly), (b) Go's `plugin` package (`.so`, Linux
   only, fragile), (c) an embedded scripting/WASM runtime. Decide before porting `PluginManager`
   and `PluginBase`. `PluginDescription`/`ApiVersion` parsing (`plugin.yml`) is already ported and

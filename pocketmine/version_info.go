@@ -13,7 +13,7 @@ const (
 	BaseVersion        = "5.44.4"
 	IsDevelopmentBuild = true
 	BuildChannel       = "stable"
-	GithubURL          = "https://github.com/pmmp/PocketMine-MP"
+	GithubURL          = "https://github.com/PMGopher/pocketmine-go" // this port's repository, not PocketMine-MP's
 
 	// WorldDataVersion is PocketMine-MP-specific version ID for world data, used to determine
 	// what fixes need to be applied to old world data. This supplements the Minecraft vanilla

@@ -2,10 +2,7 @@ package item
 
 import "pocketmine-go/pocketmine/entity/effect"
 
-// PotionType is a port of pocketmine\item\PotionType. GetEffects (the actual potion effects)
-// isn't ported - it needs EffectInstance (entity/effect package, not ported), same gap
-// documented throughout this port wherever an EffectInstance would be constructed. Only
-// GetDisplayName is ported, since that's plain string data.
+// PotionType is a port of pocketmine\item\PotionType.
 type PotionType int
 
 const (

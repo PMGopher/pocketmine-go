@@ -50,6 +50,23 @@ func RegisterListener[E any](m *Manager, plugin PluginRef, priority Priority, ha
 	return ListenerHandle{manager: m, typ: t, id: id}
 }
 
+// RegisterListenerOfType is RegisterListener for an event type only known at runtime (eventType is
+// the event's pointer type, e.g. reflect.TypeOf((*PlayerJoinEvent)(nil))). handler receives
+// values of that type. It backs PluginManager::registerEvents, which finds handler methods by
+// reflection.
+func RegisterListenerOfType(m *Manager, eventType reflect.Type, plugin PluginRef, priority Priority, handleCancelled bool, handler func(e any)) ListenerHandle {
+	id := m.nextListenerID()
+	rl := &registeredListener{
+		id:              id,
+		handler:         handler,
+		priority:        priority,
+		plugin:          plugin,
+		handleCancelled: handleCancelled,
+	}
+	m.listFor(eventType).register(rl)
+	return ListenerHandle{manager: m, typ: eventType, id: id}
+}
+
 // Call dispatches e to every registered handler of *E on the global Manager, in priority order.
 // Equivalent to PHP's $event->call().
 func Call[E any](e *E) {

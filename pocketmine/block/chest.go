@@ -66,7 +66,7 @@ func (c *Chest) OnPostPlace() {
 	for _, clockwise := range [2]bool{false, true} {
 		side := math.RotateY(c.Facing, clockwise)
 		neighbor := c.self.(blockGeometry).GetSide(side, 1)
-		other, ok := neighbor.(*Chest)
+		other, ok := asChest(neighbor)
 		if !ok || !other.HasSameTypeId(c.self) || other.Facing != c.Facing {
 			continue
 		}
@@ -128,3 +128,16 @@ func (c *Chest) OnInteract(item Item, face math.Facing, clickVector math.Vector3
 }
 
 func (c *Chest) GetFuelTime() int { return 300 }
+
+// chestBaser is `instanceof Chest`: every Chest subtype embeds Chest.
+type chestBaser interface{ chestBase() *Chest }
+
+func (c *Chest) chestBase() *Chest { return c }
+
+// asChest is `$b instanceof Chest ? $b : null`.
+func asChest(b Behavior) (*Chest, bool) {
+	if baser, ok := b.(chestBaser); ok {
+		return baser.chestBase(), true
+	}
+	return nil, false
+}

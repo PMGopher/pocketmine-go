@@ -74,15 +74,16 @@ func (m *SimpleCommandMap) Register(fallbackPrefix string, cmd CommandLike, labe
 	return registered
 }
 
-// registerAliasLocked must be called with m.mu held.
-//
-// PHP also special-cases `$command instanceof VanillaCommand` in the isAlias branch below (the
-// defaults/ commands aren't ported yet — see the type doc comment — so there's no VanillaCommand
-// type to check against here; revisit this once they are).
+// VanillaCommandMarker is `instanceof pocketmine\command\defaults\VanillaCommand`, implemented by
+// defaults.VanillaCommand (this package can't import defaults).
+type VanillaCommandMarker interface{ IsVanillaCommand() }
+
+// registerAliasLocked is a port of SimpleCommandMap::registerAlias; it must be called with m.mu
+// held. A default command never takes a label another command already has.
 func (m *SimpleCommandMap) registerAliasLocked(cmd CommandLike, isAlias bool, fallbackPrefix string, label string) bool {
 	m.knownCommands[fallbackPrefix+":"+label] = cmd
 
-	if isAlias {
+	if _, isVanilla := cmd.(VanillaCommandMarker); isVanilla || isAlias {
 		if _, exists := m.knownCommands[label]; exists {
 			return false
 		}

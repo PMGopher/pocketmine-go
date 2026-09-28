@@ -1,5 +1,7 @@
 package item
 
+import "pocketmine-go/pocketmine/block"
+
 // GlowBerries is a port of pocketmine\item\GlowBerries.
 type GlowBerries struct {
 	Food
@@ -20,3 +22,6 @@ func (g *GlowBerries) Clone() Item {
 func (g *GlowBerries) GetFoodRestore() int { return 2 }
 
 func (g *GlowBerries) GetSaturationRestore() float64 { return 0.4 }
+
+// GetBlock is a port of GlowBerries::getBlock.
+func (x *GlowBerries) GetBlock() block.Behavior { return block.VanillaBlock("cave_vines") }

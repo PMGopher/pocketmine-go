@@ -4,9 +4,8 @@ import "sync"
 
 // Permission is a port of pocketmine\permission\Permission.
 //
-// Description holds either a plain string or (once the lang package is ported) a
-// *lang.Translatable — modeled as `any` for now rather than taking a hard dependency on an
-// unported package. Most callers just pass a string.
+// Description holds a plain string or a *lang.Translatable (PHP's Translatable|string), hence
+// `any`. Most callers just pass a string.
 type Permission struct {
 	mu          sync.Mutex
 	name        string

@@ -1,7 +1,8 @@
 package item
 
-// Potato is a port of pocketmine\item\Potato. GetBlock (should return VanillaBlocks.POTATOES())
-// isn't ported - see StringItem's doc comment for why.
+import "pocketmine-go/pocketmine/block"
+
+// Potato is a port of pocketmine\item\Potato.
 type Potato struct {
 	Food
 }
@@ -21,3 +22,6 @@ func (p *Potato) Clone() Item {
 func (p *Potato) GetFoodRestore() int { return 1 }
 
 func (p *Potato) GetSaturationRestore() float64 { return 0.6 }
+
+// GetBlock is a port of Potato::getBlock.
+func (x *Potato) GetBlock() block.Behavior { return block.VanillaBlock("potatoes") }

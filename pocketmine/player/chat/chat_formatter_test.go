@@ -12,8 +12,8 @@ func TestStandardChatFormatterReturnsATranslatableWithUsernameAndMessage(t *test
 	if !ok {
 		t.Fatalf("Format() returned %T, want *lang.Translatable", got)
 	}
-	if tr.Text() != chatTypeTextKey {
-		t.Errorf("Text() = %q, want %q", tr.Text(), chatTypeTextKey)
+	if tr.Text() != lang.KeyChatTypeText {
+		t.Errorf("Text() = %q, want %q", tr.Text(), lang.KeyChatTypeText)
 	}
 	if tr.Parameter(0) != "Steve" || tr.Parameter(1) != "hello" {
 		t.Errorf("Parameters() = %v, want [Steve hello]", tr.Parameters())

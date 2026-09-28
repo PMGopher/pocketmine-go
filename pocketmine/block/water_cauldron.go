@@ -2,9 +2,11 @@ package block
 
 import (
 	"pocketmine-go/pocketmine/block/tile"
+	blockutils "pocketmine-go/pocketmine/block/utils"
 	"pocketmine-go/pocketmine/color"
 	entityevent "pocketmine-go/pocketmine/event/entity"
 	"pocketmine-go/pocketmine/math"
+	"pocketmine-go/pocketmine/nbt"
 	"pocketmine-go/pocketmine/world/sound"
 )
 
@@ -19,10 +21,6 @@ const (
 )
 
 // WaterCauldron is a port of pocketmine\block\WaterCauldron.
-//
-// Not ported yet: the dye, armour, banner and shulker box interactions (they need
-// Dye/Armor/Banner item types this package can't see); the custom water colour they set is kept in
-// the Cauldron tile.
 type WaterCauldron struct {
 	FillableCauldron
 
@@ -45,27 +43,131 @@ func (w *WaterCauldron) GetFillSound() sound.Sound { return sound.CauldronFillWa
 
 func (w *WaterCauldron) GetEmptySound() sound.Sound { return sound.CauldronEmptyWaterSound{} }
 
-// OnInteract is a port of WaterCauldron::onInteract (see the type's doc comment for what's missing).
+// Items the water cauldron dyes and cleans. This package can't import item, so these are the
+// parts of item.Dye, item.Armor, item.Banner and item.Item it needs.
+type (
+	dyeColorItem interface{ GetColor() blockutils.DyeColor }
+	armorItem    interface {
+		GetArmorSlot() int
+		GetCustomColor() (color.Color, bool)
+		SetCustomColor(c color.Color)
+		ClearCustomColor()
+	}
+	bannerItem interface {
+		GetPatterns() []blockutils.BannerPatternLayer
+		SetPatterns(patterns []blockutils.BannerPatternLayer)
+	}
+	blockItem      interface{ GetBlock() Behavior }
+	namedTagHolder interface {
+		GetNamedTag() *nbt.CompoundTag
+		SetNamedTag(tag *nbt.CompoundTag)
+	}
+)
+
+// dyeColorOf is the dye colour match of WaterCauldron::onInteract (ok is false for other items).
+func dyeColorOf(it Item) (blockutils.DyeColor, bool) {
+	switch it.GetTypeId() {
+	case itemTypeIDsLapisLazuli:
+		return blockutils.DyeColorBlue, true
+	case itemTypeIDsInkSac:
+		return blockutils.DyeColorBlack, true
+	case itemTypeIDsCocoaBeans:
+		return blockutils.DyeColorBrown, true
+	case itemTypeIDsBoneMeal:
+		return blockutils.DyeColorWhite, true
+	case itemTypeIDsDye:
+		if dye, ok := it.(dyeColorItem); ok {
+			return dye.GetColor(), true
+		}
+	}
+	return 0, false
+}
+
+// OnInteract is a port of WaterCauldron::onInteract.
 func (w *WaterCauldron) OnInteract(item Item, face math.Facing, clickVector math.Vector3, player Player, returnedItems *[]Item) bool {
-	if potion, ok := item.(waterPotionChecker); ok {
+	world, err := w.position.GetWorld()
+	if err != nil {
+		return true
+	}
+	center := w.position.Add(0.5, 0.5, 0.5)
+
+	dyeColor, isDye := dyeColorOf(item)
+	newColor := dyeColor.GetRgbValue()
+	if isDye && (w.customWaterColor == nil || newColor.ToRGBA() != w.customWaterColor.ToRGBA()) {
+		mixed := newColor
+		if w.customWaterColor != nil {
+			mixed = color.Mix(*w.customWaterColor, newColor)
+		}
+		_ = world.SetBlock(w.position, w.SetCustomWaterColor(&mixed))
+		world.AddSound(center, sound.CauldronAddDyeSound{})
+
+		item.Pop()
+	} else if potion, ok := item.(waterPotionChecker); ok {
 		if potion.IsWaterPotion() {
-			w.addFillLevels(WaterCauldronWaterBottleFillAmount, item, vanillaItem("glass_bottle"), returnedItems)
+			w.SetCustomWaterColor(nil).addFillLevels(WaterCauldronWaterBottleFillAmount, item, vanillaItem("glass_bottle"), returnedItems)
 		} else {
 			w.mix(item, vanillaItem("glass_bottle"), returnedItems)
 		}
-		return true
-	}
-	switch item.GetTypeId() {
-	case itemTypeIDsWaterBucket:
-		w.addFillLevels(FillableCauldronMaxFillLevel, item, vanillaItem("bucket"), returnedItems)
-	case itemTypeIDsBucket:
-		w.removeFillLevels(FillableCauldronMaxFillLevel, item, vanillaItem("water_bucket"), returnedItems)
-	case itemTypeIDsGlassBottle:
-		w.removeFillLevels(WaterCauldronWaterBottleFillAmount, item, vanillaItem("water_potion"), returnedItems)
-	case itemTypeIDsLavaBucket, itemTypeIDsPowderSnowBucket:
-		w.mix(item, vanillaItem("bucket"), returnedItems)
+	} else if armor, ok := item.(armorItem); ok {
+		if w.customWaterColor != nil {
+			customColor, hasCustomColor := armor.GetCustomColor()
+			if isDyeableArmor(item.GetTypeId()) && (!hasCustomColor || customColor.ToRGBA() != w.customWaterColor.ToRGBA()) {
+				armor.SetCustomColor(*w.customWaterColor)
+				_ = world.SetBlock(w.position, w.withFillLevel(w.FillLevel-WaterCauldronDyeArmorUseAmount))
+				world.AddSound(center, sound.CauldronDyeItemSound{})
+			}
+		} else if _, hasCustomColor := armor.GetCustomColor(); hasCustomColor {
+			armor.ClearCustomColor()
+			_ = world.SetBlock(w.position, w.withFillLevel(w.FillLevel-WaterCauldronCleanArmorUseAmount))
+			world.AddSound(center, sound.CauldronCleanItemSound{})
+		}
+	} else if banner, ok := item.(bannerItem); ok {
+		patterns := banner.GetPatterns()
+		if len(patterns) > 0 && w.customWaterColor == nil {
+			banner.SetPatterns(patterns[:len(patterns)-1])
+
+			_ = world.SetBlock(w.position, w.withFillLevel(w.FillLevel-WaterCauldronCleanBannerUseAmount))
+			world.AddSound(center, sound.CauldronCleanItemSound{})
+		}
+	} else if b, ok := item.(blockItem); ok && b.GetBlock().GetTypeId() == DYED_SHULKER_BOX { //ItemTypeIds::toBlockTypeId($item->getTypeId())
+		if w.customWaterColor == nil {
+			newItem, err := VanillaBlock("shulker_box").(interface{ AsItem() (Item, error) }).AsItem()
+			if err == nil {
+				if tagged, ok := item.(namedTagHolder); ok {
+					newItem.(namedTagHolder).SetNamedTag(tagged.GetNamedTag())
+				}
+
+				item.Pop()
+				appendItem(returnedItems, newItem)
+
+				_ = world.SetBlock(w.position, w.withFillLevel(w.FillLevel-WaterCauldronCleanShulkerBoxUseAmount))
+				world.AddSound(center, sound.CauldronCleanItemSound{})
+			}
+		}
+	} else {
+		switch item.GetTypeId() {
+		case itemTypeIDsWaterBucket:
+			w.SetCustomWaterColor(nil).addFillLevels(FillableCauldronMaxFillLevel, item, vanillaItem("bucket"), returnedItems)
+		case itemTypeIDsBucket:
+			w.removeFillLevels(FillableCauldronMaxFillLevel, item, vanillaItem("water_bucket"), returnedItems)
+		case itemTypeIDsGlassBottle:
+			// VanillaItems::POTION()->setType(PotionType::WATER): water is a new potion's type.
+			w.removeFillLevels(WaterCauldronWaterBottleFillAmount, item, vanillaItem("potion"), returnedItems)
+		case itemTypeIDsLavaBucket, itemTypeIDsPowderSnowBucket:
+			w.mix(item, vanillaItem("bucket"), returnedItems)
+		}
 	}
 	return true
+}
+
+// isDyeableArmor is WaterCauldron::onInteract's leather armour check.
+func isDyeableArmor(typeID int) bool {
+	//TODO: a DyeableArmor class would probably be a better idea, since not all types of armor are dyeable
+	switch typeID {
+	case itemTypeIDsLeatherCap, itemTypeIDsLeatherTunic, itemTypeIDsLeatherPants, itemTypeIDsLeatherBoots:
+		return true
+	}
+	return false
 }
 
 func (w *WaterCauldron) HasEntityCollision() bool { return true }

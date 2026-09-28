@@ -1,13 +1,17 @@
 package defaults
 
 import (
+	"sort"
+	"strconv"
+	"strings"
+
 	"pocketmine-go/pocketmine/command"
 	"pocketmine-go/pocketmine/lang"
 	"pocketmine-go/pocketmine/permission"
+	"pocketmine-go/pocketmine/utils"
 )
 
-// PluginsCommand is a port of pocketmine\command\defaults\PluginsCommand. Plugins aren't ported
-// (see AGENTS.md §6 Phase 4), so the list is always empty.
+// PluginsCommand is a port of pocketmine\command\defaults\PluginsCommand.
 type PluginsCommand struct{ VanillaCommand }
 
 func NewPluginsCommand() *PluginsCommand {
@@ -15,6 +19,16 @@ func NewPluginsCommand() *PluginsCommand {
 }
 
 func (c *PluginsCommand) Execute(sender command.Sender, commandLabel string, args []string) (any, error) {
-	sender.SendMessage(lang.KnownTranslationFactory.PocketmineCommandPluginsSuccess("0", ""))
+	var list []string
+	for _, p := range srv(sender).GetPluginManager().GetPlugins() {
+		color := utils.Red
+		if p.IsEnabled() {
+			color = utils.Green
+		}
+		list = append(list, color+p.GetDescription().GetFullName())
+	}
+	sort.Strings(list)
+
+	sender.SendMessage(lang.KnownTranslationFactory.PocketmineCommandPluginsSuccess(strconv.Itoa(len(list)), strings.Join(list, utils.Reset+", ")))
 	return true, nil
 }

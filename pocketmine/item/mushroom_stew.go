@@ -1,7 +1,6 @@
 package item
 
-// MushroomStew is a port of pocketmine\item\MushroomStew. GetResidue (should return
-// VanillaItems.BOWL()) isn't ported - see Food's doc comment for why.
+// MushroomStew is a port of pocketmine\item\MushroomStew (its use is in item_use.go).
 type MushroomStew struct {
 	Food
 }

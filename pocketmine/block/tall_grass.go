@@ -46,6 +46,9 @@ func (t *TallGrass) OnNearbyBlockChange() {
 	}
 }
 
+// CanBeReplaced is TallGrassTrait::canBeReplaced: placing a block on short grass replaces it.
+func (t *TallGrass) CanBeReplaced() bool { return true }
+
 func (t *TallGrass) GetFlameEncouragement() int { return 60 }
 
 func (t *TallGrass) GetFlammability() int { return 100 }

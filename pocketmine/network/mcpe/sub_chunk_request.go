@@ -3,6 +3,7 @@ package mcpe
 import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+	"pocketmine-go/pocketmine/block"
 
 	"pocketmine-go/pocketmine/network/mcpe/serializer"
 	"pocketmine-go/pocketmine/world"
@@ -87,7 +88,10 @@ func subChunkEntry(w *world.World, centre protocol.SubChunkPos, offset protocol.
 		return entry
 	}
 	entry.Result = protocol.SubChunkResultSuccess
-	serialised := serializer.SerializeSubChunk(sub, subY, w.Translator())
+	chunkX, chunkZ := int(centre[0])+int(offset[0]), int(centre[2])+int(offset[2])
+	serialised := serializer.SerializeSubChunk(sub, subY, w.Translator(), func(x, y, z int) block.Behavior {
+		return w.GetBlockAt(chunkX<<4|x, subY<<4|y, chunkZ<<4|z)
+	})
 	// The spawn compounds of the sub-chunk's tiles follow the sub-chunk data (as Dragonfly does;
 	// PHP's ChunkSerializer::serializeTiles appends every tile of the chunk to the full chunk).
 	tiles := serializer.SerializeTiles(chunk, subY)

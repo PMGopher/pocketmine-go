@@ -6,10 +6,9 @@ import (
 )
 
 // SplashPotion is a port of pocketmine\item\SplashPotion, a ProjectileItem (see item_use.go for
-// throwing). Linger mirrors the
-// constructor's private $linger flag, which PHP itself notes exists only for backward
-// compatibility (LingeringPotion isn't a separate PHP class - it's just a SplashPotion
-// constructed with linger=true via VanillaItems, which isn't ported either).
+// throwing). Linger mirrors the constructor's private $linger flag, which PHP itself notes exists
+// only for backward compatibility (a lingering potion is a SplashPotion registered with
+// linger=true in VanillaItems).
 type SplashPotion struct {
 	ItemBase
 

@@ -84,6 +84,13 @@ func BlockStates() []BlockStateData {
 	return blockStates
 }
 
+// RuntimeIDsForName returns the runtime IDs of every state of the block called name, in palette
+// order (nil if the palette has no such block).
+func RuntimeIDsForName(name string) []int32 {
+	loadBlockStates()
+	return blockStatesByName[name]
+}
+
 // RuntimeIDFor is a port of BlockStateDictionary::lookupStateIdFromData, searching by exact
 // name+states match. Returns false if no canonical block state has that exact name and property
 // set - e.g. because a property is missing/misspelled, or (rarely) because vanilla renamed the

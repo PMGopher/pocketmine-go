@@ -1,7 +1,8 @@
 package item
 
-// TorchflowerSeeds is a port of pocketmine\item\TorchflowerSeeds. GetBlock (should return VanillaBlocks.TORCHFLOWER_CROP())
-// isn't ported - see StringItem's doc comment for why.
+import "pocketmine-go/pocketmine/block"
+
+// TorchflowerSeeds is a port of pocketmine\item\TorchflowerSeeds.
 type TorchflowerSeeds struct {
 	ItemBase
 }
@@ -17,3 +18,6 @@ func (t *TorchflowerSeeds) Clone() Item {
 	c.rebind(&c)
 	return &c
 }
+
+// GetBlock is a port of TorchflowerSeeds::getBlock.
+func (x *TorchflowerSeeds) GetBlock() block.Behavior { return block.VanillaBlock("torchflower_crop") }

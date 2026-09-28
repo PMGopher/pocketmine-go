@@ -34,8 +34,8 @@ func (d *DoublePlant) Place(tx BlockTransaction, item Item, blockReplace Behavio
 	down := blockReplace.(blockGeometry).GetSide(math.Down, 1)
 	up := blockReplace.(blockGeometry).GetSide(math.Up, 1)
 	if down.(blockGeometry).HasTypeTag(BlockTypeTagsDirt) && up.CanBeReplaced() {
-		top := d.Clone().(*DoublePlant)
-		top.Top = true
+		top := d.self.Clone()
+		top.(doublePlantBaser).doublePlantBase().Top = true
 
 		replacePos := blockReplace.GetPosition()
 		tx.AddBlock(replacePos, d.self)
@@ -51,7 +51,7 @@ func (d *DoublePlant) IsValidHalfPlant() bool {
 	if d.Top {
 		otherSide = math.Down
 	}
-	other, ok := d.GetSide(otherSide, 1).(*DoublePlant)
+	other, ok := asDoublePlant(d.GetSide(otherSide, 1))
 	return ok && other.HasSameTypeId(d.self) && other.Top != d.Top
 }
 
@@ -85,3 +85,16 @@ func (d *DoublePlant) GetAffectedBlocks() []Behavior {
 func (d *DoublePlant) GetFlameEncouragement() int { return 60 }
 
 func (d *DoublePlant) GetFlammability() int { return 100 }
+
+// doublePlantBaser is `instanceof DoublePlant`: every DoublePlant subtype embeds DoublePlant.
+type doublePlantBaser interface{ doublePlantBase() *DoublePlant }
+
+func (d *DoublePlant) doublePlantBase() *DoublePlant { return d }
+
+// asDoublePlant is `$b instanceof DoublePlant ? $b : null`.
+func asDoublePlant(b Behavior) (*DoublePlant, bool) {
+	if baser, ok := b.(doublePlantBaser); ok {
+		return baser.doublePlantBase(), true
+	}
+	return nil, false
+}

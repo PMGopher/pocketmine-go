@@ -19,7 +19,7 @@ const (
 
 // Banner is a port of pocketmine\block\tile\Banner.
 //
-// Deprecated in the PHP original too - see block.BaseBanner (not ported yet).
+// Deprecated in the PHP original too - see block.BaseBanner.
 type Banner struct {
 	SpawnableBase
 

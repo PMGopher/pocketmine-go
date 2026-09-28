@@ -1,10 +1,7 @@
 package item
 
-// Fertilizer is a port of pocketmine\item\Fertilizer (bone meal) - adds no state or overrides of
-// its own in PHP either, existing solely to be checked with `instanceof Fertilizer` by
-// fertilizer-driven block growth (Sapling, TorchflowerCrop, PitcherCrop, Crops, SweetBerryBush,
-// CocoaBlock, etc.) - none of which wire this up yet, since their grow() logic is still blocked
-// on the unported block registry regardless (see e.g. Sapling.grow's doc comment).
+// Fertilizer is a port of pocketmine\item\Fertilizer (bone meal). It adds no state or overrides of
+// its own in PHP either: blocks that grow with bone meal check for it with `instanceof Fertilizer`.
 type Fertilizer struct {
 	ItemBase
 }
