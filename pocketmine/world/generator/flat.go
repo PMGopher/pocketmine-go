@@ -15,14 +15,9 @@ type FlatLayer struct {
 	Height int
 }
 
-// Flat is a port of pocketmine\world\generator\Flat.
-//
-// The PHP original also accepts an arbitrary preset string (e.g.
-// "2;bedrock,59xstone,3xdirt,grass;1;decoration") parsed at construction time via
-// FlatGeneratorOptions::parsePreset, which needs a general item-name parser
-// (LegacyStringToItemParser) this port doesn't have - so NewFlat takes an explicit []FlatLayer and
-// []populator.Populator instead of a preset string; see VanillaFlatLayers for the classic default
-// preset built this way, and VanillaFlatOreTypes for the "decoration" option's Ore populator setup.
+// Flat is a port of pocketmine\world\generator\Flat. NewFlatFromPreset builds it from a preset
+// string like PHP's constructor ("2;bedrock,59xstone,3xdirt,grass;1;decoration"); NewFlat takes the
+// parsed layers and populators.
 type Flat struct {
 	baseChunk *format.Chunk
 

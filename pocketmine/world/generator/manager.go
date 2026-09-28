@@ -2,6 +2,8 @@ package generator
 
 import (
 	"fmt"
+	"pocketmine-go/pocketmine/block"
+	"pocketmine-go/pocketmine/world/generator/populator"
 
 	"pocketmine-go/pocketmine/world/generator/hell"
 )
@@ -30,7 +32,32 @@ func GetFactory(name string) (Factory, bool) {
 	return f, ok
 }
 
+// defaultFlatPreset is Flat::__construct's preset for an empty one.
+const defaultFlatPreset = "2;bedrock,2xdirt,grass;1;"
+
+// NewFlatFromPreset is a port of Flat::__construct(int $seed, string $preset): the preset is
+// parsed by FlatGeneratorOptions::parsePreset, and its "decoration" option adds the ore populator.
+func NewFlatFromPreset(seed int, preset string, emptyStateID int32) (*Flat, error) {
+	if preset == "" {
+		preset = defaultFlatPreset
+	}
+	options, err := ParseFlatPreset(preset)
+	if err != nil {
+		return nil, err
+	}
+	var populators []populator.Populator
+	if _, ok := options.ExtraOptions["decoration"]; ok {
+		populators = VanillaFlatDecorationPopulators()
+	}
+	return NewFlat(seed, options.Structure, options.BiomeID, emptyStateID, populators), nil
+}
+
 func init() {
+	// GeneratorManager::__construct registers Flat as "flat", validating its preset.
+	RegisterGenerator("flat", func(seed int64, options string) (Generator, error) {
+		return NewFlatFromPreset(int(seed), options, int32(block.VanillaAir().GetStateId()))
+	})
+
 	normalFactory := func(seed int64, options string) (Generator, error) { return NewNormal(int(seed)), nil }
 	// "default" is real PocketMine-MP's own long-standing alias for "normal" (GeneratorManager
 	// registers both names against the same Normal generator class).
