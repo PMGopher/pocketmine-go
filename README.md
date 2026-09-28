@@ -1,229 +1,243 @@
-# pocketmine-go
+<p align="center">
+	<a href="https://github.com/PMGopher/pocketmine-go">
+		<picture>
+			<source srcset=".github/readme/logo-dark.svg" media="(prefers-color-scheme: dark)">
+			<img src=".github/readme/logo-light.svg" alt="PocketMine-go" width="560" loading="eager" />
+		</picture>
+	</a><br>
+	<b>A highly customisable, open source server software for Minecraft: Bedrock Edition, written in Go</b>
+</p>
 
-A port of [PocketMine-MP](https://github.com/pmmp/PocketMine-MP), the Minecraft: Bedrock Edition
-server, from PHP to Go.
+<p align="center">
+	<a href="go.mod"><img alt="Go 1.26+" src="https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white"></a>
+	<img alt="Minecraft: Bedrock Edition 1.26.50" src="https://img.shields.io/badge/Bedrock-1.26.50-62B47A">
+	<a href="LICENSE"><img alt="License: LGPL-3.0" src="https://img.shields.io/badge/license-LGPL--3.0-blue"></a>
+	<a href="https://github.com/PMGopher/pocketmine-go/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/PMGopher/pocketmine-go?style=flat&logo=github"></a>
+</p>
 
-> **Status: early and incomplete. Not usable as a real server yet.**
-> You can join, walk around a generated world, break blocks and hit other players. You can't
-> place blocks, use items, chat or run commands yet. See the [checklist](#feature-checklist).
+## What is this?
+PocketMine-go is a server for Minecraft: Bedrock Edition, built in Go. It brings the gameplay,
+plugin API and server tooling of **PocketMine-MP** to a fast, single-binary Go server.
 
-The goal is to keep PocketMine-MP's **game logic** (blocks, items, world, generation, lighting,
-player rules) faithful to the original, one PHP class → one Go type. The **network protocol** is
-the exception: it comes from [gophertunnel](https://github.com/sandertv/gophertunnel) and is not
-ported by hand.
+If you want a Bedrock server with **custom functionality**, you're in the right place.
 
-Port target: PocketMine-MP **5.44.4**. Client: Bedrock **1.26.50** (via gophertunnel v1.62.0). Upstream PocketMine-MP itself only supports 1.26.30 so far.
+- 🧩 **Plugin API in plain Go**: events, commands, permissions, configs and a task scheduler, with
+  the compiler checking your types before your players ever find a bug
+- 🗺️ **Multi-world support**: load several worlds at once, and drop a world from vanilla Bedrock
+  straight into `worlds/`
+- 🏎️ **Built for performance**: chunk generation, population and lighting run on worker goroutines,
+  so the main thread keeps ticking at 20 TPS while players explore
+- 📦 **One binary, no runtime**: build once and run anywhere Go runs: Windows, Linux or macOS,
+  on x86 or ARM
+- 🎮 **Up to date**: talks to Bedrock **1.26.50** clients through
+  [gophertunnel](https://github.com/sandertv/gophertunnel), with Xbox Live authentication on by
+  default
+- 🧱 **Familiar behaviour**: blocks, items, entities, crafting, enchanting and world generation
+  work the way PocketMine-MP server owners know
 
-Contributing or using an AI agent? Read **[AGENTS.md](AGENTS.md)** first. It covers the plan,
-architecture, porting conventions and known issues.
+## :x: PocketMine-go is NOT a vanilla Minecraft server software.
+**It is poorly suited to hosting vanilla survival servers.**
+Like PocketMine-MP, it doesn't have many features from the vanilla game, such as vanilla world
+generation, redstone circuits and mob AI.
 
-## Quick start
+If you just want to play **vanilla survival multiplayer**, consider using the
+[official Minecraft: Bedrock server software](https://minecraft.net/download/server/bedrock)
+instead.
 
-Requires Go (see `go.mod`).
+If that's not an option for you, you can add the features you're missing yourself with
+[plugins](#-writing-plugins).
+
+## 🚀 Getting started
+You need [Go 1.26 or newer](https://go.dev/dl/).
 
 ```bash
-go run ./cmd/pocketmine-go                 # data (server.properties, worlds/, players/) in the current directory
-go run ./cmd/pocketmine-go --data=server   # or in another folder (PocketMine.php's --data)
+git clone https://github.com/PMGopher/pocketmine-go.git
+cd pocketmine-go
+go build -o pocketmine-go ./cmd/pocketmine-go     # on Windows: -o pocketmine-go.exe
+./pocketmine-go
 ```
 
-Then add a server in Minecraft Bedrock pointing at your machine's IP, port `19132`.
+The first start asks a few questions (language, server name, port, ...) and creates your
+configuration. Then open Minecraft, go to **Servers → Add Server** and enter your machine's IP
+and port `19132`.
 
-Settings live in `server.properties`, created on first start with PocketMine-MP's defaults
-(`server-port`, `motd`, `max-players`, `gamemode`, `difficulty`, `level-name`, `level-seed`,
-`view-distance`, `xbox-auth`, ...). Any of them can be overridden on the command line with
-`--key=value`, e.g. `--server-port=19133` or `--xbox-auth=false`. Like PocketMine-MP,
-**`xbox-auth` is on by default**: players must be signed in to Xbox Live.
+Type `help` in the console to see the commands, and `stop` (or press Ctrl+C) to shut down. Worlds
+and players are saved on the way out.
 
-Stop with Ctrl+C or by typing `stop` in the console (players and worlds are saved). Run tests with `go test ./...`.
+### Building for another system
+Go cross-compiles out of the box. For example, to build a Windows server from Linux or macOS:
 
-## Progress
+```bash
+GOOS=windows GOARCH=amd64 go build -o pocketmine-go.exe ./cmd/pocketmine-go
+GOOS=linux   GOARCH=arm64 go build -o pocketmine-go     ./cmd/pocketmine-go   # e.g. a Raspberry Pi
+```
 
-Roughly **1,260–1,300 of PocketMine-MP's 1,498 PHP classes (~84–87%)** have a Go counterpart: 1,260
-match by file or type name, and about 40 more were merged or renamed in Go (traits as `...Component`
-structs, all biomes in one file, the tree types as `Tree` constructors). Many of the rest are out
-of scope on purpose (PHP threads, RakLib and the protocol classes gophertunnel replaces, the
-updater). The server "glue" is in place: `Server`, network sessions and packet handlers, events,
-the command map with most default commands, the console, query and UPnP, crafting and enchanting.
-World and blocks are complete, incl. world formats and tiles, and plugins load as compiled-in Go
-packages. Every area is complete: what isn't ported is PHP-runtime specific (threads, Phar plugins,
-PHP heap dumps) or replaced by gophertunnel (the protocol layer).
+### Command-line options
 
-| Area (PHP namespace, incl. sub-namespaces) | Status | Ported / total PHP classes | Notes |
-|---|---|---|---|
-| `block` (incl. tile, inventory, utils) | ✅ Complete | 390 / 390 | Every block, all tiles (`TileFactory`), all 19 block inventories; the traits are `...Component` structs |
-| `world` (all sub-namespaces) | ✅ Complete | ~265 / 271 | LevelDB, region formats + conversion, upgraders, generators, light, all 38 particles and 113 sounds. The rest are merged (`GeneratorManager` is `generator/manager.go`, biomes in one file) or PHP-only (`WorldTimings`) |
-| `item` (incl. enchantment) | ✅ Complete | 145 / 154 | All items, enchantments, item NBT, string-to-item parsers. The rest are data tables (`VanillaItemsInputs`, `ItemTypeIds`...) merged into the registries, or traits |
-| `entity` (incl. effect, object, projectile) | ✅ Complete | 75 / 77 | The 2 left are `InvalidSkinException` (a Go error) and `VanillaEffectsInputs` (merged into the effect registry) |
-| `player` | ✅ Complete | 14 / 16 | The 2 left are exceptions (Go errors) |
-| `crafting` | ✅ Complete | 25 / 25 | Recipes from pmmp/BedrockData's recipe JSON |
-| `inventory` | ✅ Complete | 32 / 35 | The rest are 2 exceptions (Go errors) and `CreativeGroupData` (the creative list comes from the vanilla server's packet) |
-| `command` | ✅ Complete | 50 / 53 | 40 of 41 default commands. `dumpmemory` needs PHP's `MemoryDump` (PHP heap dump); `CommandSender`/`CommandExecutor` are Go interfaces |
-| `event` | ✅ Complete | 145 / 150 | Every concrete event; the rest are internal caches/tags merged into the event manager |
-| `plugin` | ✅ Complete | 18 / 22 | Plugins are Go packages compiled into the server. `PharPluginLoader`/`ScriptPluginLoader` run PHP code, which Go can't |
-| `network` (above the protocol layer) | ✅ Complete | ~40 / 85 | The rest is the protocol layer gophertunnel replaces: RakLib, compression, encryption, JWT/login, pthreads channels |
-| `data` (serializers, upgraders, ID maps) | ✅ Complete | 56 / 99 | The rest are ID tables, state maps and exceptions merged into bigger Go files |
-| `permission` | ✅ Complete | 9 / 14 | The rest are traits/internals merged into `Permissible` |
-| `scheduler` | ✅ Complete | 12 / 15 | `DumpWorkerMemoryTask` needs PHP's `MemoryDump`; the rest are exceptions/internals |
-| `console` | ✅ Complete | 2 / 5 | The rest is PHP's child-process console reader (Go reads stdin directly) |
-| `resourcepacks`, `form` | ✅ Complete | 4 / 11 | The manifest classes are gophertunnel's |
-| `utils`, `promise` | ✅ Complete | 25 / 36 | PHP traits (`SingletonTrait`, `EnumTrait`...) and thread classes; Go has generics and goroutines |
-| `crash` | ✅ Complete | 5 / 5 | Crash dumps (`crashdumps/`) |
-| `lang`, `timings`, `wizard` | ✅ Complete | 7 / 7 | |
-| `thread`, `updater`, `stats` | ⛔ Out of scope | 0 / 17 | PHP-runtime specific (pthreads, PHP updater, PHP stats) |
+| Option | What it does |
+|---|---|
+| `--data=<path>` | Folder for configs, worlds and players (default: the current folder) |
+| `--plugins=<path>` | Plugins folder (default: `plugins` in the current folder) |
+| `--no-wizard` | Skip the first-start questions and use the defaults |
+| `--no-log-file` | Don't write `server.log` |
+| `--enable-ansi` / `--disable-ansi` | Force coloured console output on or off |
+| `--version` | Print the version and exit |
+| `--<key>=<value>` | Override any `server.properties` or `pocketmine.yml` setting, e.g. `--server-port=19133`, `--xbox-auth=false`, `--debug.level=2` |
 
-_Counts are approximate: a class counts as ported if a Go file with its snake_case name or a Go
-type with its name exists._
+### The data folder
 
-Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** means started but incomplete.
+```text
+<data>/
+├── server.properties        port, MOTD, game mode, difficulty, view distance, xbox-auth, ...
+├── pocketmine.yml           advanced settings: worlds, chunk sending, aliases, timings, ...
+├── ops.txt  white-list.txt  banned-players.txt  banned-ips.txt
+├── worlds/<name>/           level.dat + db/, the same layout as vanilla Bedrock
+├── players/<name>.dat       inventories, positions, XP, ...
+├── plugin_data/<plugin>/    each plugin's own files (config.yml, ...)
+├── plugin_list.yml          allow or block plugins by name
+├── resource_packs/          resource packs offered to players
+├── crashdumps/              written if the server ever crashes
+└── server.log
+```
 
-## Feature checklist
+Worlds made by vanilla Bedrock load as they are; older world formats (Anvil, McRegion, PMAnvil) are
+converted automatically, with a backup in `backups/worlds/`.
 
-### Networking & connection
-- [x] RakNet listener, login, encryption, resource-pack handshake (via gophertunnel)
-- [x] Server list entry (MOTD, player count) (`RakLibInterface::setName`)
-- [x] StartGame, item table, abilities, spawn
-- [x] Chunk streaming by view distance as the player moves (through `ChunkCache`)
-- [x] Multiple players see each other (player list, spawn, movement)
-- [x] Xbox Live authentication (`xbox-auth`, on by default)
-- [x] `RakLibInterface` on gophertunnel: pre-login checks (`PlayerPreLoginEvent`: server full, whitelist, name/IP bans), duplicate-login and XUID checks, IP blocking, raw packet filters, bandwidth stats, ping
-- [x] `NetworkSession` (full port above the wire), `NetworkSessionManager`, `Network`
-- [x] Packet handlers: `PreSpawnPacketHandler`, `InGamePacketHandler` (movement, block breaking/placing, item use, inventory transactions, item stack requests, containers, signs, books, lecterns, forms, skins, commands, emotes), `DeathPacketHandler`
-- [x] `InventoryManager` (window IDs, item stack IDs, predictions, container open/close), `ItemStackRequestExecutor`, creative inventory cache
-- [x] Block changes sent to players (`World::changedBlocks`/`sendBlocks`)
-- [x] Packet rate limiting, broadcasting (`StandardPacketBroadcaster`, `StandardEntityEventBroadcaster`), chunk cache
-- [x] Query protocol (on the game port, or a dedicated interface), UPnP port forwarding
-- [x] Resource packs (`resource_packs.yml`, `PlayerResourcePackOfferEvent`; delivery by gophertunnel)
-- [x] Transfer server, forms, toasts, titles
-- [x] `DataPacketSend/Receive/DecodeEvent`
+## 🧩 Writing plugins
+Plugins are Go packages compiled into the server. There is no plugin file to drop in a folder:
+you import the package and rebuild, and the compiler checks your plugin against the server's API.
 
-### Server core
-- [x] `Server` class: startup, `pocketmine.yml` + `server.properties`, language, ops/whitelist/ban lists, broadcast channels, player data, tick loop with TPS/load tracking, console title, query info regeneration, shutdown
-- [x] `server.properties` + `pocketmine.yml` (`ServerConfigGroup`, `--key=value` overrides)
-- [x] Console input and console command sender (`ConsoleReader`, `ConsoleCommandSender`, `BroadcastLoggerForwarder`)
-- [x] Logger (`MainLogger` with `server.log` and log archive), text formatting, language/translation files (`lang`)
-- [x] Config files (YAML/JSON/properties/enum) via `utils.Config`
-- [x] Sync task scheduler
-- [x] Async tasks / worker pool (goroutines)
-- [x] Timings, memory manager
-- [x] Crash dumps
-- [x] Version info, `server.lock` (one server per data folder)
+A complete, commented example lives in **[`plugins/example`](plugins/example)**: a welcome title on
+join, a `/example` command, a config file and a repeating task. The fastest way to start is to copy
+that folder.
 
-### World
-- [x] Chunks, sub-chunks, paletted block storage, heightmaps
-- [x] LevelDB world save/load (vanilla layout: `db/` folder, zlib-raw compression), `level.dat`: every chunk version, sub-chunk versions 0-9, legacy terrain, 2D/3D biomes, tiles and entities
-- [x] Loading worlds made by vanilla Bedrock (tested with BDS 1.26.52) or PHP PocketMine-MP
-- [x] Sky and block lighting
-- [x] World tick: time, weather, scheduled and neighbour updates, random ticks
-- [x] Chunk loading/unloading, chunk loaders, chunk listeners
-- [x] Explosions
-- [x] Multi-world manager (`WorldManager`, `worlds:` in pocketmine.yml)
-- [x] Particles (all types) and sounds (all 111 sound types)
-- [x] Block-state and item upgraders (`BlockDataUpgrader`, `ItemDataUpgrader` with pmmp's upgrade schemas): old block states and items are upgraded on load
-- [x] Region formats (Anvil, McRegion, PMAnvil) and automatic conversion to LevelDB (`FormatConverter`, backup in `backups/worlds`)
-- [x] Item NBT (de)serialization: containers, dropped items, tridents and player inventories are saved
-- [x] Liquids flow (water, lava, `MinimumCostFlowCalculator`, obsidian/cobblestone/basalt forming), fire spreads and burns blocks
-- [x] Async chunk generation / population / lighting (worker goroutines, like PHP's `AsyncGeneratorExecutor`, `PopulationTask` and `LightPopulationTask`)
+### 1. Describe the plugin: `plugin.yml`
 
-### World generation
-- [x] Flat generator
-- [x] Normal generator (noise terrain, all PMMP biomes)
-- [x] Nether generator
-- [x] Ores, tall grass, ground cover populators
-- [x] Trees: oak, spruce, birch, jungle, acacia, azalea, nether fungi (`TreeFactory`); saplings and bone meal grow them
+```yaml
+name: HelloPlugin
+version: 1.0.0
+main: hello.Main
+api: [5.0.0]
 
-### Blocks
-- [x] All block classes ported with their behaviour (state, placement rules, drops with Fortune/Silk Touch, random ticks, bone meal, hoes/shovels/axes, ...)
-- [x] 800 block type IDs
-- [x] All tiles (`TileFactory`), saved and loaded with their chunk and sent to clients (in sub-chunks and with block updates)
-- [x] Survival block breaking with correct break times
-- [x] Block placing
-- [x] Vanilla block registry (all 799 `VanillaBlocks`)
-- [x] Block ↔ network mappings: full `data/bedrock/block/convert` (`BlockObjectToStateSerializer`, `BlockStateToObjectDeserializer`, reader/writer, `VanillaBlockMappings`); all 799 `VanillaBlocks` (11,125 states) round-trip. The 1.26.50-only properties (`minecraft:corner` on stairs, `minecraft:connection_*` on fences/panes/bars/tripwire) are written with neutral values
-- [x] Item ↔ network mappings: `data/bedrock/item` (`ItemSerializer`/`ItemDeserializer`, `ItemSerializerDeserializerRegistrar`, `BlockItemIdMap`) and the full `VanillaItems`
-- [x] Cauldrons (water, lava, potions, dyed water), flower pot
-- [x] Container blocks keep their items (chest, double chest, barrel, furnace, hopper, brewing stand, shulker box, campfire, chiseled bookshelf), furnace smelting and brewing
-- [x] Beds (sleeping), respawn anchor, dragon egg, jukebox, lectern, item frames, cake with candles, banners with patterns, bells
-- [x] Redstone: what individual blocks implement, as in PocketMine-MP (which has no redstone circuits)
+commands:
+  hello:
+    description: Says hello
+    permission: helloplugin.command.hello
 
-### Items
-- [x] ~108 item classes (tools, armor, food, potions, buckets, books, records, ...)
-- [x] 321 item type IDs
-- [x] Item → network ID translation
-- [x] Vanilla item registry (full `VanillaItems`)
-- [x] Bow, arrows, snowball, egg, ender pearl, spawn eggs and other projectile items; buckets, flint and steel, spawn eggs, paintings and end crystals used on blocks
-- [x] Enchantments (all vanilla enchantments, protection/sharpness/knockback/fire aspect logic, armor EPF)
-- [x] `/give`-style item name parsing (`StringToItemParser`, `LegacyStringToItemParser`)
+permissions:
+  helloplugin.command.hello:
+    default: true
+```
 
-### Player
-- [x] Player entity, game modes, skins, player info
-- [x] Health, damage, knockback, PvP
-- [x] Fall damage
-- [x] Chat formatters
-- [x] Player data file format
-- [x] Held item / hotbar selection
-- [x] Chat broadcast and commands
-- [x] Player data saved and restored (`players/<name>.dat`: position, health, hunger, XP, game mode)
-- [x] Death and respawn (death screen, `DeathPacketHandler`, respawn)
-- [x] Hunger, saturation, experience, attributes (logic ported; attribute packets sent)
-- [x] Changing game mode in-game (`/gamemode`)
-- [x] Server-side movement checks (`Player::handleMovement`: moves over 15 blocks per tick are reverted). PocketMine-MP has no server-side movement physics or anti-cheat for players ("This is NOT an anti-cheat check"), so there is nothing more to port
+### 2. Write it: `hello.go`
 
-### Inventory & crafting
-- [x] Base inventory types
-- [x] Initial inventory contents sent to the client
-- [x] Player inventory, armor, offhand, ender chest
-- [x] Cursor inventory, inventory network sync (InventoryManager)
-- [x] Creative inventory (1,428 entries from the vanilla server's list, in its groups; the rest are items PocketMine-MP 5.44.4 doesn't have)
-- [x] Inventory transactions / item stack requests (moving, dropping, using items, crafting, enchanting)
-- [x] Crafting (shaped/shapeless recipes, `CraftingDataPacket`, `CraftingTransaction`) (recipes with potions/unknown items are skipped, like PHP)
-- [x] Enchanting table (options, bookshelves, `EnchantingTransaction`, lapis/XP cost)
-- [x] Block inventories (all 19) and opening crafting table, enchanting table, anvil, loom, stonecutter, smithing/cartography table and ender chest windows
-- [x] Container tiles holding inventories (chest, barrel, furnace, hopper, brewing stand, shulker box), saved with the world
-- [x] Furnace smelting and brewing
-- [x] Smithing table window, as in PocketMine-MP (which has no smithing recipes)
+```go
+package hello
 
-### Entities
-All 77 classes under `pocketmine\entity` are ported, with their full logic.
-- [x] Entity, Living, Human (movement/collision physics, fire, air supply, knockback, armor, death)
-- [x] EntityFactory + entity NBT save/load (LevelDB `actorprefix` storage)
-- [x] Item drops (`ItemEntity`), saved with the chunk
-- [x] Falling blocks, primed TNT, experience orbs, paintings, end crystals, firework rockets, area effect clouds
-- [x] Projectiles (arrow, snowball, egg, ender pearl, XP bottle, ice bomb, splash potion, trident)
-- [x] Effects (all 27 vanilla effects, EffectManager)
-- [x] Animations
-- [x] Mobs (zombie, villager, squid). PocketMine-MP has no AI, so neither does this port
+import (
+	"embed"
 
-### Commands, events, permissions, plugins
-- [x] Command base classes and command map
-- [x] Default commands: 40 of 41 (`/dumpmemory` dumps PHP's heap, which Go doesn't have)
-- [x] Event system base (handlers, priorities, cancellable, parent events)
-- [x] Concrete events (block, entity, player, inventory, world, server, plugin)
-- [x] Permissions, attachments, ban lists, ops
-- [x] `plugin.yml` parsing, API version checks
-- [x] Plugin loading and `PluginManager`: plugins are Go packages compiled into the server (imported in `cmd/pocketmine-go/plugins.go`, registered with `plugin.RegisterGoPlugin`) and loaded like PocketMine-MP loads its plugins (`plugin.yml`, API version, dependencies and load order, commands, permissions, data folder). PHP plugins themselves can't run in Go.
+	"pocketmine-go/pocketmine/command"
+	playerevent "pocketmine-go/pocketmine/event/player"
+	"pocketmine-go/pocketmine/plugin"
+	"pocketmine-go/pocketmine/server"
+)
 
-## Roadmap
+//go:embed plugin.yml
+var files embed.FS
 
-1. ~~**Make the world playable:** all block and item network mappings~~: done.
-2. ~~**Real server structure:**~~ done (`Server`, network sessions and handlers, console, command map, events, permissions, query, UPnP, resource packs). All default commands but `/dumpmemory` (PHP heap dump).
-3. ~~**Gameplay:** item NBT, container tiles, furnace/brewing ticks, item interactions~~: done.
-4. ~~**Plugins**~~: done, as compiled-in Go plugins.
-5. ~~**Everything else:** crash dumps~~: done.
+// Register the plugin when its package is imported.
+func init() {
+	plugin.RegisterGoPlugin(files, func() plugin.Plugin { return &Main{} })
+}
 
-**The port is complete.** What isn't ported is PHP-runtime specific (threads, Phar/script plugins,
-PHP heap dumps, the PHP updater) or the protocol layer gophertunnel replaces.
+type Main struct{ plugin.PluginBase }
 
-Details in [AGENTS.md](AGENTS.md#6-plan--roadmap).
+func (m *Main) OnEnable() error {
+	m.GetLogger().Info("Hello, world!")
+	srv := m.GetServer().(*server.Server)
+	return srv.GetPluginManager().RegisterEvents(&listener{m}, m)
+}
 
-## Known issues
+// Commands from plugin.yml land here.
+func (m *Main) OnCommand(sender command.Sender, cmd command.CommandLike, label string, args []string) bool {
+	sender.SendMessage("Hello, " + sender.GetName() + "!")
+	return true
+}
 
-- Blocks that PocketMine-MP 5.44.4 itself doesn't implement (moss, kelp, seagrass, dripstone, ...)
-  are kept as they are when a vanilla world is opened (shown and saved unchanged, like Dragonfly),
-  but have no behaviour: they break instantly and drop nothing. PHP turns them into "update!".
-- Beacons have no window or effects and note blocks don't play when clicked: PocketMine-MP 5.44.4
-  has no logic for either (only the beacon's light and the note block's stored pitch).
+// Every exported method that takes one event is an event handler.
+type listener struct{ m *Main }
 
-## Credits
+func (l *listener) OnJoin(e *playerevent.PlayerJoinEvent) {
+	l.m.GetLogger().Info(e.GetPlayer().GetName() + " joined")
+}
+```
 
-- [PocketMine-MP](https://github.com/pmmp/PocketMine-MP): the original project this is ported from (LGPL-3.0).
-- [gophertunnel](https://github.com/sandertv/gophertunnel): Bedrock protocol implementation.
+To ship default files (like a `config.yml`), put them in a `resources/` folder next to
+`plugin.yml`, embed it too (`//go:embed plugin.yml resources`) and call `m.SaveDefaultConfig()`.
+
+### 3. Register it: `cmd/pocketmine-go/plugins.go`
+
+Add a blank import of your package, then rebuild:
+
+```go
+package main
+
+import (
+	_ "pocketmine-go/plugins/example"  // a plugin inside this repository
+	_ "github.com/you/helloplugin"      // or any Go module: go get github.com/you/helloplugin
+)
+```
+
+On the next start the console shows `Loading HelloPlugin v1.0.0` and `Enabling HelloPlugin v1.0.0`.
+The server checks the `api` version, `depend`/`softdepend`/`loadbefore`, `load` order and
+`plugin_list.yml` before enabling it. Your plugin gets its own folder in `plugin_data/`.
+
+### What a plugin can use
+
+| You want to... | Use |
+|---|---|
+| React to something happening | `RegisterEvents(listener, plugin)`, or `plugin.RegisterEvent[E]` for a single handler. Events live in `pocketmine/event/...` (player, block, entity, inventory, world, server) |
+| Add a command | Declare it in `plugin.yml`, handle it in `OnCommand` |
+| Run code later or repeatedly | `m.GetScheduler().ScheduleDelayedTask` / `ScheduleRepeatingTask` with `scheduler.NewClosureTask(func() { ... })` (20 ticks = 1 second) |
+| Store settings | `m.SaveDefaultConfig()`, `m.GetConfig().Get(key, default)`, `m.ReloadConfig()` |
+| Reach the server | `m.GetServer().(*server.Server)`: players, worlds, broadcasting, commands, bans, ... |
+| Talk to a player | `*player.Player`: `SendMessage`, `SendTitle`, `SendTip`, `SendPopup`, `SendForm`, `Teleport`, `SetGamemode`, inventories, ... |
+
+## 🏗️ Under the hood
+- **Networking** by [gophertunnel](https://github.com/sandertv/gophertunnel): RakNet, login,
+  encryption and every packet, including the sub-chunk and client blob cache paths the latest
+  clients use.
+- **One main thread, many goroutines**: the game ticks on one thread like PocketMine-MP, so plugin
+  code never has to think about locks; world generation, population and lighting fan out to worker
+  goroutines.
+- **Worlds** in LevelDB, the format vanilla Bedrock uses, with block-state and item upgraders for
+  worlds from older versions. Vanilla blocks that have no behaviour here yet are kept as they are,
+  so they still show up and save unchanged.
+- **Crash dumps** in `crashdumps/`, timings reports and a query protocol for server lists.
+
+Want to see how much of PocketMine-MP is covered? See **[PROGRESS.md](PROGRESS.md)**.
+
+## 🤝 Contributing
+Contributions are welcome! Before you start:
+
+- Read **[AGENTS.md](AGENTS.md)**: it covers the architecture, the code conventions and the known
+  issues, for humans and AI agents alike.
+- Behaviour should match PocketMine-MP. When in doubt, check how upstream does it instead of
+  guessing.
+- Run `go vet ./... && go test ./...` before opening a pull request.
+
+Found a bug? [Open an issue](https://github.com/PMGopher/pocketmine-go/issues) with your server
+log and, if there is one, the crash dump from `crashdumps/`.
+
+## 🙏 Credits
+- **[MEMOxiiii](https://github.com/MEMOxiiii)**: developer of PocketMine-go.
+- **[gophertunnel](https://github.com/sandertv/gophertunnel)**: the Bedrock protocol implementation.
+
+## Licensing information
+PocketMine-go is licensed under LGPL-3.0. Please see the [LICENSE](LICENSE) file for details.
+
+PocketMine-go is developed by [PMGopher](https://github.com/PMGopher) and
+[MEMOxiiii](https://github.com/MEMOxiiii). It is not affiliated with Mojang or Microsoft. All brands
+and trademarks belong to their respective owners. PocketMine-go is not a Mojang-approved software,
+nor is it associated with Mojang.

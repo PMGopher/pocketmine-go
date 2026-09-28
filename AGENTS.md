@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Context for anyone (human or AI agent) picking up work on **pocketmine-go**. Read this before
-changing code. The feature checklist lives in [README.md](README.md#feature-checklist). This file
+changing code. The feature checklist lives in [PROGRESS.md](PROGRESS.md#feature-checklist); [README.md](README.md) is the user-facing page (keep it free of porting details). This file
 covers the goal, how the code is organised, the conventions, what state things are in, and what to
 do next.
 
@@ -113,6 +113,8 @@ go run ./cmd/pocketmine-go --debug.level=2    # debug log lines (pocketmine.yml 
 ```
 cmd/pocketmine-go/     Entry point only (port of PocketMine.php): options, server.lock, MainLogger, then
                        server.New/Start.
+plugins/example/       Example plugin (plugin.yml, embedded resources, events, command, task); plugins
+                       are registered by a blank import in cmd/pocketmine-go/plugins.go.
 tools/packetproxy/     Debugging proxy that logs a real client's packets (not part of the port).
 pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP/src/.
   server/              Server, ServerProperties, ServerConfigGroup (PHP's root-namespace classes;
@@ -360,7 +362,7 @@ git clone --depth 1 https://github.com/pmmp/PocketMine-MP.git /tmp/pmmp
 # filename, so grep for `type <Class>` or `New<Class>` for those.
 ```
 
-When you finish a chunk of work, update the checklist in `README.md` and §5 of this file.
+When you finish a chunk of work, update the checklist in `PROGRESS.md` and §5 of this file.
 
 ## 8. Tips for agents
 
