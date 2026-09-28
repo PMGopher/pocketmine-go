@@ -223,8 +223,6 @@ Contributions are welcome! Before you start:
 
 - Read **[AGENTS.md](AGENTS.md)**: it covers the architecture, the code conventions and the known
   issues, for humans and AI agents alike.
-- Behaviour should match PocketMine-MP. When in doubt, check how upstream does it instead of
-  guessing.
 - Run `go vet ./... && go test ./...` before opening a pull request.
 
 Found a bug? [Open an issue](https://github.com/PMGopher/pocketmine-go/issues) with your server

@@ -12,12 +12,13 @@ _Last updated: 2026-09-26 (world formats, tiles, liquids). Upstream reference: P
 ## 1. Goal
 
 Rewrite [PocketMine-MP](https://github.com/pmmp/PocketMine-MP) (a Minecraft: Bedrock Edition
-server written in PHP) in Go, **keeping its game logic faithful to the original**.
+server written in PHP) in Go. **The port is complete** (2026-09-28): matching PocketMine-MP's
+behaviour is no longer a requirement, and new features and changes are welcome.
 
-- This is a **port**, not a new server design. Each Go type maps to a PHP class, and behaviour
-  (block drops, break times, tick logic, generator noise, light propagation, ...) should match
-  what PocketMine-MP does. When in doubt, read the PHP source and copy its behaviour, not your
-  guess of what Minecraft does.
+- The code started as a **port**: each Go type maps to a PHP class, and its behaviour (block
+  drops, break times, tick logic, generator noise, light propagation, ...) came from
+  PocketMine-MP. The PHP source is still a useful reference for how existing code works, but it
+  doesn't limit what the server may do.
 - **Exception: the network/protocol layer.** We do **not** port `pocketmine/network/mcpe/protocol`,
   RakLib, compression or encryption. We use
   [gophertunnel](https://github.com/sandertv/gophertunnel) (the library Dragonfly uses) for RakNet,
@@ -299,6 +300,12 @@ smithing recipes, beacon effects or note block sounds.
   Without these, no sign could be written on.
 - Teleports (`SyncMovement` with `MoveModeTeleport`) must carry `TeleportData`: without it the
   1.26.51 client left with "Block" after /tp, respawn and ender pearls.
+- Opening the inventory (`InventoryManager.OnClientOpenMainInventory`): with some latency the
+  client sends `Interact(OpenInventory)` more than once per key press. PHP handles the repeat as a
+  new window, closing the one it just opened, so the inventory only opened some of the time. A
+  repeat is now ignored while the inventory is open or waiting to open (as Dragonfly does), and a
+  server-side close the client doesn't acknowledge within `WindowCloseAckTimeout` (2 s) no longer
+  blocks every later window (`expireStalePendingClose`). Test: `server/inventory_open_test.go`.
 - Threading: packet handling and the tick share `Server`'s lock (`mcpe.Server` embeds
   `sync.Locker`). Code called from a packet handler or the tick already holds it; never call
   `Server.Lock` from there. `Server.Shutdown` is safe either way (the `stop` command calls it from
@@ -366,9 +373,9 @@ When you finish a chunk of work, update the checklist in `PROGRESS.md` and §5 o
 
 ## 8. Tips for agents
 
-- Always have the PHP source open for whatever you're porting. Behaviour must match it.
+- The PHP source is a reference for existing behaviour, not a rule: changes and new features that
+  PocketMine-MP doesn't have are fine.
 - Check whether a helper is already ported before writing one (`grep -rn "is a port of" pocketmine`).
-- Don't add features PocketMine-MP doesn't have.
 - `cmd/pocketmine-go/main.go` is only the entry point (PocketMine.php). Put new logic in the proper
   `pocketmine/...` package.
 - Run `go vet ./... && go test ./...` before committing.

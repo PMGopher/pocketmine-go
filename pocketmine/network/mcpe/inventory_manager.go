@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
@@ -163,6 +164,10 @@ type InventoryManager struct {
 
 	pendingCloseWindowID      *int
 	pendingOpenWindowCallback func()
+	// pendingCloseSince is when pendingCloseWindowID was set (see WindowCloseAckTimeout), and
+	// pendingOpenIsMainInventory reports whether pendingOpenWindowCallback opens the main inventory.
+	pendingCloseSince          time.Time
+	pendingOpenIsMainInventory bool
 
 	nextItemStackID int32
 
@@ -353,7 +358,13 @@ func (m *InventoryManager) SetCurrentItemStackRequestID(id *int32) { m.currentIt
 // Sending the client a new window before sending this final response creates buggy behaviour on the client, which
 // is problematic when switching windows. Therefore, we defer sending any new windows until after the client
 // responds to our window close instruction, so that we can complete the window handshake correctly.
+//
+// Unlike PHP, a close that the client hasn't acknowledged after WindowCloseAckTimeout is given up
+// on: the client never acks a close of a window it no longer shows, and waiting for that ack
+// forever left the player unable to open any window (their inventory included) again.
 func (m *InventoryManager) openWindowDeferred(fn func()) {
+	m.pendingOpenIsMainInventory = false
+	m.expireStalePendingClose()
 	if m.pendingCloseWindowID != nil {
 		m.session.GetLogger().Debug(fmt.Sprintf("Deferring opening of new window, waiting for close ack of window %d", *m.pendingCloseWindowID))
 		m.pendingOpenWindowCallback = fn
@@ -361,6 +372,22 @@ func (m *InventoryManager) openWindowDeferred(fn func()) {
 		fn()
 	}
 }
+
+// expireStalePendingClose gives up on a server-side close the client hasn't acknowledged within
+// WindowCloseAckTimeout, dropping the window that was waiting for it (the next open request opens
+// its window at once).
+func (m *InventoryManager) expireStalePendingClose() {
+	if m.pendingCloseWindowID != nil && time.Since(m.pendingCloseSince) > WindowCloseAckTimeout {
+		m.session.GetLogger().Debug(fmt.Sprintf("No close ack of window %d after %s, opening the next window anyway", *m.pendingCloseWindowID, WindowCloseAckTimeout))
+		m.pendingCloseWindowID = nil
+		m.pendingOpenWindowCallback = nil
+		m.pendingOpenIsMainInventory = false
+	}
+}
+
+// WindowCloseAckTimeout is how long openWindowDeferred waits for the client to acknowledge a
+// window the server closed before it opens the next window anyway.
+var WindowCloseAckTimeout = 2 * time.Second
 
 // createComplexSlotMapping is a port of InventoryManager::createComplexSlotMapping.
 func createComplexSlotMapping(inv inventory.Inventory) map[int]int {
@@ -472,9 +499,24 @@ func createContainerOpen(id int, inv inventory.Inventory) []packet.Packet {
 }
 
 // OnClientOpenMainInventory is a port of InventoryManager::onClientOpenMainInventory.
+//
+// Unlike PHP, a request to open the main inventory while it's already open (or about to be) is
+// ignored, as Dragonfly does: with some latency the client sends it more than once for one key
+// press, and handling the repeat closed the inventory the first request had just opened (the
+// server-side close of OnCurrentWindowRemove), so the inventory only opened some of the time.
 func (m *InventoryManager) OnClientOpenMainInventory() {
+	m.expireStalePendingClose()
+	if m.isMainInventoryOpen() {
+		m.session.GetLogger().Debug("Ignoring a repeated request to open the inventory, it's already open")
+		return
+	}
+	if m.pendingOpenWindowCallback != nil && m.pendingOpenIsMainInventory {
+		m.session.GetLogger().Debug("Ignoring a repeated request to open the inventory, it's waiting to open")
+		return
+	}
 	m.OnCurrentWindowRemove()
 
+	defer func() { m.pendingOpenIsMainInventory = m.pendingOpenWindowCallback != nil }()
 	m.openWindowDeferred(func() {
 		windowID := m.getNewWindowID()
 		m.associateIDWithInventory(windowID, m.player.GetInventory())
@@ -488,6 +530,16 @@ func (m *InventoryManager) OnClientOpenMainInventory() {
 	})
 }
 
+// isMainInventoryOpen reports whether the current window is the player's main inventory, opened
+// by OnClientOpenMainInventory and not closed since.
+func (m *InventoryManager) isMainInventoryOpen() bool {
+	if m.pendingCloseWindowID != nil || m.currentWindowType != WindowTypeInventory {
+		return false
+	}
+	inv, ok := m.networkIDToInventoryMap[m.lastInventoryNetworkID]
+	return ok && m.lastInventoryNetworkID != ContainerIDInventory && inv == m.player.GetInventory()
+}
+
 // OnCurrentWindowRemove is a port of InventoryManager::onCurrentWindowRemove.
 func (m *InventoryManager) OnCurrentWindowRemove() {
 	if _, ok := m.networkIDToInventoryMap[m.lastInventoryNetworkID]; ok {
@@ -498,6 +550,7 @@ func (m *InventoryManager) OnCurrentWindowRemove() {
 		}
 		id := m.lastInventoryNetworkID
 		m.pendingCloseWindowID = &id
+		m.pendingCloseSince = time.Now()
 		m.enchantingTableOptions = map[int]int{}
 	}
 }
@@ -532,6 +585,7 @@ func (m *InventoryManager) OnClientRemoveWindow(id int) {
 			m.session.GetLogger().Debug(fmt.Sprintf("Opening deferred window after close ack of window %d", id))
 			callback := m.pendingOpenWindowCallback
 			m.pendingOpenWindowCallback = nil
+			m.pendingOpenIsMainInventory = false
 			callback()
 		}
 	}
