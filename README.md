@@ -107,9 +107,12 @@ converted automatically, with a backup in `backups/worlds/`.
 Plugins are Go packages compiled into the server. There is no plugin file to drop in a folder:
 you import the package and rebuild, and the compiler checks your plugin against the server's API.
 
-A complete, commented example lives in **[`plugins/example`](plugins/example)**: a welcome title on
-join, a `/example` command, a config file and a repeating task. The fastest way to start is to copy
-that folder.
+A complete, commented example lives in its own repository:
+**[PMGopher/example](https://github.com/PMGopher/example)**. It has a welcome title on join, a
+`/example` command, a config file, a repeating task and a test. The fastest way to start is to copy
+it. Converting a plugin from PocketMine-MP? Its
+[AGENTS.md](https://github.com/PMGopher/example/blob/main/AGENTS.md) is a step-by-step conversion
+guide.
 
 ### 1. Describe the plugin: `plugin.yml`
 
@@ -176,16 +179,23 @@ func (l *listener) OnJoin(e *playerevent.PlayerJoinEvent) {
 To ship default files (like a `config.yml`), put them in a `resources/` folder next to
 `plugin.yml`, embed it too (`//go:embed plugin.yml resources`) and call `m.SaveDefaultConfig()`.
 
+Your plugin is a Go module of its own (`go mod init github.com/you/helloplugin`) that requires the
+server module `pocketmine-go` (see the example plugin's `go.mod`).
+
 ### 3. Register it: `cmd/pocketmine-go/plugins.go`
 
-Add a blank import of your package, then rebuild:
+In your clone of the server, fetch the plugin and add a blank import of it, then rebuild:
+
+```bash
+go get github.com/PMGopher/example@latest
+```
 
 ```go
 package main
 
 import (
-	_ "pocketmine-go/plugins/example"  // a plugin inside this repository
-	_ "github.com/you/helloplugin"      // or any Go module: go get github.com/you/helloplugin
+	_ "github.com/PMGopher/example"   // the example plugin
+	_ "github.com/you/helloplugin"    // your own plugin
 )
 ```
 

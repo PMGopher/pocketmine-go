@@ -114,8 +114,9 @@ go run ./cmd/pocketmine-go --debug.level=2    # debug log lines (pocketmine.yml 
 ```
 cmd/pocketmine-go/     Entry point only (port of PocketMine.php): options, server.lock, MainLogger, then
                        server.New/Start.
-plugins/example/       Example plugin (plugin.yml, embedded resources, events, command, task); plugins
-                       are registered by a blank import in cmd/pocketmine-go/plugins.go.
+                       Plugins are separate Go modules registered by a blank import in
+                       cmd/pocketmine-go/plugins.go; the example plugin and the guide for converting
+                       PocketMine-MP plugins are in https://github.com/PMGopher/example.
 tools/packetproxy/     Debugging proxy that logs a real client's packets (not part of the port).
 pocketmine/            One Go package per PHP namespace under pmmp/PocketMine-MP/src/.
   server/              Server, ServerProperties, ServerConfigGroup (PHP's root-namespace classes;
