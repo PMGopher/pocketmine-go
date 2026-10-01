@@ -7,7 +7,7 @@ import (
 )
 
 // VanillaFlatLayers builds the classic PocketMine-MP default flat preset
-// ("2;bedrock,59xstone,3xdirt,grass;1;", the commented example in resources/pocketmine.yml) as
+// ("2;bedrock,59xstone,3xdirt,grass;1;", the commented example in resources/pocketmine.toml) as
 // []FlatLayer directly, since NewFlat doesn't parse preset strings - see Flat's doc comment.
 func VanillaFlatLayers() []FlatLayer {
 	return []FlatLayer{

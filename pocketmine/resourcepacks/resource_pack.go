@@ -1,5 +1,5 @@
 // Package resourcepacks is a port of pocketmine\resourcepacks: the resource packs offered to
-// clients when they join (resource_packs/resource_packs.yml). gophertunnel sends the packs to the
+// clients when they join (resource_packs/resource_packs.toml). gophertunnel sends the packs to the
 // client; this package decides which ones.
 package resourcepacks
 

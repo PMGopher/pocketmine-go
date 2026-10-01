@@ -165,7 +165,7 @@ func (m *SimpleCommandMap) GetCommands() map[string]CommandLike {
 }
 
 // RegisterServerAliases is a port of SimpleCommandMap::registerServerAliases(): registers the
-// `aliases` section of pocketmine.yml as FormattedCommandAlias commands.
+// `aliases` section of pocketmine.toml as FormattedCommandAlias commands.
 func (m *SimpleCommandMap) RegisterServerAliases() {
 	for alias, commandStrings := range m.server.GetCommandAliases() {
 		if strings.Contains(alias, ":") {

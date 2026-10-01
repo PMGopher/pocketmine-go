@@ -27,19 +27,19 @@ var (
 // RegisterGoPlugin registers a plugin compiled into the server. Call it from the plugin package's
 // init() and import that package (e.g. with a blank import in cmd/pocketmine-go):
 //
-//	//go:embed plugin.yml resources
+//	//go:embed plugin.toml resources
 //	var files embed.FS
 //
 //	func init() { plugin.RegisterGoPlugin(files, func() plugin.Plugin { return &Main{} }) }
 //
-// fsys is the plugin's root folder, like the root of a PHP plugin: it must contain plugin.yml, and
-// may contain a resources folder. newPlugin creates the plugin's main object, which is what the
-// "main" class in plugin.yml is to a PHP plugin; it must implement Initializer (embedding
-// PluginBase does that).
+// fsys is the plugin's root folder, like the root of a PHP plugin: it must contain plugin.toml (or,
+// for plugins written before it, plugin.yml), and may contain a resources folder. newPlugin creates
+// the plugin's main object, which is what the "main" class in the manifest is to a PHP plugin; it
+// must implement Initializer (embedding PluginBase does that).
 //
-// The plugin is then loaded by the PluginManager like any other: plugin_list.yml, API version,
+// The plugin is then loaded by the PluginManager like any other: plugin_list.toml, API version,
 // dependencies, load order, data folder (plugins/<name>/ or plugin_data/<name>/) and commands
-// from plugin.yml all work as for PHP plugins.
+// from plugin.toml all work as for PHP plugins.
 func RegisterGoPlugin(fsys fs.FS, newPlugin func() Plugin) {
 	goPluginsMu.Lock()
 	defer goPluginsMu.Unlock()
@@ -80,11 +80,14 @@ func (l *GoPluginLoader) GetPluginDescription(file string) (*Description, error)
 	if r == nil {
 		return nil, nil
 	}
-	yml, err := fs.ReadFile(r.fsys, "plugin.yml")
-	if err != nil {
-		return nil, nil
+	if manifest, err := fs.ReadFile(r.fsys, "plugin.toml"); err == nil {
+		return NewDescriptionFromTOML(string(manifest))
 	}
-	return NewDescriptionFromYAML(string(yml))
+	// Plugins written before plugin.toml still load.
+	if manifest, err := fs.ReadFile(r.fsys, "plugin.yml"); err == nil {
+		return NewDescriptionFromYAML(string(manifest))
+	}
+	return nil, nil
 }
 
 func (l *GoPluginLoader) GetAccessProtocol() string { return "" }

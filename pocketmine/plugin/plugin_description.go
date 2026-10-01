@@ -3,6 +3,7 @@ package plugin
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 
 var pluginNamePattern = regexp.MustCompile(`^[A-Za-z0-9 _.-]+$`)
 
-// Description is a port of pocketmine\plugin\PluginDescription (parses a plugin.yml manifest).
+// Description is a port of pocketmine\plugin\PluginDescription (parses a plugin.toml or plugin.yml manifest).
 type Description struct {
 	name                       string
 	version                    string
@@ -34,6 +35,9 @@ type Description struct {
 	order                      EnableOrder
 	permissions                map[string][]*permission.Permission
 	rawMap                     map[string]any
+	// permissionOrder is the declaration order of the permissions of a plugin.toml (see
+	// NewDescriptionFromTOML).
+	permissionOrder []string
 }
 
 // NewDescriptionFromYAML is a port of the string-argument form of PluginDescription::__construct
@@ -258,6 +262,27 @@ func (d *Description) permissionEntries(rootNode *yaml.Node) ([]permission.Permi
 
 	permsMap, _ := d.rawMap["permissions"].(map[string]any)
 	entries := make([]permission.PermissionEntry, 0, len(permsMap))
+	if d.permissionOrder != nil {
+		names := make([]string, 0, len(permsMap))
+		for _, name := range d.permissionOrder {
+			if _, ok := permsMap[name]; ok {
+				names = append(names, name)
+			}
+		}
+		for _, name := range sortedKeys(permsMap) {
+			if !slices.Contains(names, name) {
+				names = append(names, name)
+			}
+		}
+		for _, name := range names {
+			entry, err := permissionEntryFromValue(name, permsMap[name])
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, entry)
+		}
+		return entries, nil
+	}
 	for name, raw := range permsMap {
 		entry, err := permissionEntryFromValue(name, raw)
 		if err != nil {

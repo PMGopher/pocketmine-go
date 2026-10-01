@@ -16,7 +16,7 @@ type DisablePluginException struct{}
 func (e *DisablePluginException) Error() string { return "plugin requested to be disabled" }
 
 // PluginDescriptionParseException is a port of pocketmine\plugin\PluginDescriptionParseException -
-// thrown while parsing a plugin.yml manifest.
+// thrown while parsing a plugin manifest.
 type PluginDescriptionParseException struct{ Message string }
 
 func (e *PluginDescriptionParseException) Error() string { return e.Message }

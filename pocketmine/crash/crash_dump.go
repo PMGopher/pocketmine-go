@@ -38,7 +38,7 @@ type Server interface {
 	GetStartTime() time.Time
 	GetDataPath() string
 	GetName() string
-	// GetPropertyBool is ServerConfigGroup::getPropertyBool (pocketmine.yml).
+	// GetPropertyBool is ServerConfigGroup::getPropertyBool (pocketmine.toml).
 	GetPropertyBool(variable string, defaultValue bool) bool
 }
 
@@ -185,7 +185,7 @@ func (d *CrashDump) extraData() {
 		if serverDotProperties, err := os.ReadFile(filepath.Join(d.server.GetDataPath(), "server.properties")); err == nil {
 			d.data.ServerDotProperties = rconPasswordPattern.ReplaceAllString(string(serverDotProperties), "rcon.password=******")
 		}
-		if pocketmineDotYml, err := os.ReadFile(filepath.Join(d.server.GetDataPath(), "pocketmine.yml")); err == nil {
+		if pocketmineDotYml, err := os.ReadFile(filepath.Join(d.server.GetDataPath(), "pocketmine.toml")); err == nil {
 			d.data.PocketmineDotYml = string(pocketmineDotYml)
 		}
 	}

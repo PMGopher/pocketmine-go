@@ -9,12 +9,11 @@ import (
 	"pocketmine-go/pocketmine/utils"
 )
 
-// ServerConfigGroup is a port of pocketmine\ServerConfigGroup: server.properties plus pocketmine.yml,
-// with command-line --key=value overrides taking precedence (PHP's getopt).
+// ServerConfigGroup is a port of pocketmine\ServerConfigGroup: server.properties plus
+// pocketmine.toml, with command-line --key=value overrides taking precedence (PHP's getopt).
 //
-// pocketmine.yml isn't shipped with this port yet (resources/pocketmine.yml isn't vendored), so
-// pocketmineYml may be nil; GetProperty then only sees command-line overrides and the defaults
-// passed by the caller.
+// pocketmineYml (pocketmine.toml; the name is kept from PHP) may be nil in tests; GetProperty then
+// only sees command-line overrides and the defaults passed by the caller.
 type ServerConfigGroup struct {
 	pocketmineYml    *utils.Config
 	serverProperties *utils.Config
@@ -42,7 +41,7 @@ func (g *ServerConfigGroup) getopt(variable string) (string, bool) {
 	return "", false
 }
 
-// GetProperty is a port of ServerConfigGroup::getProperty (pocketmine.yml, nested key).
+// GetProperty is a port of ServerConfigGroup::getProperty (pocketmine.toml, nested key).
 func (g *ServerConfigGroup) GetProperty(variable string, defaultValue any) any {
 	if _, ok := g.propertyCache[variable]; !ok {
 		if v, ok := g.getopt(variable); ok {

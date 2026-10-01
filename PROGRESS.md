@@ -62,16 +62,16 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] Block changes sent to players (`World::changedBlocks`/`sendBlocks`)
 - [x] Packet rate limiting, broadcasting (`StandardPacketBroadcaster`, `StandardEntityEventBroadcaster`), chunk cache
 - [x] Query protocol (on the game port, or a dedicated interface), UPnP port forwarding
-- [x] Resource packs (`resource_packs.yml`, `PlayerResourcePackOfferEvent`; delivery by gophertunnel)
+- [x] Resource packs (`resource_packs.toml`, `PlayerResourcePackOfferEvent`; delivery by gophertunnel)
 - [x] Transfer server, forms, toasts, titles
 - [x] `DataPacketSend/Receive/DecodeEvent`
 
 ### Server core
-- [x] `Server` class: startup, `pocketmine.yml` + `server.properties`, language, ops/whitelist/ban lists, broadcast channels, player data, tick loop with TPS/load tracking, console title, query info regeneration, shutdown
-- [x] `server.properties` + `pocketmine.yml` (`ServerConfigGroup`, `--key=value` overrides)
+- [x] `Server` class: startup, `pocketmine.toml` + `server.properties`, language, ops/whitelist/ban lists, broadcast channels, player data, tick loop with TPS/load tracking, console title, query info regeneration, shutdown
+- [x] `server.properties` + `pocketmine.toml` (`ServerConfigGroup`, `--key=value` overrides)
 - [x] Console input and console command sender (`ConsoleReader`, `ConsoleCommandSender`, `BroadcastLoggerForwarder`)
 - [x] Logger (`MainLogger` with `server.log` and log archive), text formatting, language/translation files (`lang`)
-- [x] Config files (YAML/JSON/properties/enum) via `utils.Config`
+- [x] Config files (TOML/JSON/properties/enum; YAML read to convert old files) via `utils.Config`
 - [x] Sync task scheduler
 - [x] Async tasks / worker pool (goroutines)
 - [x] Timings, memory manager
@@ -86,7 +86,7 @@ Legend for the checklist below: `[x]` done · `[ ]` not done. **(partial)** mean
 - [x] World tick: time, weather, scheduled and neighbour updates, random ticks
 - [x] Chunk loading/unloading, chunk loaders, chunk listeners
 - [x] Explosions
-- [x] Multi-world manager (`WorldManager`, `worlds:` in pocketmine.yml)
+- [x] Multi-world manager (`WorldManager`, `[worlds]` in pocketmine.toml)
 - [x] Particles (all types) and sounds (all 111 sound types)
 - [x] Block-state and item upgraders (`BlockDataUpgrader`, `ItemDataUpgrader` with pmmp's upgrade schemas): old block states and items are upgraded on load
 - [x] Region formats (Anvil, McRegion, PMAnvil) and automatic conversion to LevelDB (`FormatConverter`, backup in `backups/worlds`)
@@ -169,8 +169,8 @@ All 77 classes under `pocketmine\entity` are ported, with their full logic.
 - [x] Event system base (handlers, priorities, cancellable, parent events)
 - [x] Concrete events (block, entity, player, inventory, world, server, plugin)
 - [x] Permissions, attachments, ban lists, ops
-- [x] `plugin.yml` parsing, API version checks
-- [x] Plugin loading and `PluginManager`: plugins are Go packages compiled into the server (imported in `cmd/pocketmine-go/plugins.go`, registered with `plugin.RegisterGoPlugin`) and loaded like PocketMine-MP loads its plugins (`plugin.yml`, API version, dependencies and load order, commands, permissions, data folder). PHP plugins themselves can't run in Go.
+- [x] Plugin manifest parsing (`plugin.toml`; `plugin.yml` still read), API version checks
+- [x] Plugin loading and `PluginManager`: plugins are Go packages compiled into the server (imported in `cmd/pocketmine-go/plugins.go`, registered with `plugin.RegisterGoPlugin`) and loaded like PocketMine-MP loads its plugins (`plugin.toml`, API version, dependencies and load order, commands, permissions, data folder). PHP plugins themselves can't run in Go.
 
 ## Roadmap
 

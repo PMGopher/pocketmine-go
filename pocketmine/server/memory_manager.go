@@ -27,7 +27,7 @@ const (
 var PruneChunkCachesFunc func()
 
 // MemoryManager is a port of pocketmine\MemoryManager: watches memory usage against the limits in
-// pocketmine.yml, fires LowMemoryEvent and lowers the allowed view distance while memory is low.
+// pocketmine.toml, fires LowMemoryEvent and lowers the allowed view distance while memory is low.
 //
 // PHP's hard limit is memory_limit, which kills the process when exceeded; Go has no such hard
 // limit, so memory.main-hard-limit is applied as the runtime's soft limit (debug.SetMemoryLimit),

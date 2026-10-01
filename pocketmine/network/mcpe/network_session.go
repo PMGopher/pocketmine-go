@@ -56,7 +56,7 @@ type Server interface {
 	GetMotd() string
 	GetMaxPlayers() int
 	RequiresAuthentication() bool
-	// GetPropertyBool is ServerConfigGroup::getPropertyBool (pocketmine.yml).
+	// GetPropertyBool is ServerConfigGroup::getPropertyBool (pocketmine.toml).
 	GetPropertyBool(variable string, defaultValue bool) bool
 	IsWhitelisted(name string) bool
 	GetNameBans() *permission.BanList

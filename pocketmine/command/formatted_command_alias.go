@@ -10,7 +10,7 @@ import (
 )
 
 // FormattedCommandAlias is a port of pocketmine\command\FormattedCommandAlias: used to register
-// commands defined in the `aliases` section of pocketmine.yml.
+// commands defined in the `aliases` section of pocketmine.toml.
 type FormattedCommandAlias struct {
 	Command
 	formatStrings []string

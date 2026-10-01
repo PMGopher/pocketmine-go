@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// PluginGraylist is a port of pocketmine\plugin\PluginGraylist (plugin_list.yml).
+// PluginGraylist is a port of pocketmine\plugin\PluginGraylist (plugin_list.toml).
 type PluginGraylist struct {
 	plugins     map[string]bool
 	order       []string

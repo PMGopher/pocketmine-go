@@ -35,8 +35,8 @@ behaviour is no longer a requirement, and new features and changes are welcome.
 go build ./...                      # builds everything
 go test ./...                       # all packages currently pass
 go run ./cmd/pocketmine-go                                   # server on UDP :19132, data in the current directory
-go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # PocketMine.php options + server.properties/pocketmine.yml overrides
-go run ./cmd/pocketmine-go --debug.level=2    # debug log lines (pocketmine.yml debug.level)
+go run ./cmd/pocketmine-go --data=srv --server-port=19133 --xbox-auth=false   # PocketMine.php options + server.properties/pocketmine.toml overrides
+go run ./cmd/pocketmine-go --debug.level=2    # debug log lines (pocketmine.toml debug.level)
 ```
 
 - Go version: see `go.mod` (`go 1.26.1`).
@@ -200,13 +200,13 @@ Measured by mapping every PHP class in upstream `src/` to a Go file/type (see §
 |---|---|
 | block (+ tiles, block inventories, utils) | **All 390 classes ported** (traits as `...Component` structs), all 19 block inventories. **All 799 `VanillaBlocks` are registered** (port of `VanillaBlocksInputs.php`, 11,125 runtime states in `RuntimeBlockStateRegistry`) and serialize through the full `data/bedrock/block/convert` port (`VanillaBlockMappings`). The 1.26.50-only properties (`minecraft:corner` on stairs, `minecraft:connection_*` on fences/panes/bars/tripwire) are written with neutral values and ignored on read; real neighbour-based values would be a follow-up. Blocks open their windows through `block.OpenWindowFunc`/`OpenTileWindowFunc` (set by `player`). **All tiles** (`TileFactory`, every PHP save ID and alias) save/load with their chunk, are created/updated by `Block::writeStateToWorld` and read back by `readStateFromWorld`, and are sent to clients (spawn compounds in the `SubChunk` entries, `BlockActorData` + the render-update workaround in `World.CreateBlockUpdatePackets`). **Container tiles hold their inventories** through hooks set by `block/inventory` (`tile/container.go`, `block/inventory/tile_hooks.go`), incl. furnace smelting, brewing, campfire cooking and chiseled bookshelves. Liquids flow (`Liquid.OnScheduledUpdate`, `MinimumCostFlowCalculator`), fire spreads, drops use `FortuneDropHelper`, bone meal/hoe/shovel interactions and tree growth (`TreeFactory` via `block.TreeTransactionFunc`) are ported. |
 | item | 137/154 classes incl. enchantments, `EnchantingHelper`, `AvailableEnchantmentRegistry`, `ItemEnchantmentTagRegistry` (enchanting table options match PHP output, see `enchanting_helper_test.go`). **Full `VanillaItems`** (port of `VanillaItemsInputs.php`) and `data/bedrock/item` (`ItemSerializer`/`ItemDeserializer`, registrar, `BlockItemIdMap` derived from the vendored item list: block items are the entries with runtime ID < 256). **Item NBT (de)serialization** (`item/item_nbt.go`, `SavedItemStackData`, `ItemDataUpgrader` for legacy formats): dropped items, tridents, container contents and Human inventories are saved. |
-| world core | World, ticking, scheduled/random updates, light, explosions, WorldManager (incl. `worlds:` from pocketmine.yml), ChunkListener: done. **World formats: done** (`world/format/io`): `WorldProviderManager`, full `LevelDB` (vanilla `db/` layout, zlib-raw via df-mc/goleveldb, every chunk/sub-chunk version, legacy terrain, 2D/3D biomes, tiles, entities), region formats (Anvil, McRegion, PMAnvil) with automatic conversion to LevelDB (`FormatConverter`, backups in `backups/worlds`), `BedrockWorldData`/`JavaWorldData`, the block-state upgrader (`data/bedrock/block/upgrade`, pmmp's BedrockBlockUpgradeSchema) and item upgrader (`data/bedrock/item/upgrade`). Tested with worlds from BDS 1.26.52. Old root-level LevelDB files of earlier builds of this port are moved into `db/` on load. |
+| world core | World, ticking, scheduled/random updates, light, explosions, WorldManager (incl. `[worlds]` from pocketmine.toml), ChunkListener: done. **World formats: done** (`world/format/io`): `WorldProviderManager`, full `LevelDB` (vanilla `db/` layout, zlib-raw via df-mc/goleveldb, every chunk/sub-chunk version, legacy terrain, 2D/3D biomes, tiles, entities), region formats (Anvil, McRegion, PMAnvil) with automatic conversion to LevelDB (`FormatConverter`, backups in `backups/worlds`), `BedrockWorldData`/`JavaWorldData`, the block-state upgrader (`data/bedrock/block/upgrade`, pmmp's BedrockBlockUpgradeSchema) and item upgrader (`data/bedrock/item/upgrade`). Tested with worlds from BDS 1.26.52. Old root-level LevelDB files of earlier builds of this port are moved into `db/` on load. |
 | generators | Flat, Normal (all biomes), Nether done. All trees (oak, birch, spruce, jungle, acacia, azalea, nether fungi) and `TreeFactory`. Generation, population and lighting run on the async pool's worker goroutines like PHP (`world/generator_executor.go`, `world_population.go`, `light_population_task.go`). |
 | entity | **All 77 `pocketmine\entity` classes ported with their logic.** Item use (bows, throwables, spawn eggs) is wired through the packet handlers, limited by which items have network mappings. |
 | player | **Complete** (`Player` with every PHP method that has its dependencies: chunk streaming, block interaction, item use, combat, death/respawn, forms, titles, game modes, permissions, broadcast channels, player data). |
 | event | **Every concrete event** (block, entity, player, inventory, world, server, plugin), fired where the ported code fires them. Event inheritance: `event.DeclareParent` (see `event/parents.go`). |
 | network | **Complete above the wire**, incl. `CraftingDataCache` and enchanting options: `NetworkSession`, `RakLibInterface` (on gophertunnel), `InventoryManager`, `ChunkCache`, `CreativeInventoryCache`, broadcasters, rate limiter, `PreSpawn`/`InGame`/`Death` packet handlers, `ItemStackRequestExecutor`, query, UPnP, resource packs, `DataPacket*Event`. |
-| server core | **Complete**: `Server` (pocketmine.yml, language, ops/whitelist/bans, broadcast channels, TPS, title tick, query regeneration, memory manager, async pool, shutdown), console reader/sender, `MainLogger` + `server.log`, `server.lock`. `/version` shows the Go version instead of PHP's (no JIT line); `/status` adds goroutines, OS threads, Go heap, RSS (`utils.ProcessRSS`) and GC count, since PHP's memory numbers don't mean the same thing for Go. |
+| server core | **Complete**: `Server` (pocketmine.toml, language, ops/whitelist/bans, broadcast channels, TPS, title tick, query regeneration, memory manager, async pool, shutdown), console reader/sender, `MainLogger` + `server.log`, `server.lock`. `/version` shows the Go version instead of PHP's (no JIT line); `/status` adds goroutines, OS threads, Go heap, RSS (`utils.ProcessRSS`) and GC count, since PHP's memory numbers don't mean the same thing for Go. |
 | command | **Complete**: command map + 40 of 41 default commands (`command/defaults`); `dumpmemory` dumps PHP's heap (`MemoryDump`), out of scope. |
 | crafting | **All 25 `pocketmine\crafting` classes.** Recipes load from pmmp/BedrockData's JSON (`data/bedrock/assets/recipes`); recipes with an item that can't be deserialized are skipped (like PHP). `CraftingTransaction`/`EnchantingTransaction` are wired into `ItemStackRequestExecutor`. Furnace and brewing stand ticks run from their blocks' scheduled updates. |
 | plugin | **18 of 22 classes**: `PluginManager`, `PluginBase`, `PluginLogger`, graylist, load triage, loadability checker and a Go plugin loader (`go_plugin_loader.go`). Plugins are Go packages compiled into the server (option (a) of Phase 4): imported in `cmd/pocketmine-go/plugins.go`, registered with `plugin.RegisterGoPlugin`, then loaded like PHP loads the plugins folder. `PharPluginLoader`/`ScriptPluginLoader` are PHP-only. |
@@ -307,6 +307,12 @@ smithing recipes, beacon effects or note block sounds.
   repeat is now ignored while the inventory is open or waiting to open (as Dragonfly does), and a
   server-side close the client doesn't acknowledge within `WindowCloseAckTimeout` (2 s) no longer
   blocks every later window (`expireStalePendingClose`). Test: `server/inventory_open_test.go`.
+- Config files are **TOML** (owner's decision, 2026-10-01): `pocketmine.toml`, `plugin_list.toml`,
+  `resource_packs.toml`, plugins' `plugin.toml` and `config.toml` (`utils.ConfigTOML`, go-toml v2;
+  integers are normalized to `int`). The YAML files of older versions are converted on first start
+  by `utils.ConvertYAMLToTOML` (old file kept as `.yml.bak`); a plugin's `plugin.yml` is still read
+  when it has no `plugin.toml`. `plugin.toml` permissions keep their declaration order
+  (`tomlChildKeyOrder`), since a `default` carries forward to the permissions after it.
 - Threading: packet handling and the tick share `Server`'s lock (`mcpe.Server` embeds
   `sync.Locker`). Code called from a packet handler or the tick already holds it; never call
   `Server.Lock` from there. `Server.Shutdown` is safe either way (the `stop` command calls it from
@@ -330,7 +336,7 @@ something a person can see working in the client.
 6. ~~**Spawn/floating issue**~~ Fixed (see Known issues).
 
 ### Phase 2: Real server structure
-Done: `Server` (pocketmine.yml, ops/whitelist/bans, broadcast channels, async pool, memory
+Done: `Server` (pocketmine.toml, ops/whitelist/bans, broadcast channels, async pool, memory
 manager, query, UPnP), `NetworkSession`/`RakLibInterface`/`InventoryManager` and every packet
 handler above the wire, console reader + `ConsoleCommandSender`, all concrete events, permissions
 and ops wired to players, 34 of 41 default commands. Remaining: `give`, `clear`, `enchant`,
@@ -351,7 +357,7 @@ upload), crash dumps.
 - **Decided: (a), compile-time Go plugins** (done, see §5). The options were (a) compile-time Go plugins
   registered via an interface (simplest, like Dragonfly), (b) Go's `plugin` package (`.so`, Linux
   only, fragile), (c) an embedded scripting/WASM runtime. Decide before porting `PluginManager`
-  and `PluginBase`. `PluginDescription`/`ApiVersion` parsing (`plugin.yml`) is already ported and
+  and `PluginBase`. `PluginDescription`/`ApiVersion` parsing (`plugin.yml`, now `plugin.toml`) is already ported and
   usable in all three.
 
 ### Phase 5: Everything else

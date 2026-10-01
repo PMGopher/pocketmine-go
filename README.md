@@ -82,23 +82,27 @@ GOOS=linux   GOARCH=arm64 go build -o pocketmine-go     ./cmd/pocketmine-go   # 
 | `--no-log-file` | Don't write `server.log` |
 | `--enable-ansi` / `--disable-ansi` | Force coloured console output on or off |
 | `--version` | Print the version and exit |
-| `--<key>=<value>` | Override any `server.properties` or `pocketmine.yml` setting, e.g. `--server-port=19133`, `--xbox-auth=false`, `--debug.level=2` |
+| `--<key>=<value>` | Override any `server.properties` or `pocketmine.toml` setting, e.g. `--server-port=19133`, `--xbox-auth=false`, `--debug.level=2` |
 
 ### The data folder
 
 ```text
 <data>/
 ├── server.properties        port, MOTD, game mode, difficulty, view distance, xbox-auth, ...
-├── pocketmine.yml           advanced settings: worlds, chunk sending, aliases, timings, ...
+├── pocketmine.toml          advanced settings: worlds, chunk sending, aliases, timings, ...
 ├── ops.txt  white-list.txt  banned-players.txt  banned-ips.txt
 ├── worlds/<name>/           level.dat + db/, the same layout as vanilla Bedrock
 ├── players/<name>.dat       inventories, positions, XP, ...
-├── plugin_data/<plugin>/    each plugin's own files (config.yml, ...)
-├── plugin_list.yml          allow or block plugins by name
+├── plugin_data/<plugin>/    each plugin's own files (config.toml, ...)
+├── plugin_list.toml         allow or block plugins by name
 ├── resource_packs/          resource packs offered to players
 ├── crashdumps/              written if the server ever crashes
 └── server.log
 ```
+
+All configuration files are [TOML](https://toml.io). Upgrading from a version that used YAML?
+`pocketmine.yml`, `plugin_list.yml`, `resource_packs.yml` and plugins' `config.yml` are converted
+automatically on the first start, settings included; the old files are kept as `.yml.bak`.
 
 Worlds made by vanilla Bedrock load as they are; older world formats (Anvil, McRegion, PMAnvil) are
 converted automatically, with a backup in `backups/worlds/`.
@@ -114,22 +118,20 @@ it. Converting a plugin from PocketMine-MP? Its
 [AGENTS.md](https://github.com/PMGopher/example/blob/main/AGENTS.md) is a step-by-step conversion
 guide.
 
-### 1. Describe the plugin: `plugin.yml`
+### 1. Describe the plugin: `plugin.toml`
 
-```yaml
-name: HelloPlugin
-version: 1.0.0
-main: hello.Main
-api: [5.0.0]
+```toml
+name = "HelloPlugin"
+version = "1.0.0"
+main = "hello.Main"
+api = ["5.0.0"]
 
-commands:
-  hello:
-    description: Says hello
-    permission: helloplugin.command.hello
+[commands.hello]
+description = "Says hello"
+permission = "helloplugin.command.hello"
 
-permissions:
-  helloplugin.command.hello:
-    default: true
+[permissions."helloplugin.command.hello"]
+default = true
 ```
 
 ### 2. Write it: `hello.go`
@@ -146,7 +148,7 @@ import (
 	"pocketmine-go/pocketmine/server"
 )
 
-//go:embed plugin.yml
+//go:embed plugin.toml
 var files embed.FS
 
 // Register the plugin when its package is imported.
@@ -162,7 +164,7 @@ func (m *Main) OnEnable() error {
 	return srv.GetPluginManager().RegisterEvents(&listener{m}, m)
 }
 
-// Commands from plugin.yml land here.
+// Commands from plugin.toml land here.
 func (m *Main) OnCommand(sender command.Sender, cmd command.CommandLike, label string, args []string) bool {
 	sender.SendMessage("Hello, " + sender.GetName() + "!")
 	return true
@@ -176,11 +178,12 @@ func (l *listener) OnJoin(e *playerevent.PlayerJoinEvent) {
 }
 ```
 
-To ship default files (like a `config.yml`), put them in a `resources/` folder next to
-`plugin.yml`, embed it too (`//go:embed plugin.yml resources`) and call `m.SaveDefaultConfig()`.
+To ship default files (like a `config.toml`), put them in a `resources/` folder next to
+`plugin.toml`, embed it too (`//go:embed plugin.toml resources`) and call `m.SaveDefaultConfig()`.
 
-Your plugin is a Go module of its own (`go mod init github.com/you/helloplugin`) that requires the
-server module `pocketmine-go` (see the example plugin's `go.mod`).
+Your plugin is a Go module of its own (`go mod init github.com/you/helloplugin`). Its `go.mod`
+needs no `require` for the server; a `go.work` next to it points at your server clone while you
+develop (see the example plugin).
 
 ### 3. Register it: `cmd/pocketmine-go/plugins.go`
 
@@ -201,14 +204,14 @@ import (
 
 On the next start the console shows `Loading HelloPlugin v1.0.0` and `Enabling HelloPlugin v1.0.0`.
 The server checks the `api` version, `depend`/`softdepend`/`loadbefore`, `load` order and
-`plugin_list.yml` before enabling it. Your plugin gets its own folder in `plugin_data/`.
+`plugin_list.toml` before enabling it. Your plugin gets its own folder in `plugin_data/`.
 
 ### What a plugin can use
 
 | You want to... | Use |
 |---|---|
 | React to something happening | `RegisterEvents(listener, plugin)`, or `plugin.RegisterEvent[E]` for a single handler. Events live in `pocketmine/event/...` (player, block, entity, inventory, world, server) |
-| Add a command | Declare it in `plugin.yml`, handle it in `OnCommand` |
+| Add a command | Declare it in `plugin.toml`, handle it in `OnCommand` |
 | Run code later or repeatedly | `m.GetScheduler().ScheduleDelayedTask` / `ScheduleRepeatingTask` with `scheduler.NewClosureTask(func() { ... })` (20 ticks = 1 second) |
 | Store settings | `m.SaveDefaultConfig()`, `m.GetConfig().Get(key, default)`, `m.ReloadConfig()` |
 | Reach the server | `m.GetServer().(*server.Server)`: players, worlds, broadcasting, commands, bans, ... |

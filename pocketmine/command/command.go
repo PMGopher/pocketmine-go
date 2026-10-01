@@ -89,7 +89,7 @@ func (c *Command) SetPermissions(perms []string) error {
 
 // SetPermission mirrors Command::setPermission(): a nil pointer clears every permission;
 // otherwise it's a ";"-separated list, matching how PHP encodes multiple required permissions
-// in plugin.yml as a single string.
+// in plugin.toml as a single string.
 func (c *Command) SetPermission(perm *string) {
 	if perm == nil {
 		c.perms = nil

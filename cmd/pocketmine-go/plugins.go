@@ -11,6 +11,6 @@ package main
 //	)
 //
 // The PluginManager then loads it on startup like a plugin from the plugins folder
-// (plugin_list.yml, API version, dependencies, load order, commands and permissions from its
-// plugin.yml, data folder in plugin_data/<name>/). See
+// (plugin_list.toml, API version, dependencies, load order, commands and permissions from its
+// plugin.toml, data folder in plugin_data/<name>/). See
 // https://github.com/PMGopher/example and the README's "Writing plugins" section.

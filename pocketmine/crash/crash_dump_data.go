@@ -75,7 +75,7 @@ func (d *CrashDumpData) MarshalJSON() ([]byte, error) {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, err
 	}
-	result["pocketmine.yml"] = d.PocketmineDotYml
+	result["pocketmine.toml"] = d.PocketmineDotYml
 	result["server.properties"] = d.ServerDotProperties
 	return json.Marshal(result)
 }

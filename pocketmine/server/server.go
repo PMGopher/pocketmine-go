@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
-	"gopkg.in/yaml.v3"
 
 	"pocketmine-go/pocketmine"
 	"pocketmine-go/pocketmine/block"
@@ -81,8 +80,8 @@ const (
 	defaultAsyncCompressionThresh = 10_000
 )
 
-//go:embed resources/pocketmine.yml
-var defaultPocketmineYml []byte
+//go:embed resources/pocketmine.toml
+var defaultPocketmineToml []byte
 
 func init() {
 	PruneChunkCachesFunc = mcpe.PruneChunkCaches
@@ -231,17 +230,23 @@ func NewWithPluginPath(dataPath, pluginPath string, logger log.Logger) (*Server,
 	s.pluginPath, _ = filepath.Abs(pluginPath)
 
 	logger.Info("Loading server configuration")
-	pocketmineYmlPath := filepath.Join(s.dataPath, "pocketmine.yml")
-	if _, err := os.Stat(pocketmineYmlPath); os.IsNotExist(err) {
-		content := string(defaultPocketmineYml)
-		if pocketmine.IsDevelopmentBuild {
-			content = strings.Replace(content, "preferred-channel: stable", "preferred-channel: beta", 1)
-		}
-		_ = os.WriteFile(pocketmineYmlPath, []byte(content), 0o644)
+	pocketmineTomlPath := filepath.Join(s.dataPath, "pocketmine.toml")
+	if converted, err := utils.ConvertYAMLToTOML(filepath.Join(s.dataPath, "pocketmine.yml"), pocketmineTomlPath,
+		"Main configuration file for PocketMine-go, converted from pocketmine.yml (kept as pocketmine.yml.bak)."); err != nil {
+		return nil, fmt.Errorf("converting pocketmine.yml: %w", err)
+	} else if converted {
+		logger.Notice("Converted pocketmine.yml to pocketmine.toml (the old file is kept as pocketmine.yml.bak)")
 	}
-	pocketmineYml, err := utils.NewConfig(pocketmineYmlPath, utils.ConfigYAML, map[string]any{})
+	if _, err := os.Stat(pocketmineTomlPath); os.IsNotExist(err) {
+		content := string(defaultPocketmineToml)
+		if pocketmine.IsDevelopmentBuild {
+			content = strings.Replace(content, `preferred-channel = "stable"`, `preferred-channel = "beta"`, 1)
+		}
+		_ = os.WriteFile(pocketmineTomlPath, []byte(content), 0o644)
+	}
+	pocketmineYml, err := utils.NewConfig(pocketmineTomlPath, utils.ConfigTOML, map[string]any{})
 	if err != nil {
-		return nil, fmt.Errorf("loading pocketmine.yml: %w", err)
+		return nil, fmt.Errorf("loading pocketmine.toml: %w", err)
 	}
 	serverProperties, err := utils.NewConfig(filepath.Join(s.dataPath, "server.properties"), utils.ConfigProperties, map[string]any{
 		PropertyMotd:                          DefaultServerName,
@@ -1538,16 +1543,23 @@ var (
 	_ command.Server = (*Server)(nil)
 )
 
-// pluginListYml is resources/plugin_list.yml, copied to the data folder on first start.
+// pluginListToml is resources/plugin_list.toml, copied to the data folder on first start.
 //
-//go:embed resources/plugin_list.yml
-var pluginListYml []byte
+//go:embed resources/plugin_list.toml
+var pluginListToml []byte
 
-// loadPluginGraylist is the plugin_list.yml part of Server::__construct.
+// loadPluginGraylist is the plugin_list part of Server::__construct (plugin_list.toml; a
+// plugin_list.yml of an older version is converted).
 func (s *Server) loadPluginGraylist() (*plugin.PluginGraylist, error) {
-	graylistFile := filepath.Join(s.dataPath, "plugin_list.yml")
+	graylistFile := filepath.Join(s.dataPath, "plugin_list.toml")
+	if converted, err := utils.ConvertYAMLToTOML(filepath.Join(s.dataPath, "plugin_list.yml"), graylistFile,
+		"Converted from plugin_list.yml (kept as plugin_list.yml.bak).\nmode: \"blacklist\" or \"whitelist\"; plugins: the plugin names."); err != nil {
+		return nil, fmt.Errorf("converting plugin_list.yml: %w", err)
+	} else if converted {
+		s.logger.Notice("Converted plugin_list.yml to plugin_list.toml (the old file is kept as plugin_list.yml.bak)")
+	}
 	if !fileExists(graylistFile) {
-		if err := os.WriteFile(graylistFile, pluginListYml, 0o644); err != nil {
+		if err := os.WriteFile(graylistFile, pluginListToml, 0o644); err != nil {
 			return nil, err
 		}
 	}
@@ -1555,9 +1567,9 @@ func (s *Server) loadPluginGraylist() (*plugin.PluginGraylist, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load %s: %w", graylistFile, err)
 	}
-	var array map[string]any
-	if err := yaml.Unmarshal(data, &array); err != nil || array == nil {
-		return nil, fmt.Errorf("Failed to load %s: Expected array for root", graylistFile)
+	array, err := utils.ParseTOML(data)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load %s: %w", graylistFile, err)
 	}
 	graylist, err := plugin.PluginGraylistFromArray(array)
 	if err != nil {

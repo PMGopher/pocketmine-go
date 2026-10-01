@@ -210,7 +210,7 @@ type World struct {
 	// tickRateTime is World::$tickRateTime: how long the last tick took, in milliseconds.
 	tickRateTime float64
 
-	// chunkTickRadius mirrors World::$chunkTickRadius (pocketmine.yml's chunk-ticking.tick-radius,
+	// chunkTickRadius mirrors World::$chunkTickRadius (pocketmine.toml's chunk-ticking.tick-radius,
 	// default 4) - tickChunks() is a no-op while this is <= 0.
 	chunkTickRadius int
 

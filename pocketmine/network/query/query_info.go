@@ -20,7 +20,7 @@ type Plugin interface {
 // Server is what QueryInfo and QueryHandler need from pocketmine\Server.
 type Server interface {
 	GetMotd() string
-	// QueryListPlugins is pocketmine.yml's settings.query-plugins.
+	// QueryListPlugins is pocketmine.toml's settings.query-plugins.
 	QueryListPlugins() bool
 	GetQueryPlugins() []Plugin
 	GetOnlinePlayerNames() []string

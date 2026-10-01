@@ -80,7 +80,7 @@ func newTestServer(t *testing.T) *testServer {
 	return s
 }
 
-// testLoader loads in-memory plugins: file name => plugin.yml.
+// testLoader loads in-memory plugins: file name => plugin manifest (YAML).
 type testLoader struct {
 	manifests map[string]string
 	created   map[string]*testPlugin
@@ -112,7 +112,7 @@ func (l *testLoader) NewPlugin(file string, description *Description) (Plugin, b
 	return p, true
 }
 func (l *testLoader) GetResourceProvider(string) ResourceProvider {
-	return NewFSResourceProvider(fstest.MapFS{"config.yml": {Data: []byte("greeting: hello\n")}})
+	return NewFSResourceProvider(fstest.MapFS{"config.toml": {Data: []byte("greeting = \"hello\"\n")}})
 }
 
 type testPlugin struct {
@@ -214,7 +214,7 @@ func TestEnableAndDisablePlugins(t *testing.T) {
 		t.Errorf("PluginEnableEvent fired for %v", enabledEvents)
 	}
 
-	// The plugin.yml command is registered and routed to the plugin's OnCommand.
+	// The manifest's command is registered and routed to the plugin's OnCommand.
 	cmd := server.commandMap.GetCommand("hi")
 	if cmd == nil {
 		t.Fatal("the plugin's command alias isn't registered")
@@ -314,10 +314,10 @@ func TestPluginBaseConfig(t *testing.T) {
 	m.LoadPlugins(t.TempDir(), nil)
 	alpha := loader.created["Alpha"]
 	if got := alpha.GetConfig().Get("greeting", nil); got != "hello" {
-		t.Errorf("config greeting = %v, want the default config.yml's", got)
+		t.Errorf("config greeting = %v, want the default config.toml's", got)
 	}
-	if _, err := os.Stat(filepath.Join(alpha.GetDataFolder(), "config.yml")); err != nil {
-		t.Errorf("config.yml wasn't saved to the data folder: %v", err)
+	if _, err := os.Stat(filepath.Join(alpha.GetDataFolder(), "config.toml")); err != nil {
+		t.Errorf("config.toml wasn't saved to the data folder: %v", err)
 	}
 	if !strings.HasSuffix(alpha.GetDataFolder(), filepath.Join("plugin_data", "Alpha")+"/") {
 		t.Errorf("data folder = %q", alpha.GetDataFolder())
@@ -345,5 +345,27 @@ func TestPluginGraylist(t *testing.T) {
 	}
 	if !server.logger.contains("blacklist") {
 		t.Error("blacklisted plugin not reported")
+	}
+}
+
+// A config.yml left in the data folder by an older version becomes config.toml with its settings.
+func TestPluginBaseConvertsOldConfig(t *testing.T) {
+	dataPath := t.TempDir()
+	m, _, loader, _ := newTestManager(t, map[string]string{"a": manifest("Alpha", "")})
+	m.LoadPlugins(dataPath, nil)
+	alpha := loader.created["Alpha"]
+	old := filepath.Join(alpha.GetDataFolder(), "config.yml")
+	if err := os.WriteFile(old, []byte("greeting: changed by the owner\nnested:\n  level: 3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	alpha.ReloadConfig()
+	if got := alpha.GetConfig().Get("greeting", nil); got != "changed by the owner" {
+		t.Errorf("greeting = %v, want the owner's value from config.yml", got)
+	}
+	if got := alpha.GetConfig().GetNested("nested.level", nil); got != 3 {
+		t.Errorf("nested.level = %v (%T), want 3", got, got)
+	}
+	if _, err := os.Stat(old + ".bak"); err != nil {
+		t.Errorf("config.yml wasn't kept as config.yml.bak: %v", err)
 	}
 }

@@ -14,11 +14,11 @@ import (
 	"pocketmine-go/pocketmine/utils"
 )
 
-// defaultResourcePacksYml is resources/resource_packs.yml, copied into the resource pack folder on
-// first start.
+// defaultResourcePacksToml is resource_packs.toml, copied into the resource pack folder on first
+// start.
 //
-//go:embed resource_packs.yml
-var defaultResourcePacksYml []byte
+//go:embed resource_packs.toml
+var defaultResourcePacksToml []byte
 
 // ResourcePackManager is a port of pocketmine\resourcepacks\ResourcePackManager.
 type ResourcePackManager struct {
@@ -30,7 +30,8 @@ type ResourcePackManager struct {
 }
 
 // NewResourcePackManager is a port of ResourcePackManager::__construct: path is the folder the
-// packs and resource_packs.yml are in.
+// packs and resource_packs.toml are in (a resource_packs.yml of an older version is
+// converted).
 func NewResourcePackManager(path string, logger log.Logger) (*ResourcePackManager, error) {
 	m := &ResourcePackManager{path: path, uuidList: map[string]ResourcePack{}, encryptionKeys: map[string]string{}}
 
@@ -43,13 +44,19 @@ func NewResourcePackManager(path string, logger log.Logger) (*ResourcePackManage
 		return nil, fmt.Errorf("Resource packs path %s exists and is not a directory", path)
 	}
 
-	resourcePacksYml := filepath.Join(path, "resource_packs.yml")
-	if _, err := os.Stat(resourcePacksYml); os.IsNotExist(err) {
-		if err := os.WriteFile(resourcePacksYml, defaultResourcePacksYml, 0o666); err != nil {
+	resourcePacksToml := filepath.Join(path, "resource_packs.toml")
+	if converted, err := utils.ConvertYAMLToTOML(filepath.Join(path, "resource_packs.yml"), resourcePacksToml,
+		"Converted from resource_packs.yml (kept as resource_packs.yml.bak)."); err != nil {
+		return nil, err
+	} else if converted {
+		logger.Notice("Converted resource_packs.yml to resource_packs.toml (the old file is kept as resource_packs.yml.bak)")
+	}
+	if _, err := os.Stat(resourcePacksToml); os.IsNotExist(err) {
+		if err := os.WriteFile(resourcePacksToml, defaultResourcePacksToml, 0o666); err != nil {
 			return nil, err
 		}
 	}
-	config, err := utils.NewConfig(resourcePacksYml, utils.ConfigYAML, map[string]any{})
+	config, err := utils.NewConfig(resourcePacksToml, utils.ConfigTOML, map[string]any{})
 	if err != nil {
 		return nil, err
 	}

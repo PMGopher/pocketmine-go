@@ -54,14 +54,14 @@ type WorldManager struct {
 	// asyncPool is Server::getAsyncPool(), which worlds populate chunks and calculate light on;
 	// nil makes worlds do both synchronously.
 	asyncPool *scheduler.AsyncPool
-	// populationQueueSize is pocketmine.yml's chunk-generation.population-queue-size.
+	// populationQueueSize is pocketmine.toml's chunk-generation.population-queue-size.
 	populationQueueSize int
 }
 
 // SetAsyncPool sets the pool worlds loaded or generated from now on populate chunks on.
 func (m *WorldManager) SetAsyncPool(pool *scheduler.AsyncPool) { m.asyncPool = pool }
 
-// SetPopulationQueueSize sets pocketmine.yml's chunk-generation.population-queue-size for worlds
+// SetPopulationQueueSize sets pocketmine.toml's chunk-generation.population-queue-size for worlds
 // loaded or generated from now on.
 func (m *WorldManager) SetPopulationQueueSize(n int) { m.populationQueueSize = n }
 

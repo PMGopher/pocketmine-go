@@ -2,8 +2,8 @@
 
 package server
 
-// Keys of pocketmine.yml, a port of pocketmine\YmlServerProperties (Yml + the constant name in
-// CamelCase).
+// Keys of pocketmine.toml, a port of pocketmine\YmlServerProperties (Yml + the constant name in
+// CamelCase; the names are kept from PHP).
 const (
 	YmlAliases                              = "aliases"
 	YmlAnonymousStatistics                  = "anonymous-statistics"

@@ -3,7 +3,7 @@
 //
 // Options (PocketMine.php's BootstrapOptions): --data=<path> (defaults to the working directory),
 // --plugins=<path>, --version, --enable-ansi, --disable-ansi, --no-log-file. Any server.properties
-// or pocketmine.yml key can be overridden with --key=value, e.g. --server-port=19133
+// or pocketmine.toml key can be overridden with --key=value, e.g. --server-port=19133
 // (ServerConfigGroup's getopt).
 //
 // The set-up wizard runs when the data folder has no server.properties, unless --no-wizard is

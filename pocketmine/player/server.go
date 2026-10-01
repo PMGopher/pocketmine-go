@@ -43,7 +43,7 @@ type Server interface {
 	GetForceGamemode() bool
 	// GetAllowedViewDistance is a port of Server::getAllowedViewDistance.
 	GetAllowedViewDistance(distance int) int
-	// GetPropertyInt is ServerConfigGroup::getPropertyInt (pocketmine.yml).
+	// GetPropertyInt is ServerConfigGroup::getPropertyInt (pocketmine.toml).
 	GetPropertyInt(variable string, defaultValue int) int
 	// GetConfigBool is ServerConfigGroup::getConfigBool (server.properties).
 	GetConfigBool(variable string, defaultValue bool) bool

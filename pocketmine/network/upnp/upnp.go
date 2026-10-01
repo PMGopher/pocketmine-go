@@ -1,5 +1,5 @@
 // Package upnp is a port of pocketmine\network\upnp: forwarding the server port on the router
-// with UPnP (pocketmine.yml network.upnp-forwarding).
+// with UPnP (pocketmine.toml network.upnp-forwarding).
 package upnp
 
 import (

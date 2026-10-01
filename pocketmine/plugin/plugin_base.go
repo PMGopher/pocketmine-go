@@ -64,7 +64,7 @@ func (b *PluginBase) InitPlugin(self Plugin, loader PluginLoader, server Server,
 	b.file = strings.TrimRight(file, "/"+string(filepath.Separator)) + "/"
 	b.resourceFolder = path.Join(b.file, "resources") + "/"
 
-	b.configFile = filepath.Join(b.dataFolder, "config.yml")
+	b.configFile = filepath.Join(b.dataFolder, "config.toml")
 
 	prefix := b.description.GetPrefix()
 	if prefix == "" {
@@ -251,21 +251,41 @@ func (b *PluginBase) GetConfig() *utils.Config {
 // SaveConfig is a port of PluginBase::saveConfig.
 func (b *PluginBase) SaveConfig() error { return b.GetConfig().Save() }
 
-// SaveDefaultConfig is a port of PluginBase::saveDefaultConfig.
+// SaveDefaultConfig is a port of PluginBase::saveDefaultConfig: the plugin's config is
+// config.toml in its data folder, copied from resources/config.toml. A config.yml there (from an
+// older version of the plugin or of this server) is converted to config.toml instead, and so is a
+// plugin that still ships resources/config.yml.
 func (b *PluginBase) SaveDefaultConfig() bool {
-	if _, err := os.Stat(b.configFile); errors.Is(err, os.ErrNotExist) {
-		return b.SaveResource("config.yml", false)
+	if _, err := os.Stat(b.configFile); !errors.Is(err, os.ErrNotExist) {
+		return false
 	}
-	return false
+	yamlFile := filepath.Join(b.dataFolder, "config.yml")
+	if _, err := os.Stat(yamlFile); errors.Is(err, os.ErrNotExist) {
+		if b.SaveResource("config.toml", false) {
+			return true
+		}
+		if !b.SaveResource("config.yml", false) {
+			return false
+		}
+	}
+	converted, err := utils.ConvertYAMLToTOML(yamlFile, b.configFile, "Converted from config.yml (kept as config.yml.bak).")
+	if err != nil {
+		b.logger.Error("Failed to convert config.yml to config.toml: " + err.Error())
+		return false
+	}
+	if converted {
+		b.logger.Notice("Converted config.yml to config.toml (the old file is kept as config.yml.bak)")
+	}
+	return converted
 }
 
 // ReloadConfig is a port of PluginBase::reloadConfig.
 func (b *PluginBase) ReloadConfig() {
 	b.SaveDefaultConfig()
-	config, err := utils.NewConfig(b.configFile, utils.ConfigDetect, nil)
+	config, err := utils.NewConfig(b.configFile, utils.ConfigTOML, nil)
 	if err != nil {
-		b.logger.Error("Failed to load config.yml: " + err.Error())
-		config, _ = utils.NewConfig(b.configFile, utils.ConfigYAML, map[string]any{})
+		b.logger.Error("Failed to load config.toml: " + err.Error())
+		config, _ = utils.NewConfig(b.configFile, utils.ConfigTOML, map[string]any{})
 	}
 	b.config = config
 }
@@ -292,7 +312,7 @@ func (b *PluginBase) GetPluginLoader() PluginLoader { return b.loader }
 // GetScheduler is a port of PluginBase::getScheduler.
 func (b *PluginBase) GetScheduler() *scheduler.TaskScheduler { return b.scheduler }
 
-// sortedKeys is the keys of m in a stable order (the plugin.yml order isn't kept by Description).
+// sortedKeys is the keys of m in a stable order (the manifest order isn't kept by Description).
 func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

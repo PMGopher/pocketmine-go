@@ -25,10 +25,10 @@ type ChunkLockID struct{ _ byte }
 type temporaryChunkLoader struct{ _ byte }
 
 // defaultMaxConcurrentChunkPopulationTasks is World::$maxConcurrentChunkPopulationTasks' default
-// (pocketmine.yml chunk-generation.population-queue-size overrides it).
+// (pocketmine.toml chunk-generation.population-queue-size overrides it).
 const defaultMaxConcurrentChunkPopulationTasks = 2
 
-// SetMaxConcurrentChunkPopulationTasks sets pocketmine.yml's chunk-generation.population-queue-size.
+// SetMaxConcurrentChunkPopulationTasks sets pocketmine.toml's chunk-generation.population-queue-size.
 func (w *World) SetMaxConcurrentChunkPopulationTasks(n int) {
 	w.maxConcurrentChunkPopulationTasks = max(1, n)
 }

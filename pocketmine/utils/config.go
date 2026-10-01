@@ -22,7 +22,8 @@ const (
 	ConfigProperties ConfigType = 0  // .properties
 	ConfigCNF                   = ConfigProperties
 	ConfigJSON       ConfigType = 1 // .js, .json
-	ConfigYAML       ConfigType = 2 // .yml, .yaml
+	ConfigYAML       ConfigType = 2 // .yml, .yaml (read for converting old files; new files are TOML)
+	ConfigTOML       ConfigType = 3 // .toml: every config file of this server
 	// ConfigSerialized (PHP's `serialize()` binary format, historically type 4) is deliberately
 	// not ported: nothing outside a PHP runtime can produce or consume it, so it has no meaning
 	// for a from-scratch Go server. Any config file with that type fails to load with a clear error.
@@ -38,6 +39,7 @@ var configFormatsByExtension = map[string]ConfigType{
 	"js":         ConfigJSON,
 	"yml":        ConfigYAML,
 	"yaml":       ConfigYAML,
+	"toml":       ConfigTOML,
 	"txt":        ConfigEnum,
 	"list":       ConfigEnum,
 	"enum":       ConfigEnum,
@@ -140,6 +142,11 @@ func (c *Config) load(file string, configType ConfigType, defaults map[string]an
 		if err := yaml.Unmarshal([]byte(fixed), &data); err != nil {
 			return WrapConfigLoadException(file, err)
 		}
+	case ConfigTOML:
+		var err error
+		if data, err = ParseTOML(content); err != nil {
+			return WrapConfigLoadException(file, err)
+		}
 	case ConfigEnum:
 		data = map[string]any{}
 		for _, entry := range ParseList(string(content)) {
@@ -186,6 +193,12 @@ func (c *Config) saveLocked() error {
 		content = b
 	case ConfigYAML:
 		b, err := yaml.Marshal(c.data)
+		if err != nil {
+			return err
+		}
+		content = b
+	case ConfigTOML:
+		b, err := MarshalTOML(c.data)
 		if err != nil {
 			return err
 		}

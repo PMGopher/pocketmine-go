@@ -7,7 +7,7 @@ type PluginLoader interface {
 	// LoadPlugin loads the plugin contained in file.
 	LoadPlugin(file string)
 	// GetPluginDescription gets the Description from the file (nil if it has none). Errors are
-	// *PluginDescriptionParseException for an invalid plugin.yml.
+	// *PluginDescriptionParseException for an invalid plugin manifest.
 	GetPluginDescription(file string) (*Description, error)
 	// GetAccessProtocol returns the protocol prefix used to access files in this plugin, e.g.
 	// file://, phar://.

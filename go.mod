@@ -8,6 +8,7 @@ require (
 	github.com/df-mc/jsonc v1.0.5
 	github.com/go-gl/mathgl v1.1.0
 	github.com/google/uuid v1.6.0
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/sandertv/go-raknet v1.15.2-0.20260705184311-0d1fd09e2cf6
 	github.com/sandertv/gophertunnel v1.62.0
 	golang.org/x/sys v0.47.0

@@ -2,7 +2,7 @@ package pocketmine
 
 // BootstrapOptions is a port of pocketmine\BootstrapOptions: names of the command-line options
 // PocketMine-MP supports. Other options not listed here can be used to override
-// server.properties/pocketmine.yml values temporarily.
+// server.properties/pocketmine.toml values temporarily.
 const (
 	OptNoWizard    = "no-wizard"    // Disables the setup wizard on first startup
 	OptDisableANSI = "disable-ansi" // Force-disables console text colour and formatting

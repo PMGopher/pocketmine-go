@@ -3,7 +3,7 @@ package command
 import "pocketmine-go/pocketmine/permission"
 
 // PluginCommand is a port of pocketmine\command\PluginCommand: routes commands defined in
-// plugin.yml to a plugin's Executor.OnCommand.
+// plugin.toml to a plugin's Executor.OnCommand.
 type PluginCommand struct {
 	Command
 	owner    permission.Plugin

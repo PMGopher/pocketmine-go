@@ -39,7 +39,7 @@ type Server interface {
 	mcpe.Server
 	GetName() string
 	GetQueryInformation() *query.QueryInfo
-	// GetPropertyInt is ServerConfigGroup::getPropertyInt (pocketmine.yml).
+	// GetPropertyInt is ServerConfigGroup::getPropertyInt (pocketmine.toml).
 	GetPropertyInt(variable string, defaultValue int) int
 	GetResourcePackManager() *resourcepacks.ResourcePackManager
 	// ErrorLog is where gophertunnel's and go-raknet's own errors are logged.
